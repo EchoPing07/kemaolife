@@ -287,8 +287,10 @@ func TestCheckElectricityFailsWholeReport(t *testing.T) {
 		t.Errorf("report = %+v", report)
 	}
 	// collectedAt 应取 collecdate 的真实采集时刻，而不是 opdtdate 补的 00:00:00。
-	if report.Status.CollectedAt != "2026-11-04T22:41:37+08:00" {
-		t.Errorf("collectedAt = %q, want 2026-11-04T22:41:37+08:00", report.Status.CollectedAt)
+	// 期望值按 time.Local 生成：CI runner 是 UTC，写死 +08:00 会让断言依赖运行机器时区。
+	want := time.Date(2026, 11, 4, 22, 41, 37, 0, time.Local).Format(time.RFC3339)
+	if report.Status.CollectedAt != want {
+		t.Errorf("collectedAt = %q, want %q", report.Status.CollectedAt, want)
 	}
 
 	useOK = false
@@ -326,8 +328,9 @@ func TestCheckElectricityFallsBackToOpdtdate(t *testing.T) {
 	if err != nil {
 		t.Fatalf("CheckElectricity: %v", err)
 	}
-	if report.Status.CollectedAt != "2026-11-04T00:00:00+08:00" {
-		t.Errorf("collectedAt = %q, want 降级到 opdtdate", report.Status.CollectedAt)
+	want := time.Date(2026, 11, 4, 0, 0, 0, 0, time.Local).Format(time.RFC3339)
+	if report.Status.CollectedAt != want {
+		t.Errorf("collectedAt = %q, want 降级到 opdtdate %q", report.Status.CollectedAt, want)
 	}
 }
 
