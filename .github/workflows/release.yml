@@ -1,0 +1,356 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 已推送的发布 tag（例如 v0.1.0）；用于补传资产
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+# 发布串行化：补传资产与打 tag 触发不会并发覆盖同一批资产。
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # tag push 时按 tag 检出；手动补跑时按输入的 tag 检出。
+          ref: ${{ github.event.inputs.tag || github.ref }}
+          fetch-depth: 0
+          fetch-tags: true
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      # tag 是唯一发布入口，且必须与源码常量一致（docs/002 §1.1）。
+      - name: Resolve tag, version and commit
+        id: meta
+        env:
+          INPUT_TAG: ${{ github.event.inputs.tag || '' }}
+          REF_NAME: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+          TAG="${INPUT_TAG:-$REF_NAME}"
+          if [[ ! "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "::error::tag 必须是 vX.Y.Z：$TAG"
+            exit 1
+          fi
+          VERSION="${TAG#v}"
+          SRC_VERSION="$(sed -nE 's/^const Version[[:space:]]*=[[:space:]]*"([^"]+)".*/\1/p' internal/version/version.go)"
+          if [[ -z "$SRC_VERSION" ]]; then
+            echo "::error::无法从 internal/version/version.go 提取 Version"
+            exit 1
+          fi
+          if [[ "$SRC_VERSION" != "$VERSION" ]]; then
+            echo "::error::tag $TAG 与 internal/version.Version $SRC_VERSION 不一致（docs/002 §1.1）"
+            exit 1
+          fi
+
+          git fetch origin "+refs/tags/${TAG}:refs/tags/${TAG}" --force
+          COMMIT="$(git rev-parse "${TAG}^{commit}")"
+          git fetch origin main
+          if ! git merge-base --is-ancestor "$COMMIT" FETCH_HEAD; then
+            echo "::error::$TAG 指向的提交不在 origin/main 上"
+            exit 1
+          fi
+
+          {
+            echo "TAG=$TAG"
+            echo "VERSION=$VERSION"
+            echo "COMMIT=$COMMIT"
+            echo "SHORT_SHA=${COMMIT:0:12}"
+          } >> "$GITHUB_OUTPUT"
+          echo "发布 $TAG：版本 $VERSION，提交 ${COMMIT:0:12}"
+
+      # 完整分层 / 浏览器内核 / 隐私检查由 ci.yml 负责，靠「tag 必须在 main 上」兜底。
+      - name: Quality gates
+        run: |
+          set -euo pipefail
+          test -z "$(gofmt -l .)"
+          go vet ./...
+          go test ./...
+
+      - name: Build assets
+        env:
+          VERSION: ${{ steps.meta.outputs.VERSION }}
+          COMMIT: ${{ steps.meta.outputs.COMMIT }}
+        run: |
+          set -euo pipefail
+          PY="$(command -v python3 2>/dev/null || true)"
+          if [[ -z "$PY" ]] || ! "$PY" -c 'import sys; sys.exit(0)' > /dev/null 2>&1; then
+            PY="$(command -v python)"
+          fi
+          rm -rf dist
+          mkdir -p dist
+
+          cat > dist/INSTALL.txt <<'EOF'
+          kemaolife —— Linux CLI 安装说明
+
+          包内文件：
+            kemaolife     静态二进制（CGO_ENABLED=0），不依赖系统 libc 之外的运行时
+            LICENSE       MIT 许可证
+            INSTALL.txt   本文件
+
+          安装（在下载目录执行，把压缩包名换成自己下载的架构）：
+            sha256sum -c SHA256SUMS --ignore-missing
+            tar -xzf kemaolife_<版本>_linux_<架构>.tar.gz
+            mkdir -p ~/.local/bin
+            install -m 0755 kemaolife ~/.local/bin/kemaolife
+            kemaolife --version
+            kemaolife config init
+
+          config init 交互录入学号与教务密码，配置文件权限 0600。首次查询前可用
+          kemaolife --json timetable sync 生成一次快照；日常查询每次自动刷新，失败时
+          回落旧快照并标 stale:true。电费数据约 1 天延迟，输出中的「数据截至」不是实时值。
+
+          agent skill 单独发布为 kemaolife-skill_<版本>.zip，解压后把 kemaolife/ 放进
+          agent 的 skills 目录；skill 不含二进制，也不含凭据。skill 存放位置（D2）尚未
+          定稿，由使用者决定。
+
+          本工具只查本人数据；Linux 端不提供校园网状态查询，也不存校园网凭据。请勿在
+          Issue / 交流群提交学号、密码、Cookie 或课表快照。
+          EOF
+
+          build_one() {
+            arch="$1"
+            goarch="$2"
+            goarm="${3:-}"
+            stage="dist/stage/${arch}"
+            mkdir -p "$stage"
+            cp LICENSE "$stage/LICENSE"
+            cp dist/INSTALL.txt "$stage/INSTALL.txt"
+
+            build_env=(CGO_ENABLED=0 GOOS=linux "GOARCH=${goarch}")
+            if [[ -n "$goarm" ]]; then
+              build_env+=("GOARM=${goarm}")
+            fi
+            # 版本号取源码常量，不注入；只注入构建提交（docs/002 §1.1）。
+            env "${build_env[@]}" go build -trimpath \
+              -ldflags "-s -w -X main.commit=${COMMIT}" \
+              -o "$stage/kemaolife" ./cmd/kemaolife
+            chmod 0755 "$stage/kemaolife"
+            tar -czf "dist/kemaolife_${VERSION}_linux_${arch}.tar.gz" \
+              -C "$stage" kemaolife LICENSE INSTALL.txt
+          }
+
+          build_one amd64 amd64
+          build_one arm64 arm64
+          build_one armv7 arm 7
+
+          mkdir -p dist/skill/kemaolife
+          cp skills/kemaolife/SKILL.md dist/skill/kemaolife/SKILL.md
+          cat > dist/skill/kemaolife/README.txt <<'EOF'
+          kemaolife agent skill
+
+          包内文件：
+            kemaolife/SKILL.md      skill 正文（与仓库 skills/kemaolife/SKILL.md 一致）
+            kemaolife/README.txt    本文件
+
+          安装：解压后把 kemaolife/ 整个目录放进所用 agent 的 skills 目录。
+          skill 依赖同机已安装的 kemaolife 二进制，本身不含二进制、不含凭据，
+          也不会写入任何配置。所有查询固定带 --json，只读 stdout。
+
+          skill 存放位置（D2）仍是待确认项，由使用者自行决定，本包不指定安装路径。
+          二进制与校验和见同版 Release 的 kemaolife_<版本>_linux_<架构>.tar.gz
+          与 SHA256SUMS。
+          EOF
+
+          "$PY" - <<'PY'
+          import os, zipfile
+
+          version = os.environ["VERSION"]
+          out = f"dist/kemaolife-skill_{version}.zip"
+          with zipfile.ZipFile(out, "w", zipfile.ZIP_DEFLATED) as z:
+              for name in ("SKILL.md", "README.txt"):
+                  z.write(f"dist/skill/kemaolife/{name}", f"kemaolife/{name}")
+          print(out)
+          PY
+
+          (cd dist && sha256sum \
+            "kemaolife_${VERSION}_linux_amd64.tar.gz" \
+            "kemaolife_${VERSION}_linux_arm64.tar.gz" \
+            "kemaolife_${VERSION}_linux_armv7.tar.gz" \
+            "kemaolife-skill_${VERSION}.zip" > SHA256SUMS)
+          cat dist/SHA256SUMS
+
+      - name: Verify assets
+        env:
+          VERSION: ${{ steps.meta.outputs.VERSION }}
+          COMMIT: ${{ steps.meta.outputs.COMMIT }}
+        run: |
+          set -euo pipefail
+          PY="$(command -v python3 2>/dev/null || true)"
+          if [[ -z "$PY" ]] || ! "$PY" -c 'import sys; sys.exit(0)' > /dev/null 2>&1; then
+            PY="$(command -v python)"
+          fi
+          (cd dist && sha256sum -c SHA256SUMS)
+
+          # 读 ELF 头判架构，避免依赖 file 的输出文案；二进制按 CGO_ENABLED=0 构建。
+          "$PY" - <<'PY'
+          import os, struct
+
+          version = os.environ["VERSION"]
+          expected = {"amd64": (2, 62), "arm64": (2, 183), "armv7": (1, 40)}
+          for arch, (ei_class, e_machine) in expected.items():
+              path = f"dist/stage/{arch}/kemaolife"
+              with open(path, "rb") as f:
+                  head = f.read(20)
+              assert head[:4] == b"\x7fELF", (path, "not ELF")
+              assert head[4] == ei_class and head[5] == 1, (path, "class/endian")
+              machine = struct.unpack_from("<H", head, 18)[0]
+              assert machine == e_machine, (path, machine)
+              print(f"{arch}: ELF class={head[4]} machine={machine} OK")
+
+          for arch in expected:
+              with __import__("tarfile").open(f"dist/kemaolife_{version}_linux_{arch}.tar.gz") as t:
+                  names = sorted(m.name for m in t.getmembers())
+              assert names == ["INSTALL.txt", "LICENSE", "kemaolife"], (arch, names)
+
+          with __import__("zipfile").ZipFile(f"dist/kemaolife-skill_{version}.zip") as z:
+              names = sorted(z.namelist())
+          assert names == ["kemaolife/README.txt", "kemaolife/SKILL.md"], names
+          print("archive contents OK")
+          PY
+
+          # --version 不联网、不读配置，amd64 产物可在 runner 直接实跑。
+          ./dist/stage/amd64/kemaolife --version
+          ./dist/stage/amd64/kemaolife --help > /dev/null
+          ./dist/stage/amd64/kemaolife --version --json > dist/version.json
+          "$PY" - <<'PY'
+          import json, os
+
+          with open("dist/version.json", encoding="utf-8") as f:
+              env = json.load(f)
+          assert env["ok"] is True, env
+          assert env["data"]["version"] == os.environ["VERSION"], env
+          assert env["data"]["commit"] == os.environ["COMMIT"], env
+          print("version/commit OK")
+          PY
+
+      - name: Render release notes
+        env:
+          TAG: ${{ steps.meta.outputs.TAG }}
+          VERSION: ${{ steps.meta.outputs.VERSION }}
+          SHORT_SHA: ${{ steps.meta.outputs.SHORT_SHA }}
+        run: |
+          set -euo pipefail
+          PY="$(command -v python3 2>/dev/null || true)"
+          if [[ -z "$PY" ]] || ! "$PY" -c 'import sys; sys.exit(0)' > /dev/null 2>&1; then
+            PY="$(command -v python)"
+          fi
+          cat > dist/RELEASE_NOTES.md <<'EOF'
+          ## kemaolife __TAG__
+
+          首个 Linux CLI 发行版。源码版本 `internal/version.Version` = `__VERSION__`；构建提交 `__SHORT_SHA__`（完整提交号见 `kemaolife --version --json`）。本版只发布 Linux，Windows 与 Android 尚未启动。
+
+          ### 产物
+
+          | 文件 | 适用 |
+          |---|---|
+          | `__ASSET_AMD64__` | x86_64 Linux |
+          | `__ASSET_ARM64__` | aarch64 / arm64 Linux |
+          | `__ASSET_ARMV7__` | 32 位 ARMv7 Linux（`GOARCH=arm GOARM=7`） |
+          | `__ASSET_SKILL__` | agent skill，单独安装 |
+          | `SHA256SUMS` | 以上四个包的校验和 |
+
+          三个二进制包内含 `kemaolife`（`CGO_ENABLED=0` 静态二进制）、`LICENSE` 与 `INSTALL.txt`；skill 包内含 `kemaolife/SKILL.md` 与 `kemaolife/README.txt`。
+
+          ### 安装（amd64 示例）
+
+          ```bash
+          sha256sum -c SHA256SUMS --ignore-missing
+          tar -xzf __ASSET_AMD64__
+          mkdir -p ~/.local/bin
+          install -m 0755 kemaolife ~/.local/bin/kemaolife
+          kemaolife --version
+          kemaolife config init
+          ```
+
+          arm64 / armv7 换成对应压缩包即可。`config init` 交互录入学号与教务密码，配置文件权限 `0600`；学校代码内置默认值可用 `config set customercode <学校代码>` 覆盖。
+
+          ### skill
+
+          解压 zip，把 `kemaolife/` 放进所用 agent 的 skills 目录。skill 依赖同机已安装的 `kemaolife` 二进制，本身不带二进制、不带凭据；存放位置（D2）尚未定稿，由使用者决定。
+
+          ### 使用须知
+
+          - 电费数据约 1 天延迟，输出中的「数据截至」是采集时刻，不是实时值。
+          - 课表查询每次先联网刷新，失败回落旧快照并标 `stale:true` + `syncedAt`。
+          - Linux 端不提供校园网状态查询，也不存校园网凭据。
+          - 只查本人数据；请勿在 Issue / 交流群提交学号、密码、Cookie 或课表快照。
+
+          ### 变更清单
+
+          以下由 GitHub 依据本次 tag 与上一次 release 之间的 PR / 提交自动生成。
+          EOF
+
+          "$PY" - <<'PY'
+          import os
+
+          version = os.environ["VERSION"]
+          values = {
+              "__TAG__": os.environ["TAG"],
+              "__VERSION__": version,
+              "__SHORT_SHA__": os.environ["SHORT_SHA"],
+              "__ASSET_AMD64__": f"kemaolife_{version}_linux_amd64.tar.gz",
+              "__ASSET_ARM64__": f"kemaolife_{version}_linux_arm64.tar.gz",
+              "__ASSET_ARMV7__": f"kemaolife_{version}_linux_armv7.tar.gz",
+              "__ASSET_SKILL__": f"kemaolife-skill_{version}.zip",
+          }
+          path = "dist/RELEASE_NOTES.md"
+          with open(path, encoding="utf-8") as f:
+              text = f.read()
+          for key, value in values.items():
+              text = text.replace(key, value)
+          assert "__" not in text, "模板占位符未全部替换"
+          with open(path, "w", encoding="utf-8") as f:
+              f.write(text)
+          print(f"{path} 已生成，{len(text)} 字符")
+          PY
+
+      - name: Publish release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ steps.meta.outputs.TAG }}
+          VERSION: ${{ steps.meta.outputs.VERSION }}
+        run: |
+          set -euo pipefail
+          ASSETS=(
+            "dist/kemaolife_${VERSION}_linux_amd64.tar.gz"
+            "dist/kemaolife_${VERSION}_linux_arm64.tar.gz"
+            "dist/kemaolife_${VERSION}_linux_armv7.tar.gz"
+            "dist/kemaolife-skill_${VERSION}.zip"
+            "dist/SHA256SUMS"
+          )
+          for asset in "${ASSETS[@]}"; do
+            if [[ ! -f "$asset" ]]; then
+              echo "::error::缺少资产 $asset"
+              exit 1
+            fi
+          done
+
+          if gh release view "$TAG" > /dev/null 2>&1; then
+            echo "Release $TAG 已存在，只补传同名资产"
+            gh release upload "$TAG" "${ASSETS[@]}" --clobber
+          else
+            # --notes-file 提供固定说明，--generate-notes 追加 GitHub 自动生成的变更清单。
+            gh release create "$TAG" \
+              --verify-tag \
+              --title "kemaolife $TAG" \
+              --notes-file dist/RELEASE_NOTES.md \
+              --generate-notes \
+              "${ASSETS[@]}"
+          fi

@@ -103,6 +103,8 @@ kemaolife --json electricity                  # 余额 + 每日用量
 
 学校代码内置默认值为 `3126`（学校事实，非个人隐私），可用 `kemaolife config set customercode <学校代码>` 或构建期 `-ldflags "-X main.defaultCustomerCode=<学校代码>"` 覆盖。agent skill 见 [`skills/kemaolife/SKILL.md`](./skills/kemaolife/SKILL.md)，复制到 agent 的 skill 目录即可使用（D2 待定稿）。
 
+正式发布在 [Releases](https://github.com/EchoPing07/kemaolife/releases) 提供 Linux `amd64` / `arm64` / `armv7` 静态二进制压缩包、单独的 agent skill zip 与 `SHA256SUMS`；解压后用 `install -m 0755 kemaolife ~/.local/bin/kemaolife` 安装，校验和用 `sha256sum -c SHA256SUMS --ignore-missing` 核对。打 `vX.Y.Z` tag 会触发 [`.github/workflows/release.yml`](./.github/workflows/release.yml) 自动构建发布，tag 必须与 `internal/version.Version` 一致。
+
 ## 交流
 
 **QQ 交流群：1126474633** · [点此加群](https://qm.qq.com/q/rf4PfFM5RA)（也可以在 QQ 里搜群号加群）。
