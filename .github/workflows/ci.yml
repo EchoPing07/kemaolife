@@ -1,0 +1,46 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.24'
+          cache: true
+      - name: Format
+        run: test -z "$(gofmt -l .)"
+      - name: Vet
+        run: go vet ./...
+      - name: Test
+        run: go test ./...
+      - name: No browser engine
+        run: |
+          if grep -rniE 'webview|cef|wails|pwa|electron|tauri' --include='*.go' --include='*.kt' .; then
+            echo 'FAIL: browser engine reference found'; exit 1
+          fi
+      - name: Layering
+        run: |
+          if grep -rn 'runtime.GOOS' internal/core internal/app; then
+            echo 'FAIL: platform check in core/app'; exit 1
+          fi
+          if go list -deps ./internal/core/... | grep -E 'x/sys/windows|gioui|fyne|android'; then
+            echo 'FAIL: core depends on platform/UI packages'; exit 1
+          fi
+      - name: Cross build
+        run: |
+          GOOS=linux   GOARCH=amd64 go build ./internal/... ./cmd/kemaolife/...
+          GOOS=windows GOARCH=amd64 go build ./internal/...
+      - name: No personal credentials in repo
+        run: |
+          # 个人隐私（学号 / 房间号 / Cookie 值）不得入仓；按已知值逐个检查
+          # 学校代码 3126 与协议 IP 属学校事实，不在此检查范围
+          if grep -rniE '<把已知的真实学号/房间号写在这里>' .; then
+            echo 'FAIL: personal data found'; exit 1
+          fi

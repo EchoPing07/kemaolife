@@ -50,7 +50,7 @@ body:
       options:
         - label: 我没有把「倾向」当作已定稿结论，也没有替用户做 D 项决策
           required: true
-        - label: 内容不含真实个人信息、凭据或学校代码明文
+        - label: 内容不含真实个人信息、凭据或会话值（学校代码与协议 IP 除外）
           required: true
         - label: 我已阅读 CODE_OF_CONDUCT.md，讨论将聚焦问题本身
           required: true

@@ -6,7 +6,7 @@ body:
   - type: markdown
     attributes:
       value: |
-        提交前请先搜索已有 Issue。请勿粘贴真实学号、姓名、宿舍房间号、密码、Cookie、课表快照、内网地址、MAC 或学校代码明文；一律用占位符，例如 `<学号>`、`<学校代码>`、`<roomverify>`。
+        提交前请先搜索已有 Issue。请勿粘贴真实学号、姓名、宿舍房间号、密码、Cookie、课表快照、会话值、本机 MAC 或 `roomverify`；一律用占位符，例如 `<学号>`、`<密码>`、`<roomverify>`。学校代码（`3126`）与学校公开的 Portal / 探测 IP 属协议事实，可保留。
         复现步骤请用本地夹具或 `httptest` 描述，不要要求维护者使用真实账号访问学校系统。
 
   - type: dropdown
@@ -83,7 +83,7 @@ body:
     attributes:
       label: 提交确认
       options:
-        - label: 我已移除所有真实个人信息、凭据、快照内容与内网地址，示例均为占位符
+        - label: 我已移除所有真实个人信息、凭据、会话值与快照内容，示例均为占位符
           required: true
         - label: 我未使用真实学校接口或非本人数据复现问题
           required: true
