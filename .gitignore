@@ -32,6 +32,9 @@ local.properties
 *.keystore
 *.jks
 
+# 本机手动验证目录：可放本人学号配置与一次性查询输出，永不提交
+/local-test/
+
 # 本地配置、凭据与缓存（快照含 Cookie，等同凭据）
 .env
 .env.*
