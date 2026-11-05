@@ -2,7 +2,7 @@
 
 # 科贸生活 · kemaolife
 
-**上课前不用翻教务网页，电费一次看全，校园网掉线随手重连 —— 一份 Go 核心，目标覆盖 Linux CLI、Windows 托盘和 Android App。当前已交付 Linux CLI。**
+**上课前不用翻教务网页，电费一次看全，校园网掉线随手重连 —— 一份 Go 核心，目标覆盖 Linux CLI、Windows 托盘和 Android App。当前已交付 Linux CLI 与 Windows 托盘。**
 
 [![QQ 交流群 1126474633](https://img.shields.io/badge/QQ%20交流群-1126474633-12B7F5?logo=qq&logoColor=white)](https://qm.qq.com/q/rf4PfFM5RA)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](./LICENSE)
@@ -18,7 +18,7 @@
 <br />
 
 > [!NOTE]
-> 仓库当前已实现 Linux CLI（M0 / M1）；Windows 与 Android 尚未启动。想先搞清楚「要做什么」，从[需求与产品定位](./docs/000-需求与产品定位.md)读起；想直接看命令、字段和退出码，去[功能规格](./docs/002-功能规格.md)。
+> 仓库当前已实现 Linux CLI（M0 / M1）与 Windows 托盘（M2）；Android 尚未启动。想先搞清楚「要做什么」，从[需求与产品定位](./docs/000-需求与产品定位.md)读起；想直接看命令、字段和退出码，去[功能规格](./docs/002-功能规格.md)。
 
 ## kemaolife 是什么
 
@@ -26,7 +26,7 @@
 
 - **课表查得慢？** 每次查询先联网刷新一次，刷新成功直接给最新数据；断网时回落旧快照并标 `stale:true` + `syncedAt`，飞行模式也能查整学期。Android 每次打开同样先刷新、失败沿用旧快照。
 - **电费只看余额不够** 一条命令 / 一个 `op` 同时返回余额与每日用量，用来估算还能撑几天。电表数据约 1 天延迟，所有输出都带「数据截至」。
-- **校园网（规划中）** Portal 探测 302 判出「已在线 / 未认证 / 不在校园网」，Windows 默认手动、自动可选，Android 全手动，Linux 不碰校园网也不存凭据。
+- **校园网** Portal 探测 302 判出「已在线 / 未认证 / 不在校园网」，Windows 默认手动、自动可选（Android 规划中为全手动），Linux 不碰校园网也不存凭据。
 - **三端不漂移** `internal/core` 只做领域逻辑，平台能力经端口注入；三端共享 DTO、错误码与告警判定，UI 只消费数据。单仓库、单 `go.mod`、多 `cmd`。
 
 这是给自己用的工具，**不是学校官方产品**，与教务系统、水电系统、校园网 Portal 的运营方没有关联，也只查本人数据。
@@ -36,7 +36,7 @@
 | 端 | 长什么样 | 给谁用 | 能做什么 |
 |---|---|---|---|
 | **Linux** | 单二进制 `kemaolife` + 子命令 + Agent Skill | agent | 配置、课表四维度查询（默认当日）、电费余额与每日用量一次查 |
-| **Windows**（未启动） | `kemaolife-agent.exe` 原生托盘常驻（登录时自启一次，不保活） | 人 | 托盘看状态、电费轮询（默认 4 小时）、阈值提醒、校园网默认手动 / 自动可选 |
+| **Windows** | `kemaolife-agent.exe` 原生托盘常驻（登录时自启一次，不保活） | 人 | 托盘看状态、电费轮询（默认 4 小时）、阈值提醒、校园网默认手动 / 自动可选 |
 | **Android**（未启动） | 原生 App（Kotlin / Compose），底栏三 tab | 人 | 课表、电费与校园网手动动作、设置；打开即刷新 |
 
 > [!IMPORTANT]
@@ -62,7 +62,8 @@ Portal   ──探测 302──► 判态 ──► 登录 / 下线 / 重登（M
 | 设计基线 | R1–R5、三端定位、架构与端口、共享契约、三个接口协议文档 | 已入库 |
 | M0 · 契约 + core | DTO、错误码、`core` / `ports`、单测、`kemaolife` 跑通 | 已实现 |
 | M1 · Linux CLI + skill | 单二进制 `kemaolife` + 子命令、`config`、快照缓存、SKILL.md、刷新降级、电费合并查询 | 已实现（aarch64 Linux 真机验证） |
-| M0.5 → M4 | Android 门面 spike、Windows 托盘、Android App、校园网自动登录 | 未启动 |
+| M2 · Windows 托盘 | 托盘状态与按模式切换的按钮组、4 小时轮询（600s 硬下限）、阈值去重与静默时段、失败退避、DPAPI 凭据、原生设置窗口、开机自启 | 已实现（本机 Win11 验证） |
+| M3 · Android App | 门面 spike、三 tab、打开即刷新、电费页、校园网手动动作 | 未启动 |
 
 完整里程碑与验收见 [000 文档 §7](./docs/000-需求与产品定位.md#7-里程碑)。
 
@@ -84,7 +85,7 @@ Portal   ──探测 302──► 判态 ──► 登录 / 下线 / 重登（M
 
 ## 参与贡献
 
-欢迎 Issue 和 PR。M0/M1 已实现，当前可参与 Linux CLI 改进、文档契约审阅与 D 项讨论；Windows / Android 尚未启动。完整规范在 [CONTRIBUTING.md](./CONTRIBUTING.md)，几条最容易踩的：
+欢迎 Issue 和 PR。M0/M1/M2 已实现，当前可参与 Linux CLI 与 Windows 端改进、文档契约审阅与 D 项讨论；Android 尚未启动。完整规范在 [CONTRIBUTING.md](./CONTRIBUTING.md)，几条最容易踩的：
 
 - **一个 PR 只做一件事**，从最新 `main` 拉分支，别夹带格式化或顺手优化。
 - **标题写实际改动**，格式 `类型(范围): 说明`，例如 `feat(core): 快照版本升级到 2`；正文写清改了什么、为什么、怎么验证。

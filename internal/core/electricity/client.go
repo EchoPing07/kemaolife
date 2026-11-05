@@ -165,11 +165,11 @@ func (c *Client) GetUseDetail(ctx context.Context, account, schoolCode, roomVeri
 // call 发一次 SWAEServlet 请求，返回已解开双层的业务 body。
 func (c *Client) call(ctx context.Context, cmd, account, schoolCode string, extra map[string]string) (map[string]any, error) {
 	if strings.TrimSpace(account) == "" {
-		return nil, model.NewError(model.CodeCredentialMissing, "学号为空，请先执行 kemaolife config init")
+		return nil, model.NewError(model.CodeCredentialMissing, "学号为空，请先配置学号")
 	}
 	if strings.TrimSpace(schoolCode) == "" {
 		return nil, model.NewError(model.CodeCredentialMissing,
-			"学校代码为空，请检查配置或执行 kemaolife config set customercode")
+			"学校代码为空，请检查配置")
 	}
 
 	// param 是 JSON 字符串，account 必须由客户端注入（api-docs/002 §3.2）。

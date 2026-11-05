@@ -4,6 +4,7 @@ import (
 	"context"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 	"time"
 
@@ -108,12 +109,28 @@ func failWith(opts options, rt *session, err error) int {
 	if rt != nil && rt.deps.Clock != nil {
 		now = rt.deps.Clock.Now()
 	}
+	err = withCLIHint(err)
 	if opts.json {
 		writeJSON(stdout, model.Failure(now, err))
 	} else {
 		writeStderr("错误: " + model.MessageOf(err))
 	}
 	return model.ExitCode(err)
+}
+
+// withCLIHint 给凭据类错误补上「在本端怎么修」的指引。
+//
+// 为什么放在 cmd 层：core / app 是共用的，它们不知道用户在用 CLI 还是托盘，
+// 所以只报中性原因（「未配置学号」），由各端自己补命令（docs/002 §7 失败处理）。
+func withCLIHint(err error) error {
+	if model.CodeOf(err) != model.CodeCredentialMissing {
+		return err
+	}
+	if strings.Contains(model.MessageOf(err), "kemaolife") {
+		return err // 已经有引导，不重复叠加
+	}
+	return model.WrapError(model.CodeCredentialMissing,
+		model.MessageOf(err)+"，请执行 kemaolife config init", err)
 }
 
 // session 是一次调用组装好的依赖与目标路径。
