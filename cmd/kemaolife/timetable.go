@@ -98,7 +98,7 @@ func timetableDay(ctx context.Context, opts options, rt *session, date model.Dat
 		OK:       true,
 		Data:     result.Day,
 		TS:       formatNow(rt),
-		Stale:    result.Stale,
+		Stale:    model.BoolPtr(result.Stale),
 		SyncedAt: formatSyncedAt(result.SyncedAt),
 	}
 	return envelope(opts, env, func() {
@@ -126,7 +126,7 @@ func timetableWeek(ctx context.Context, opts options, rt *session, week int) err
 		OK:       true,
 		Data:     data,
 		TS:       formatNow(rt),
-		Stale:    result.Stale,
+		Stale:    model.BoolPtr(result.Stale),
 		SyncedAt: formatSyncedAt(result.SyncedAt),
 	}
 	return envelope(opts, env, func() {
@@ -165,13 +165,13 @@ func renderWeek(week int, days []model.DaySchedule, stale bool, syncedAt time.Ti
 			semesterDays++
 		}
 	}
+	b.WriteString(dataTimeLine(stale, formatSyncedAt(syncedAt)))
 	if semesterDays == 0 {
 		b.WriteString(fmt.Sprintf("第 %d 周不在本学期范围\n", week))
 		return b.String()
 	}
 
 	b.WriteString(fmt.Sprintf("第 %d 周\n", week))
-	b.WriteString(dataTimeLine(stale, formatSyncedAt(syncedAt)))
 	b.WriteString("\n")
 
 	rows := make([][]string, 0, len(days))

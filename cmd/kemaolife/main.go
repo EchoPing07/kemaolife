@@ -22,13 +22,6 @@ var (
 	commit  = "unknown"
 )
 
-// defaultCustomerCode 是学校代码的内置默认值，由构建期注入：
-//
-//	go build -ldflags "-X main.defaultCustomerCode=<学校代码>"
-//
-// 仓库内不得出现真实值（AGENTS §5.6、P1），因此默认值只能是空串。
-const defaultCustomerCodeBuildVar = "main.defaultCustomerCode"
-
 func main() {
 	os.Exit(run(os.Args[1:]))
 }
@@ -64,6 +57,10 @@ func run(args []string) int {
 
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
+
+	if opts.verbose {
+		writeStderr("诊断：已启动，超时上限 " + opts.timeout.String())
+	}
 
 	timeout := opts.timeout
 	if timeout <= 0 {

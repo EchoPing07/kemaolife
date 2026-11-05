@@ -16,7 +16,7 @@ const rootHelp = `kemaolife —— 课表与电费查询（Linux CLI，供 agent
 
 命令:
   config init                       交互录入学号与教务密码（配置权限 0600）
-  config set customercode <代码>    覆盖内置的学校代码
+  config set customercode <代码>    覆盖内置学校代码（默认 3126）
   config show                       显示配置状态（学号与密码恒脱敏）
   timetable                         查询当日课表（等价于 timetable today）
   timetable sync                    登录教务并刷新快照
@@ -29,16 +29,18 @@ const rootHelp = `kemaolife —— 课表与电费查询（Linux CLI，供 agent
 全局参数:
   --json             stdout 只输出 JSON 信封，诊断信息走 stderr
   --config <path>    指定配置文件（默认 ~/.config/kemaolife/config.json）
-  --timeout <dur>    单次网络超时上限（默认 30s，示例 30s / 1m）
-  --verbose          诊断信息输出到 stderr（不含个人信息）
+  --timeout <dur>    单次网络超时上限（默认 30s，示例 30s / 1m；可放命令后）
+  --verbose          诊断信息输出到 stderr（仅错误类别 / 耗时 / 状态码）
   --version          输出版本号（不联网、不读配置）
   --help             输出本帮助
+  -h / -v            --help / --version 别名；支持 --flag=value 与 -- 终止符
 
 退出码:
   0 成功  1 业务失败  2 参数错误  3 凭据缺失或会话失效  4 网络或接口不可用
 
 说明:
-  课表查询只读本地快照，0 网络请求、可离线；仅 timetable sync 会联网。
+  课表查询每次先联网刷新，成功用最新快照（stale:false）；断网时沿用旧快照
+  并标 stale:true + syncedAt，退出码仍为 0。timetable sync 只刷新不查询。
   电费数据约有 1 天延迟，输出中的「数据截至」是采集时间，不是实时值。
 `
 
@@ -83,8 +85,9 @@ var commandHelp = map[string]string{
   kemaolife timetable week [N]        第 N 周课表；省略 N 为当周
   kemaolife timetable date YYYY-MM-DD 指定日期课表
 
-  查询只读本地快照，0 网络请求、可离线；快照缺失时返回退出码 3，
-  不会自动联网。非学期内日期返回 inSemester:false 与空 entries（退出码 0）。
+  每次查询先联网刷新（含可选的会话探活），刷新失败才回落旧快照（stale:true）。
+  刷新失败且无旧快照时才报错（退出码 3 或 4）。非学期内日期、当周不可解析
+  均返回 inSemester:false 与空 entries（退出码 0），不产生 1002。
 
   支持的参数: --json --config <path> --timeout <dur>
 `,
@@ -92,8 +95,9 @@ var commandHelp = map[string]string{
 
   kemaolife electricity [--month YYYY-MM]
 
-  一次调用返回剩余电费与每日用量（内部 2 个请求）。任一请求失败整体报错，
-  不返回半份数据。--month 省略时取当月。
+  一次调用返回剩余电费与每日用量（2 个主请求 + 1 个采集时刻请求）。
+  任一主请求失败整体报错，不返回半份数据；采集时刻请求失败静默降级。
+  --month 省略时取当月。
 
   输出中的 collectedAt 是数据采集时间（电表约 1 天延迟），必须标注「数据截至」。
 

@@ -12,12 +12,10 @@ import (
 // defaultTimeout 是 --timeout 未指定时的单次网络超时上限（docs/002 §1.1）。
 const defaultTimeout = 30 * time.Second
 
-// defaultCustomerCode 是学校代码内置默认值，由构建期注入（AGENTS §5.6）：
-//
-//	go build -ldflags "-X main.defaultCustomerCode=<学校代码>"
-//
-// 源码里必须为空串：仓库内不得出现真实学校代码。
-var defaultCustomerCode = ""
+// defaultCustomerCode 是本项目的学校代码内置默认值（学校事实，非个人隐私）。
+// 可用 -ldflags "-X main.defaultCustomerCode=<学校代码>" 覆盖；
+// 用户还能用 config set customercode 再覆盖。
+var defaultCustomerCode = "3126"
 
 // options 是全局参数解析结果（docs/002 §1.1「全局参数」）。
 type options struct {
@@ -84,29 +82,49 @@ func parseGlobalFlags(args []string) (options, []string, error) {
 	}
 
 	// 子命令之后仍可能带全局参数（agent 习惯写在末尾）；把它们摘出来。
-	rest = extractTrailingGlobals(&opts, rest)
-	return opts, rest, nil
+	tail, err := extractTrailingGlobals(&opts, rest)
+	if err != nil {
+		return opts, nil, err
+	}
+	return opts, tail, nil
 }
 
 // extractTrailingGlobals 把子命令参数里的全局开关摘走，其余保持原序。
-func extractTrailingGlobals(opts *options, args []string) []string {
+// 带值参数（--config / --timeout）也支持放在末尾，agent 不必记住参数位置。
+func extractTrailingGlobals(opts *options, args []string) ([]string, error) {
 	if len(args) == 0 {
-		return args
+		return args, nil
 	}
 	out := make([]string, 0, len(args))
-	for _, arg := range args {
-		switch arg {
+	for i := 0; i < len(args); i++ {
+		arg := args[i]
+		name, value, hasValue := splitFlag(arg)
+		switch name {
 		case "--json":
 			opts.json = true
 		case "--verbose":
 			opts.verbose = true
 		case "-h", "--help":
 			opts.help = true
+		case "--config", "--timeout":
+			v, err := flagValue(name, value, hasValue, args, &i)
+			if err != nil {
+				return nil, err
+			}
+			if name == "--config" {
+				opts.configPath = v
+			} else {
+				d, err := parseTimeout(v)
+				if err != nil {
+					return nil, err
+				}
+				opts.timeout = d
+			}
 		default:
 			out = append(out, arg)
 		}
 	}
-	return out
+	return out, nil
 }
 
 func splitFlag(arg string) (name, value string, hasValue bool) {

@@ -57,7 +57,7 @@ func configInit(opts options, rt *session) error {
 	reader := bufio.NewReader(stdin)
 
 	if interactive {
-		writeStdout("学号: ")
+		writePrompt("学号: ")
 	}
 	studentID, err := readLine(reader)
 	if err != nil {
@@ -69,11 +69,11 @@ func configInit(opts options, rt *session) error {
 	}
 
 	if interactive {
-		writeStdout("教务密码（输入不回显）: ")
+		writePrompt("教务密码（输入不回显）: ")
 	}
 	password, err := platform.ReadSecret(reader, interactive)
 	if interactive {
-		writeStdout("\n")
+		writePrompt("\n")
 	}
 	if err != nil {
 		return model.WrapError(model.CodeInvalidArgument, "读取密码失败", err)
@@ -144,7 +144,7 @@ func configSet(opts options, rt *session, args []string) error {
 		"customerCodeSource": app.CustomerCodeSource(rt.deps, cfg),
 	}
 	return envelope(opts, model.Envelope{OK: true, Data: data, TS: formatNow(rt)}, func() {
-		writeStdout("学校代码已更新（来源 custom）\n")
+		writeStdout("学校代码已更新（来源 " + data["customerCodeSource"] + "）\n")
 	})
 }
 
@@ -205,6 +205,9 @@ func readLine(r *bufio.Reader) (string, error) {
 	}
 	return strings.TrimRight(line, "\r\n"), nil
 }
+
+// writePrompt 把交互提示写到 stderr：--json 时 stdout 必须只有信封（docs/002 §1.1）。
+func writePrompt(s string) { fmt.Fprint(stderr, s) }
 
 // formatNow 统一信封 ts；命令内部时间一律经 deps.Clock（AGENTS §6）。
 func formatNow(rt *session) string {

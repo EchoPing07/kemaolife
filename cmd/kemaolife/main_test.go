@@ -8,6 +8,8 @@ import (
 	"runtime"
 	"strings"
 	"testing"
+
+	"github.com/EchoPing07/kemaolife/internal/core/model"
 )
 
 // runCLI 在隔离的目录里跑一次 CLI，返回退出码与 stdout/stderr。
@@ -79,6 +81,21 @@ func TestVersionJSON(t *testing.T) {
 	}
 	if !env.OK || env.Data.Version != version || env.TS == "" {
 		t.Errorf("信封 = %+v", env)
+	}
+}
+
+// 课表查询信封必须恒带 stale 键；刷新成功时为 false，不能因 omitempty 被省略。
+func TestEnvelopeAlwaysHasStale(t *testing.T) {
+	env := model.Envelope{OK: true, Data: map[string]any{}, TS: "2026-11-06T00:00:00+08:00", Stale: model.BoolPtr(false)}
+	var buf bytes.Buffer
+	writeJSON(&buf, env)
+	var got map[string]any
+	if err := json.Unmarshal(buf.Bytes(), &got); err != nil {
+		t.Fatal(err)
+	}
+	v, ok := got["stale"]
+	if !ok || v != false {
+		t.Errorf("stale = %v, present = %v", v, ok)
 	}
 }
 
@@ -255,10 +272,10 @@ func TestConfigSetCustomerCode(t *testing.T) {
 	}
 	out.Reset()
 
-	if code := run([]string{"--json", "config", "set", "customercode", "<学校代码>"}); code != 0 {
+	if code := run([]string{"--json", "config", "set", "customercode", "<自定义学校代码>"}); code != 0 {
 		t.Fatalf("config set exit = %d", code)
 	}
-	if strings.Contains(out.String(), "<学校代码>") {
+	if strings.Contains(out.String(), "<自定义学校代码>") {
 		t.Error("set 不得回显学校代码取值")
 	}
 
@@ -286,7 +303,7 @@ func TestConfigSetUnknownFieldExit2(t *testing.T) {
 	}
 }
 
-// 全局参数写在子命令之后也要生效（agent 习惯）。
+// 全局参数写在子命令之后也要生效（agent 习惯），含带值参数。
 func TestTrailingGlobalFlags(t *testing.T) {
 	code, out, _ := runCLI(t, nil, "", "config", "show", "--json")
 	if code != 0 {
@@ -294,6 +311,61 @@ func TestTrailingGlobalFlags(t *testing.T) {
 	}
 	if !strings.HasPrefix(strings.TrimSpace(out), "{") {
 		t.Errorf("尾部 --json 未生效: %q", out)
+	}
+
+	tmp := t.TempDir()
+	custom := filepath.Join(tmp, "custom", "config.json")
+	code, out, _ = runCLI(t, nil, "", "config", "show", "--json", "--config", custom)
+	if code != 0 {
+		t.Fatalf("exit = %d", code)
+	}
+	var env struct {
+		Data struct {
+			ConfigPath string `json:"configPath"`
+		} `json:"data"`
+	}
+	if err := json.Unmarshal([]byte(out), &env); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(env.Data.ConfigPath, "custom") {
+		t.Errorf("尾部 --config 未生效: %q", env.Data.ConfigPath)
+	}
+}
+
+// --verbose 只写 stderr，不污染 stdout 信封，且不含个人信息。
+func TestVerboseWritesDiagnosticsToStderr(t *testing.T) {
+	code, out, errOut := runCLI(t, nil, "", "--json", "--verbose", "config", "show")
+	if code != 0 {
+		t.Fatalf("exit = %d", code)
+	}
+	if !strings.HasPrefix(strings.TrimSpace(out), "{") {
+		t.Errorf("stdout 必须只有信封: %q", out)
+	}
+	if !strings.Contains(errOut, "诊断") {
+		t.Errorf("stderr 缺少诊断: %q", errOut)
+	}
+}
+
+// 学校代码内置默认值为 3126（学校事实），config show 恒脱敏但标注来源。
+func TestDefaultCustomerCode(t *testing.T) {
+	if defaultCustomerCode != "3126" {
+		t.Fatalf("defaultCustomerCode = %q", defaultCustomerCode)
+	}
+	code, out, _ := runCLI(t, nil, "", "--json", "config", "show")
+	if code != 0 {
+		t.Fatalf("exit = %d", code)
+	}
+	var env struct {
+		Data struct {
+			CustomerCode       string `json:"customerCode"`
+			CustomerCodeSource string `json:"customerCodeSource"`
+		} `json:"data"`
+	}
+	if err := json.Unmarshal([]byte(out), &env); err != nil {
+		t.Fatal(err)
+	}
+	if env.Data.CustomerCode != "****" || env.Data.CustomerCodeSource != "default" {
+		t.Errorf("data = %+v", env.Data)
 	}
 }
 
