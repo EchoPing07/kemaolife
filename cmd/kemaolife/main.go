@@ -10,17 +10,18 @@ import (
 	"github.com/EchoPing07/kemaolife/internal/app"
 	"github.com/EchoPing07/kemaolife/internal/core/model"
 	"github.com/EchoPing07/kemaolife/internal/platform"
+	buildversion "github.com/EchoPing07/kemaolife/internal/version"
 )
 
-// 版本信息由编译期注入（docs/002 §1.1）：
+// 版本号取自仓库唯一来源 internal/version.Version（docs/002 §1.1）：改版本只改那一行，
+// 不用构建参数覆盖，避免三端版本漂移；commit 是构建产物信息，仍由编译期注入：
 //
-//	go build -ldflags "-X main.version=<版本号> -X main.commit=<提交号>"
+//	go build -ldflags "-X main.commit=<提交号>"
 //
 // --version 不联网、不读配置。
-var (
-	version = "0.0.0-dev"
-	commit  = "unknown"
-)
+const version = buildversion.Version
+
+var commit = "unknown"
 
 func main() {
 	os.Exit(run(os.Args[1:]))
