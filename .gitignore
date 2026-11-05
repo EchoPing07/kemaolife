@@ -1,0 +1,45 @@
+# 本地 AI agent 约束文件（不纳入版本控制）
+AGENTS.md
+
+# 本地编辑器 / 工作区状态
+.obsidian/
+.idea/
+.vscode/
+*.swp
+.DS_Store
+Thumbs.db
+
+# Go 构建产物与测试输出
+/bin/
+/dist/
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+*.test
+*.out
+*.prof
+
+# Android / gomobile 产物
+.gradle/
+**/build/
+local.properties
+*.iml
+*.aar
+*.apk
+*.aab
+*.keystore
+*.jks
+
+# 本地配置、凭据与缓存（快照含 Cookie，等同凭据）
+.env
+.env.*
+*.local.json
+config.local.*
+secrets/
+snapshot*.json
+*.snapshot
+
+# 日志
+*.log

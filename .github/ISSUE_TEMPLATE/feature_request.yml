@@ -1,0 +1,84 @@
+name: 功能建议
+description: 提出新能力、行为变更，或讨论待确认项（D 项）
+title: "[feat] "
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        提交前请先阅读 [docs/000-需求与产品定位.md](https://github.com/EchoPing07/kemaolife/blob/main/docs/000-需求与产品定位.md) 与 [docs/002-功能规格.md](https://github.com/EchoPing07/kemaolife/blob/main/docs/002-功能规格.md)。
+        本项目只有三个功能域（课表、电费、校园网认证）与三个端；不做多账号、代查、公开服务化、充值 / 绑房间、浏览器内核、Android 后台服务、Windows 课表主界面。
+        按「背景 / 要求 / 验收」写，不记录对话过程；不要粘贴真实数据。
+
+  - type: dropdown
+    id: kind
+    attributes:
+      label: 类型
+      options:
+        - 新能力
+        - 现有行为变更
+        - 待确认项（D 项）讨论
+        - 里程碑 / 范围调整
+    validations:
+      required: true
+
+  - type: input
+    id: reference
+    attributes:
+      label: 关联编号
+      description: R 项 / D 项 / 文档章节 / 已有 Issue
+      placeholder: "例：R2、D3、docs/002-功能规格.md §6 或 #12"
+    validations:
+      required: false
+
+  - type: textarea
+    id: background
+    attributes:
+      label: 背景
+      description: 现状与问题，不含原始话术与真实数据
+    validations:
+      required: true
+
+  - type: textarea
+    id: requirements
+    attributes:
+      label: 要求
+      description: 逐条列出期望行为；涉及三端时分别说明
+    validations:
+      required: true
+
+  - type: textarea
+    id: acceptance
+    attributes:
+      label: 验收
+      description: 可验证的条件；写明对离线、数据截至、告警去重等约束的影响
+    validations:
+      required: true
+
+  - type: textarea
+    id: contract
+    attributes:
+      label: 契约影响
+      description: 是否触及 CLI 命令 / 退出码 / JSON 信封 / DTO 字段名 / 错误码 / Android 门面 op；如触及，说明为何需要先改 docs/002
+    validations:
+      required: false
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: 不做的事 / 备选方案
+      description: 明确边界；D 项请列出候选，不要自行定稿
+    validations:
+      required: false
+
+  - type: checkboxes
+    id: confirm
+    attributes:
+      label: 提交确认
+      options:
+        - label: 建议不涉及真实个人信息、凭据、非本人数据或对外服务化
+          required: true
+        - label: 若是 D 项讨论，我没有把「倾向」当作已定稿结论
+          required: true
+        - label: 我已阅读 CODE_OF_CONDUCT.md，讨论将聚焦问题本身
+          required: true

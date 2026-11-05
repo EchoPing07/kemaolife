@@ -1,0 +1,56 @@
+name: 待确认项 / 使用疑问
+description: 讨论 D 项、范围疑问或使用问题（不自行定稿）
+title: "[question] "
+labels: ["question"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        D 项清单位于 [docs/000-需求与产品定位.md §6](https://github.com/EchoPing07/kemaolife/blob/main/docs/000-需求与产品定位.md#6-待确认清单)。
+        「倾向」只是描述性基线，**D 项定稿由用户决策**；本模板用于讨论，不代表结论。
+        若是可复现的缺陷请用「问题报告」，若是明确的新能力请用「功能建议」。
+
+  - type: input
+    id: reference
+    attributes:
+      label: 关联编号
+      description: D 项编号 / R 项 / 文档章节 / 已有 Issue
+      placeholder: "例：D13、R4、docs/001-架构设计.md §9"
+    validations:
+      required: true
+
+  - type: textarea
+    id: question
+    attributes:
+      label: 问题
+      description: 想确认什么，为什么现有文档不足以判断
+    validations:
+      required: true
+
+  - type: textarea
+    id: options
+    attributes:
+      label: 候选方案与影响
+      description: 逐条列出候选、对三端 / 契约 / 工具链的影响；工具链或第三方依赖变更需单独确认
+    validations:
+      required: true
+
+  - type: textarea
+    id: conservative
+    attributes:
+      label: 最保守默认值
+      description: "若暂不定稿，实现时应取什么值、代码标哪个 `// TODO(D<n>): 待定`"
+    validations:
+      required: false
+
+  - type: checkboxes
+    id: confirm
+    attributes:
+      label: 提交确认
+      options:
+        - label: 我没有把「倾向」当作已定稿结论，也没有替用户做 D 项决策
+          required: true
+        - label: 内容不含真实个人信息、凭据或学校代码明文
+          required: true
+        - label: 我已阅读 CODE_OF_CONDUCT.md，讨论将聚焦问题本身
+          required: true

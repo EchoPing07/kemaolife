@@ -1,0 +1,17 @@
+blank_issues_enabled: false
+contact_links:
+  - name: 敏感信息 / 隐私问题（请勿公开提交）
+    url: https://github.com/EchoPing07/kemaolife/security/advisories/new
+    about: 疑似真实凭据、个人信息或课表快照进入仓库时，使用私有渠道，见 SECURITY.md
+  - name: 社区行为准则问题
+    url: https://github.com/EchoPing07/kemaolife/blob/main/CODE_OF_CONDUCT.md
+    about: 不当行为的私下报告渠道与处置方式
+  - name: 贡献规范与提交前自检
+    url: https://github.com/EchoPing07/kemaolife/blob/main/CONTRIBUTING.md
+    about: Issue / PR 规范、提交信息格式、契约变更纪律、自检命令
+  - name: 社区行为准则
+    url: https://github.com/EchoPing07/kemaolife/blob/main/CODE_OF_CONDUCT.md
+    about: 参与讨论的行为期望与违规报告渠道
+  - name: 需求与契约基线
+    url: https://github.com/EchoPing07/kemaolife/tree/main/docs
+    about: 开 Issue 前先查 R 项、D 项、功能矩阵与共享契约

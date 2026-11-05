@@ -1,0 +1,70 @@
+name: 文档与契约
+description: 报告文档错误、契约不一致，或协议证据与实测冲突
+title: "[docs] "
+labels: ["docs"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        文档编号固定为 `docs/000`、`001`、`002`，新增续 `003` 起；`docs/` 的「变更记录」表只追加、不改写。
+        协议事实只以 `api-docs/` 为准。若协议与实测不一致，请指出具体条目与差异，**不要自行纠偏或改写协议文档**。
+        所有示例值必须是占位符，`api-docs/**` 的示例代码必须是 Go。
+
+  - type: dropdown
+    id: scope
+    attributes:
+      label: 范围
+      options:
+        - docs/000 需求与产品定位
+        - docs/001 架构设计
+        - docs/002 功能规格（契约）
+        - api-docs/001 课表协议
+        - api-docs/002 电费协议
+        - api-docs/003 校园网协议
+        - README / CONTRIBUTING / 模板
+        - 跨文档不一致
+    validations:
+      required: true
+
+  - type: input
+    id: location
+    attributes:
+      label: 位置
+      description: 文件路径 + 章节 / 行号
+      placeholder: "例：docs/002-功能规格.md §2 JSON 信封"
+    validations:
+      required: true
+
+  - type: textarea
+    id: issue
+    attributes:
+      label: 问题
+      description: 现状写什么、与哪一处契约 / 协议证据冲突
+    validations:
+      required: true
+
+  - type: textarea
+    id: proposal
+    attributes:
+      label: 建议改法
+      description: 只写结论与理由；涉及契约字段时说明三端如何同步
+    validations:
+      required: true
+
+  - type: textarea
+    id: evidence
+    attributes:
+      label: 证据（已脱敏）
+      description: 可选。可引用文档条目或本地夹具；禁止粘贴真实响应体、Cookie、凭据、内网地址
+    validations:
+      required: false
+
+  - type: checkboxes
+    id: confirm
+    attributes:
+      label: 提交确认
+      options:
+        - label: 我没有改写「变更记录」表，也没有把 D 项自行定稿
+          required: true
+        - label: 内容不含真实个人信息、凭据或学校代码明文
+          required: true
