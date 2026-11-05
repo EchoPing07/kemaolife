@@ -50,8 +50,8 @@ func GetSchedule(ctx context.Context, d Deps, cfg model.Config, date model.Date)
 
 // refreshSnapshot 尝试刷新快照，返回刷新是否失败。
 //
-// 缺教务凭据时不抛错：某些环境只需要读快照（例如只配了学号但密码过期），
-// 让查询仍然可用并标 stale，而不是把「没配密码」变成硬失败。
+// 缺教务凭据时不抛错：有旧快照时仍可查并标 stale（docs/002 §1.3）；
+// 无旧快照时由调用方拿到 refreshErr 并映射为退出码 3。
 func refreshSnapshot(ctx context.Context, d Deps, cfg model.Config) error {
 	if cfg.StudentID == "" || cfg.EduPassword == "" {
 		return model.NewError(model.CodeCredentialMissing, "未配置教务账号")
@@ -69,7 +69,7 @@ type WeekResult struct {
 }
 
 // GetWeekSchedule 查询第 week 周（先刷新，语义同 GetSchedule）。
-// week <= 0 表示当周；当周解析不出来时返回 1002。
+// week <= 0 表示当周；当前日期不在学期内时返回 7 天 InSemester:false 的成功结果（不产生 1002）。
 func GetWeekSchedule(ctx context.Context, d Deps, cfg model.Config, week int) (WeekResult, error) {
 	if err := ensureDeps(d, true, true); err != nil {
 		return WeekResult{}, err
@@ -86,17 +86,33 @@ func GetWeekSchedule(ctx context.Context, d Deps, cfg model.Config, week int) (W
 	}
 
 	resolved := week
+	outsideSemester := false
 	if resolved <= 0 {
-		resolved = timetable.CurrentWeek(snap, model.NewDate(d.Clock.Now()))
-		if resolved == 0 {
-			return WeekResult{}, model.NewError(model.CodeNotInSemester,
-				"当前日期不在本学期范围（"+timetable.SemesterRange(snap)+"）")
+		if w := timetable.CurrentWeek(snap, model.NewDate(d.Clock.Now())); w > 0 {
+			resolved = w
+		} else {
+			// 假期 / 学期外：不猜周次、不报错；按「今天所在周」取 7 天，
+			// 但统一标记 InSemester:false（docs/002 §1.1）。
+			outsideSemester = true
+			today := model.NewDate(d.Clock.Now())
+			resolved = today.DaysSince(snap.Week1Monday)/7 + 1
+			if resolved < 1 {
+				resolved = 1
+			}
+		}
+	}
+
+	days := timetable.QueryWeek(snap, resolved)
+	if outsideSemester {
+		for i := range days {
+			days[i].InSemester = false
+			days[i].Entries = []model.Entry{}
 		}
 	}
 
 	return WeekResult{
 		Week:     resolved,
-		Days:     timetable.QueryWeek(snap, resolved),
+		Days:     days,
 		Stale:    refreshErr != nil,
 		SyncedAt: snap.SyncedAt,
 	}, nil

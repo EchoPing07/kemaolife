@@ -261,7 +261,7 @@ func TestSyncHappyPath(t *testing.T) {
 		t.Errorf("SyncedAt 应来自注入时钟: %v", snap.SyncedAt)
 	}
 
-	// 快照可直接用于查询，0 请求。
+	// 快照可直接用于 Query 纯函数计算，0 请求；刷新由 app 层负责。
 	day := Query(snap, model.Date{Year: 2026, Month: 11, Day: 5}) // 第 10 周周四
 	if day.Week != 10 {
 		t.Errorf("week = %d, want 10", day.Week)

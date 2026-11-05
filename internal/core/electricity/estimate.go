@@ -8,8 +8,8 @@ import (
 
 // Estimate 由近 7 日平均日用量估算可用天数（docs/002 §3.2）。
 //
-// 数据不足 7 日时用实际天数求均值；无数据或均量为 0 时返回 nil，
-// 让输出明确「算不出」，不要用 0 冒充。
+// 数据不足 7 日时用实际天数求均值；无数据时 dailyAvg 为 nil（estimatedDays 亦为 nil），
+// 均量 ≤ 0 时 dailyAvg 为 0、estimatedDays 为 nil（docs/002 §3.2）。
 func Estimate(days []model.DayUsage) (dailyAvg *float64, estimatedDays *int) {
 	if len(days) == 0 {
 		return nil, nil

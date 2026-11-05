@@ -14,7 +14,7 @@ import (
 
 const (
 	testAccount = "<学号>"
-	testSchool  = "<学校代码>"
+	testSchool  = "3126" // 学校事实，非个人隐私；允许入仓
 	testRoom    = "<roomverify>"
 )
 
@@ -123,6 +123,9 @@ func TestCallDetectsInnerFailureDespiteOuterSuccess(t *testing.T) {
 	if model.CodeOf(err) != model.CodeCredentialMissing {
 		t.Errorf("code = %d, want %d", model.CodeOf(err), model.CodeCredentialMissing)
 	}
+	if !strings.Contains(err.Error(), "电费业务失败") || strings.Contains(err.Error(), "参数异常") {
+		t.Errorf("上游文案必须脱敏: %v", err)
+	}
 }
 
 func TestCallOuterFailure(t *testing.T) {
@@ -135,6 +138,9 @@ func TestCallOuterFailure(t *testing.T) {
 	_, _, err := c.GetBindRoom(context.Background(), testAccount, testSchool)
 	if model.CodeOf(err) != model.CodeNetworkDown {
 		t.Errorf("code = %d, want %d", model.CodeOf(err), model.CodeNetworkDown)
+	}
+	if strings.Contains(err.Error(), "服务异常") {
+		t.Errorf("上游文案必须脱敏: %v", err)
 	}
 }
 
@@ -196,10 +202,18 @@ func TestGetBindRoomNoElectricMeter(t *testing.T) {
 	}
 }
 
-// 每日用量必须按日期升序（接口倒序返回）。
+// 每日用量必须按日期升序：即使上游乱序返回也保证升序（AGENTS §6）。
 func TestGetUseDetailAscendingOrder(t *testing.T) {
+	const shuffled = `{
+  "result":"0","yearmonth":"2026-11","monthuse":"63.13","opdtdate":"2026-11-04",
+  "dayuselist":[
+    {"date":"2026-11-03","dayuse":11.64},
+    {"date":"2026-11-04","dayuse":11.75},
+    {"date":"2026-11-02","dayuse":10.50}
+  ]
+}`
 	srv := newServer(t, func(cmd string, form map[string]string) string {
-		return wrap(useDetailBody)
+		return wrap(shuffled)
 	})
 	defer srv.Close()
 

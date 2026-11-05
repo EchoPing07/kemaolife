@@ -1,8 +1,9 @@
 // Package electricity 访问智能水电 H5 后端（SWAEServlet），解析双层 JSON。
 //
 // 两个坑（AGENTS §5.3）必须逐条对照本包：
-//  1. `body` 是字符串，缺参数时外层仍 `result_:"true"`，必须解 `body` 再判 `body.result`；
-//  2. 一次查询 = 2 个请求（getbindroom + getusedetail），任一失败整体报错，不返回半份数据。
+//  1. `body` 是字符串（实测也可能是内联对象），缺参数时外层仍 `result_:"true"`，必须解 `body` 再判 `body.result`；
+//  2. 一次查询 = 2 个主请求（getbindroom + getusedetail）+ 1 个可选采集时刻请求；
+//     主请求任一失败整体报错，采集时刻请求失败静默降级。
 package electricity
 
 import (
@@ -11,6 +12,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
+	"sort"
 	"strconv"
 	"strings"
 
@@ -134,7 +136,7 @@ func (c *Client) GetUseDetail(ctx context.Context, account, schoolCode, roomVeri
 	}
 
 	list, _ := body[bodyFieldDayUses].([]any)
-	reversed := make([]model.DayUsage, 0, len(list))
+	days := make([]model.DayUsage, 0, len(list))
 	for _, item := range list {
 		d, ok := item.(map[string]any)
 		if !ok {
@@ -152,12 +154,11 @@ func (c *Client) GetUseDetail(ctx context.Context, account, schoolCode, roomVeri
 		if err != nil {
 			continue // 单日数据异常不拖垮整月
 		}
-		reversed = append(reversed, model.DayUsage{Date: date, Use: use})
+		days = append(days, model.DayUsage{Date: date, Use: use})
 	}
-	// 接口倒序 → 升序（docs/002 §3.2「days[] 按日期升序输出」）。
-	for i := len(reversed) - 1; i >= 0; i-- {
-		usage.Days = append(usage.Days, reversed[i])
-	}
+	// 显式按日期升序（AGENTS §6「列表排序必须显式」），不依赖上游返回顺序。
+	sort.SliceStable(days, func(i, j int) bool { return days[i].Date < days[j].Date })
+	usage.Days = append(usage.Days, days...)
 	return usage, nil
 }
 
@@ -216,8 +217,7 @@ func (c *Client) call(ctx context.Context, cmd, account, schoolCode string, extr
 		return nil, model.WrapError(model.CodeMalformedResponse, "电费外层 JSON 解析失败", err)
 	}
 	if !bool(outer.Result) {
-		// 上游拒绝（如「客户学校不存在」）：属配置或凭据问题，不是网络问题。
-		// message_ / exception_ 只用于定位，不代表个人信息，可以透传。
+		// 上游文案可能夹带个人信息（api-docs/002 §10）：只用于错误分类，不外传。
 		msg := outer.Message
 		if msg == "" {
 			msg = outer.Exception
@@ -225,7 +225,7 @@ func (c *Client) call(ctx context.Context, cmd, account, schoolCode string, extr
 		if msg == "" {
 			msg = "上游返回失败"
 		}
-		return nil, model.NewError(codeForOuterFailure(int(outer.Code), msg), "电费接口请求失败: "+msg)
+		return nil, model.NewError(codeForOuterFailure(int(outer.Code), msg), "电费接口请求失败")
 	}
 	bodyText := string(outer.Body)
 	if strings.TrimSpace(bodyText) == "" {
@@ -238,11 +238,9 @@ func (c *Client) call(ctx context.Context, cmd, account, schoolCode string, extr
 		return nil, model.WrapError(model.CodeMalformedResponse, "电费内层 JSON 解析失败", err)
 	}
 	if result := asString(body[bodyFieldResult]); result != "0" {
-		msg := asString(body[bodyFieldMessage])
-		if msg == "" {
-			msg = "上游业务失败"
-		}
-		return nil, model.NewError(codeForResult(result), "电费业务失败: "+msg)
+		// 上游 message 可能夹带姓名 / 房间号，不外传；只按 result 分类。
+		_ = asString(body[bodyFieldMessage])
+		return nil, model.NewError(codeForResult(result), "电费业务失败")
 	}
 	return body, nil
 }
@@ -278,7 +276,8 @@ func codeForOuterFailure(code int, msg string) model.ErrorCode {
 	return model.CodeNetworkDown
 }
 
-// maskRoomVerify 对房间编码脱敏：对外只保留长度信息（P1 / docs/002 §3.2）。
+// maskRoomVerify 对房间编码脱敏（个人隐私，P1）；roomName 属本人宿舍标识，
+// 允许在本机 CLI 输出（docs/002 §3.2），但不进日志 / 错误信息。
 func maskRoomVerify(raw string) string {
 	if raw == "" {
 		return ""

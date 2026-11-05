@@ -8,7 +8,7 @@ type Config struct {
 	StudentID   string `json:"studentId"`
 	EduPassword string `json:"eduPassword"`
 	// CustomerCode 是电费的学校代码，因校而异（api-docs/002 §10.2）。
-	// 允许随发行包内置默认值，但仓库内不得出现真实值（AGENTS §5.6）。
+	// 学校代码属学校事实，内置默认值写在 cmd 层（3126），不写成 core 包级常量。
 	CustomerCode string `json:"customerCode,omitempty"`
 }
 
@@ -17,8 +17,3 @@ const (
 	CustomerCodeSourceDefault = "default"
 	CustomerCodeSourceCustom  = "custom"
 )
-
-// CredentialComplete 判断查询电费所需的身份信息是否齐全（电费无密码）。
-func (c Config) CredentialComplete() bool {
-	return c.StudentID != "" && c.CustomerCode != ""
-}

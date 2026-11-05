@@ -19,7 +19,7 @@ import (
 const (
 	testAccount = "<学号>"
 	testPass    = "<密码>"
-	testSchool  = "<学校代码>"
+	testSchool  = "3126" // 学校事实，非个人隐私；允许入仓
 )
 
 func testClock() *porttest.FakeClock {
@@ -178,16 +178,24 @@ func TestGetWeekSchedule(t *testing.T) {
 	}
 }
 
-// 假期里未指定周次：明确报 1002，不猜周次。
-func TestGetWeekScheduleOutsideSemesterIs1002(t *testing.T) {
+// 假期里未指定周次：返回 7 天 inSemester:false 的成功结果，不产生 1002。
+func TestGetWeekScheduleOutsideSemesterIsSuccess(t *testing.T) {
 	clock := porttest.NewFakeClock(time.Date(2026, 7, 1, 8, 0, 0, 0, time.Local))
 	deps, store, _ := testDeps(clock)
 	deps.HTTP = failingHTTP{}
 	seedSnapshot(t, store)
 
-	_, err := app.GetWeekSchedule(context.Background(), deps, testConfig(), 0)
-	if model.CodeOf(err) != model.CodeNotInSemester {
-		t.Errorf("code = %d, want %d", model.CodeOf(err), model.CodeNotInSemester)
+	result, err := app.GetWeekSchedule(context.Background(), deps, testConfig(), 0)
+	if err != nil {
+		t.Fatalf("非学期内不应报错: %v", err)
+	}
+	if len(result.Days) != 7 {
+		t.Fatalf("days = %d, want 7", len(result.Days))
+	}
+	for _, d := range result.Days {
+		if d.InSemester || len(d.Entries) != 0 {
+			t.Errorf("day = %+v, want InSemester:false / 空 entries", d)
+		}
 	}
 }
 
@@ -354,7 +362,7 @@ func TestConfigRoundTripAndMasking(t *testing.T) {
 
 	cfg.StudentID = testAccount
 	cfg.EduPassword = testPass
-	cfg.CustomerCode = "999999"
+	cfg.CustomerCode = "<自定义学校代码>"
 	if err := app.SaveConfig(deps, cfg); err != nil {
 		t.Fatal(err)
 	}

@@ -24,6 +24,12 @@ func NewSingleFileStore(path, key string) (*SingleFileStore, error) {
 	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
 		return nil, fmt.Errorf("创建配置目录失败: %w", err)
 	}
+	// 历史文件可能是 0644：只读命令也要收紧权限，避免凭据长期宽松落盘（P5）。
+	if info, err := os.Stat(path); err == nil && info.Mode().Perm() != 0o600 {
+		if err := os.Chmod(path, 0o600); err != nil {
+			return nil, fmt.Errorf("收紧配置文件权限失败: %w", err)
+		}
+	}
 	return &SingleFileStore{path: path, key: key}, nil
 }
 

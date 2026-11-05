@@ -451,8 +451,9 @@ func (c *Client) doFollowStatus(ctx context.Context, req *http.Request) (int, st
 		if location == "" {
 			return resp.StatusCode, string(body), nil
 		}
-		// 实测中间跳的 Location 形如 `/jsxsd/;bzb_jsxsd=909B...`：
+		// 实测中间跳的 Location 形如 `/jsxsd/;<Cookie 名>=<会话值>`：
 		// Cookie 被塞在路径参数里，标准 url.Parse 不会当 Set-Cookie 处理，必须自己抽。
+		// 文档与注释均不复述真实会话值（P1）。
 		if strings.Contains(location, ";") {
 			c.absorbPathCookies(location)
 			location = stripPathParams(location)

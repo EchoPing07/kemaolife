@@ -41,8 +41,8 @@ type Lesson struct {
 
 // LoadSnapshot 从 KVStore 读快照并校验版本。
 //
-// 缺失或版本不匹配一律返回 3003（CodeSnapshotMissing）：CLI 查询路径不联网
-// 自动重拉（docs/002 §1.3），由调用方提示用户执行 `timetable sync`。
+// 缺失或版本不匹配一律返回 3003（CodeSnapshotMissing）：由 app 层先刷新，
+// 刷新也失败且无可用快照时才把该错误交给调用方（docs/002 §1.3）。
 func LoadSnapshot(store core.KVStore) (*Snapshot, error) {
 	raw, err := store.Get(SnapshotStoreKey)
 	if err != nil || len(raw) == 0 {

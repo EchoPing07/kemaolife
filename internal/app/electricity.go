@@ -11,7 +11,8 @@ import (
 
 // CheckElectricity 一次查询同时返回余额与每日用量（ElectricityReport）。
 //
-// 内部 2 个请求，任一失败整体报错，不返回半份数据（R2 要求 2、docs/002 §3.2）。
+// 2 个主请求任一失败整体报错，不返回半份数据；第 3 个采集时刻请求失败静默降级
+// （docs/002 §3.2）。
 // yearMonth 为空时取 Clock 当月的 YYYY-MM；
 // schoolCode 为空时回落配置值。
 func CheckElectricity(ctx context.Context, d Deps, cfg model.Config, yearMonth string) (model.ElectricityReport, error) {
@@ -50,7 +51,7 @@ func CheckElectricity(ctx context.Context, d Deps, cfg model.Config, yearMonth s
 
 	usage, err := client.GetUseDetail(ctx, cfg.StudentID, schoolCode, roomVerify, normalized)
 	if err != nil {
-		// 任一请求失败整体报错，不返回半份数据。
+		// 主请求任一失败整体报错，不返回半份数据。
 		return model.ElectricityReport{}, err
 	}
 
