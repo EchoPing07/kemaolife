@@ -82,6 +82,32 @@ func (c *Client) GetBindRoom(ctx context.Context, account, schoolCode string) (m
 	return status, roomVerify, nil
 }
 
+// GetIndexPage 取首页聚合数据里的**数据采集时刻**（`modlist[0].collecdate`）。
+//
+// 为什么单独发这一个请求：电费 DTO 的 `collectedAt` 必须是「数据截至」的准确时刻。
+// `getbindroom` 不给时间，`getusedetail` 只给 `opdtdate`（截止日，无时刻）。
+// 实测 `getstuindexpage` 的 `collecdate` 形如 `2026-11-05 22:24:52`，才是真实采集时刻。
+//
+// 注意：`getstuindexpage` 的 `odd` / `todayuse` 实测**缺失**，不得用作余额或用量来源
+// （api-docs/002 §6.3）。本方法只读时间字段，读不到就返回空串，由调用方降级。
+func (c *Client) GetIndexPage(ctx context.Context, account, schoolCode string) (string, error) {
+	body, err := c.call(ctx, CmdGetStuIndexPage, account, schoolCode, nil)
+	if err != nil {
+		return "", err
+	}
+	list, _ := body[bodyFieldModList].([]any)
+	for _, item := range list {
+		m, ok := item.(map[string]any)
+		if !ok {
+			continue
+		}
+		if ts := asString(m[bodyFieldCollecDate]); ts != "" {
+			return ts, nil
+		}
+	}
+	return "", nil
+}
+
 // GetUseDetail 取某月每日用量，days 按日期升序（接口返回倒序，这里反转）。
 func (c *Client) GetUseDetail(ctx context.Context, account, schoolCode, roomVerify, yearMonth string) (model.ElectricityUsage, error) {
 	body, err := c.call(ctx, CmdGetUseDetail, account, schoolCode, map[string]string{

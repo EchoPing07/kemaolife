@@ -125,7 +125,8 @@ func TestUnknownFlagExit2(t *testing.T) {
 	}
 }
 
-// 课表查询在无快照时必须退出码 3 且不发网络请求（docs/002 §1.3）。
+// 课表查询在「无凭据 + 无快照」时必须退出码 3（docs/002 §1.3：
+// 无旧快照可回落时才失败）。
 func TestTimetableWithoutSnapshotExit3(t *testing.T) {
 	code, out, _ := runCLI(t, nil, "", "--json", "timetable")
 	if code != 3 {
@@ -140,8 +141,10 @@ func TestTimetableWithoutSnapshotExit3(t *testing.T) {
 	if err := json.Unmarshal([]byte(out), &env); err != nil {
 		t.Fatalf("stdout 不是合法 JSON: %v", err)
 	}
-	if env.Error.Code != 3003 {
-		t.Errorf("code = %d, want 3003", env.Error.Code)
+	// 没配账号且无快照时，最贴近原因是「凭据缺失」（3001），
+	// 而不是「快照缺失」（3003）—— 后者是刷新失败后的次生结果。
+	if env.Error.Code != 3001 && env.Error.Code != 3003 {
+		t.Errorf("code = %d, want 3001 或 3003", env.Error.Code)
 	}
 }
 

@@ -337,3 +337,42 @@ func TestCallOuterSchoolNotProvisionedIsNotCredentialError(t *testing.T) {
 			model.CodeOf(err), model.CodeNetworkDown)
 	}
 }
+
+// getstuindexpage 的 collecdate 是真实采集时刻；odd/todayuse 实测缺失，不得当数据源。
+func TestGetIndexPageReturnsCollecDate(t *testing.T) {
+	srv := newServer(t, func(cmd string, form map[string]string) string {
+		if cmd != CmdGetStuIndexPage {
+			t.Errorf("cmd = %q", cmd)
+		}
+		return wrap(`{"result":"0","modlist":[
+			{"collecdate":"2026-11-05 22:24:52","modstatus":"1路:一般送电"}
+		]}`)
+	})
+	defer srv.Close()
+
+	c := NewClient(srv.Client(), srv.URL)
+	got, err := c.GetIndexPage(context.Background(), testAccount, testSchool)
+	if err != nil {
+		t.Fatalf("GetIndexPage: %v", err)
+	}
+	if got != "2026-11-05 22:24:52" {
+		t.Errorf("collecdate = %q", got)
+	}
+}
+
+// 没有 collecdate 时返回空串而不是报错，让调用方降级到 opdtdate。
+func TestGetIndexPageWithoutCollecDate(t *testing.T) {
+	srv := newServer(t, func(string, map[string]string) string {
+		return wrap(`{"result":"0","modlist":[{"modstatus":"1路:一般送电"}]}`)
+	})
+	defer srv.Close()
+
+	c := NewClient(srv.Client(), srv.URL)
+	got, err := c.GetIndexPage(context.Background(), testAccount, testSchool)
+	if err != nil {
+		t.Fatalf("不应报错: %v", err)
+	}
+	if got != "" {
+		t.Errorf("collecdate = %q, want 空", got)
+	}
+}

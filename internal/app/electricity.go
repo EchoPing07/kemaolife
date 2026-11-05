@@ -54,14 +54,20 @@ func CheckElectricity(ctx context.Context, d Deps, cfg model.Config, yearMonth s
 		return model.ElectricityReport{}, err
 	}
 
-	// 数据采集时间取 usage 的截止日（电表约 1 天延迟，api-docs/002 §10.5）。
-	// 只有截止日时补 00:00:00，格式仍是 RFC3339。
-	if status.CollectedAt == "" && usage.DataUntil != "" {
-		status.CollectedAt = usage.DataUntil + "T00:00:00+08:00"
-	}
 	electricity.WithEstimate(&status, usage.Days)
-	if status.CollectedAt != "" {
-		if normalizedAt, ok := normalizeTimestamp(status.CollectedAt); ok {
+
+	// 「数据截至」优先用 getstuindexpage 的 collecdate（真实采集时刻），
+	// 拿不到再退到 getusedetail 的 opdtdate（只有截止日，无时刻）。
+	//
+	// 为什么值得多发这一条请求：`opdtdate` 只到日，补成 00:00:00 会让用户看到
+	// 「数据截至 00:00」这种明显不是采集时刻的值；而 collecdate 是 22:24:52 这类真时刻。
+	if collectedAt, err := client.GetIndexPage(ctx, cfg.StudentID, schoolCode); err == nil && collectedAt != "" {
+		if normalizedAt, ok := normalizeTimestamp(collectedAt); ok {
+			status.CollectedAt = normalizedAt
+		}
+	}
+	if status.CollectedAt == "" && usage.DataUntil != "" {
+		if normalizedAt, ok := normalizeTimestamp(usage.DataUntil); ok {
 			status.CollectedAt = normalizedAt
 		}
 	}

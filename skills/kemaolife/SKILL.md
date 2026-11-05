@@ -12,6 +12,7 @@ description: 用 kemaolife CLI 查询广东科贸职业学院的课表与宿舍�
 
 | 用户问 | 跑 |
 |---|---|
+| — | **每次查询都会先联网刷新**：连网时是最新数据，断网时自动回落旧快照并标 `stale:true` |
 | 今天有什么课 / 现在上什么 | `kemaolife --json timetable` |
 | 第 N 周课表 / 本周课表 | `kemaolife --json timetable week [N]` |
 | 某天有没有课 | `kemaolife --json timetable date <YYYY-MM-DD>` |
@@ -52,6 +53,7 @@ description: 用 kemaolife CLI 查询广东科贸职业学院的课表与宿舍�
 ```
 
 - `entries: []` 表示**当天没课**，不是查询失败。
+- **`stale: true` 表示本次刷新失败、返回的是旧快照**：必须告诉用户数据时间（`syncedAt`），不要说成「最新课表」。
 - `inSemester: false` 表示该日期不在本学期范围（假期 / 越界周次），此时 `entries` 为空；这是**成功**（退出码 `0`），不是错误。
 - `week` 从 1 起；`weekday` 周一 = 1、周日 = 7。
 - `periods` 是大节区间，`time` 是该大节的时间段。多门课按起始节次、再按课程名排序。
@@ -85,16 +87,17 @@ description: 用 kemaolife CLI 查询广东科贸职业学院的课表与宿舍�
 
 | 场景 | `error.code` | 应对 |
 |---|---|---|
-| 快照缺失 / 版本不匹配 | `3003` | 让用户执行 `kemaolife timetable sync`（查询路径不会自动联网） |
-| 会话失效 | `3002` | 让用户执行 `kemaolife timetable sync`（sync 内部会重登一次） |
+| 快照缺失 / 版本不匹配（且刷新也失败） | `3003` | 让用户执行 `kemaolife timetable sync` |
+| 刷新失败但有旧快照 | 无（退出码 `0`） | 看 `stale:true`，向用户说明用的是 `syncedAt` 的数据 |
+| 会话失效 | `3002` | 刷新内部会重登一次；仍失败且有旧快照时按 `stale:true` 返回，无快照才报此错 |
 | 凭据缺失 | `3001` | 让用户执行 `kemaolife config init` 或 `config set customercode` |
-| 网络不可达 | `4001` | 课表：**已有快照时查询本不需要网络**，说明同步失败并给出 `syncedAt`；电费：明确报错，不要用缓存 |
+| 网络不可达 | `4001` | 课表：有旧快照时不报错，会以 `stale:true` 返回；无快照才报此错。电费：明确报错，不要用缓存 |
 | 响应格式异常 | `4002` | 上游可能改版，如实告知，不要自己修正协议 |
 | 账号密码错误 | `4003` | 让用户检查凭据 |
 | 不在本学期范围（且未指定周次） | `1002` | 让用户明确指定周次，或说明当前是假期 |
 | 未绑定房间 | `5001` | 说明需先在 H5 页面绑定房间，本工具不做绑定 |
 
-**不要把「同步失败」说成「查到最新课表」**：`stale` 字段为 `true` 时才表示沿用了旧快照。
+**不要把「刷新失败」说成「查到最新课表」**：`stale:true` 就是沿用了旧快照，回答里必须带数据时间。
 
 ## 5. 隐私约束（硬性）
 
@@ -107,7 +110,7 @@ description: 用 kemaolife CLI 查询广东科贸职业学院的课表与宿舍�
 
 1. `kemaolife config init` —— 交互录入学号与教务密码（权限 0600）。
 2. `kemaolife config set customercode <学校代码>` —— 电费需要；未设置时电费报 `3001`。
-3. `kemaolife timetable sync` —— 生成课表快照（1 登录 + 2 请求）。之后查课表都是 0 请求。
+3. `kemaolife timetable sync` —— 先生成一次快照（1 登录 + 2 请求）。之后每次查询会自动刷新，这一步只在首次 / 快照被清时需要。
 4. `kemaolife --json timetable` / `kemaolife --json electricity` —— 日常查询。
 
 > skill 存放位置仍是待确认项 `D2`；当前按 `skills/kemaolife/SKILL.md`（仓库内）放置，安装说明见仓库 README。

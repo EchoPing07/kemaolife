@@ -14,6 +14,9 @@ const (
 	// CmdGetUseDetail 取指定月份每日用量（api-docs/002 §5、§6.2）。
 	CmdGetUseDetail = "getusedetail"
 
+	// CmdGetStuIndexPage 取首页聚合数据；本项目只从中读数据采集时刻。
+	CmdGetStuIndexPage = "getstuindexpage"
+
 	// BusinessTypeElectric 是电；水为 1（api-docs/002 §7）。
 	BusinessTypeElectric = "0"
 
@@ -24,16 +27,18 @@ const (
 	outerFieldMessage = "message_"
 
 	// 内层 body 字段（api-docs/002 §6.1、§6.2）。
-	bodyFieldResult    = "result"
-	bodyFieldMessage   = "message"
-	bodyFieldRoomName  = "roomfullname"
-	bodyFieldRoomVer   = "roomverify"
-	bodyFieldExistFlag = "existflag"
-	bodyFieldDetail    = "detaillist"
-	bodyFieldYearMonth = "yearmonth"
-	bodyFieldMonthUse  = "monthuse"
-	bodyFieldOpdtDate  = "opdtdate" // 数据截止日
-	bodyFieldDayUses   = "dayuselist"
+	bodyFieldResult     = "result"
+	bodyFieldMessage    = "message"
+	bodyFieldRoomName   = "roomfullname"
+	bodyFieldRoomVer    = "roomverify"
+	bodyFieldExistFlag  = "existflag"
+	bodyFieldDetail     = "detaillist"
+	bodyFieldYearMonth  = "yearmonth"
+	bodyFieldMonthUse   = "monthuse"
+	bodyFieldOpdtDate   = "opdtdate" // 数据截止日
+	bodyFieldDayUses    = "dayuselist"
+	bodyFieldModList    = "modlist"    // getstuindexpage 的数据块数组
+	bodyFieldCollecDate = "collecdate" // 数据采集时刻，如 "2026-11-05 22:24:52"
 
 	detailFieldBusinessType = "businesstype"
 	detailFieldOdd          = "odd" // 剩余量

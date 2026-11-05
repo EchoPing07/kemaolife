@@ -2,7 +2,6 @@ package app
 
 import (
 	"context"
-	"fmt"
 
 	"github.com/EchoPing07/kemaolife/internal/core/model"
 	"github.com/EchoPing07/kemaolife/internal/core/timetable"
@@ -92,72 +91,4 @@ func syncWithRelogin(ctx context.Context, client *timetable.Client, cfg model.Co
 	}
 	return nil, model.NewError(model.CodeSessionExpired,
 		"教务会话失效且重新登录未成功，请确认账号密码后重试")
-}
-
-// GetSchedule 查询某一天课表：只读本地快照，0 请求（R1）。
-//
-// 快照缺失 / 版本不匹配返回 3003，不自动联网（docs/002 §1.3）。
-func GetSchedule(d Deps, date model.Date) (model.DaySchedule, error) {
-	if err := ensureDeps(d, false, true); err != nil {
-		return model.DaySchedule{}, err
-	}
-	snap, err := timetable.LoadSnapshot(d.Store)
-	if err != nil {
-		return model.DaySchedule{}, err
-	}
-	return timetable.Query(snap, date), nil
-}
-
-// ScheduleEnvelope 包装课表查询结果，附上 syncedAt（docs/002 §2）。
-//
-// 快照有效的正常查询 stale 恒为 false；「同步失败沿用旧快照」的 stale:true
-// 由 Android 的同步动作产出，不在这里置位。
-func ScheduleEnvelope(d Deps, date model.Date) (model.Envelope, error) {
-	if err := ensureDeps(d, false, true); err != nil {
-		return model.Envelope{}, err
-	}
-	snap, err := timetable.LoadSnapshot(d.Store)
-	if err != nil {
-		// 快照缺失 / 版本不匹配：明确报 3003，不返回空课表冒充成功。
-		return model.Envelope{}, err
-	}
-	return model.Envelope{
-		OK:       true,
-		Data:     timetable.Query(snap, date),
-		TS:       formatRFC3339(d.Clock.Now()),
-		Stale:    false,
-		SyncedAt: formatRFC3339(snap.SyncedAt),
-	}, nil
-}
-
-// WeekSchedule 返回第 week 周的 7 天（week<=0 表示当周）。
-func WeekSchedule(d Deps, week int) ([]model.DaySchedule, int, error) {
-	if err := ensureDeps(d, false, true); err != nil {
-		return nil, 0, err
-	}
-	snap, err := timetable.LoadSnapshot(d.Store)
-	if err != nil {
-		return nil, 0, err
-	}
-	if week <= 0 {
-		week = timetable.CurrentWeek(snap, model.NewDate(d.Clock.Now()))
-		if week == 0 {
-			return nil, 0, model.NewError(model.CodeNotInSemester,
-				fmt.Sprintf("当前日期不在本学期范围（第 1 周周一 %s，最后一周 %d）",
-					snap.Week1Monday, snap.LastWeek))
-		}
-	}
-	if week < 1 {
-		return nil, 0, model.NewError(model.CodeInvalidArgument, "周次必须从 1 起")
-	}
-	return timetable.QueryWeek(snap, week), week, nil
-}
-
-// CurrentWeekOf 返回当前周次（非学期内为 0）。
-func CurrentWeekOf(d Deps) (int, error) {
-	snap, err := timetable.LoadSnapshot(d.Store)
-	if err != nil {
-		return 0, err
-	}
-	return timetable.CurrentWeek(snap, model.NewDate(d.Clock.Now())), nil
 }
