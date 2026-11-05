@@ -41,6 +41,11 @@ jobs:
         run: |
           # 个人隐私（学号 / 房间号 / Cookie 值）不得入仓；按已知值逐个检查
           # 学校代码 3126 与协议 IP 属学校事实，不在此检查范围
-          if grep -rniE '<把已知的真实学号/房间号写在这里>' .; then
+          # grep 目标是占位模板（见 AGENTS §8，本地替换成已知真实值后逐个检查）。
+          # ci.yml / AGENTS.md / CONTRIBUTING.md 记录的正是这条命令，若一并扫描会
+          # 自匹配，导致 CI 永久误报；排除后真实值仍在其他任何文件里被拦截。
+          if grep -rniE '<把已知的真实学号/房间号写在这里>' . \
+              --exclude-dir=.git \
+              --exclude=ci.yml --exclude=AGENTS.md --exclude=CONTRIBUTING.md; then
             echo 'FAIL: personal data found'; exit 1
           fi
