@@ -18,7 +18,7 @@
 <br />
 
 > [!NOTE]
-> 仓库目前只有文档，没有可安装、可运行的程序，也没有示例配置或演示账号。想先搞清楚「要做什么」，从[需求与产品定位](./docs/000-需求与产品定位.md)读起；想直接看命令、字段和退出码，去[功能规格](./docs/002-功能规格.md)。
+> 仓库当前已实现 Linux CLI（M0 / M1）；Windows 与 Android 尚未启动。想先搞清楚「要做什么」，从[需求与产品定位](./docs/000-需求与产品定位.md)读起；想直接看命令、字段和退出码，去[功能规格](./docs/002-功能规格.md)。
 
 ## kemaolife 是什么
 
@@ -60,8 +60,9 @@ Portal   ──探测 302──► 判态 ──► 登录 / 下线 / 重登
 | 阶段 | 产出 | 状态 |
 |---|---|---|
 | 设计基线 | R1–R5、三端定位、架构与端口、共享契约、三个接口协议文档 | 已入库 |
-| M0 · 契约 + core | DTO、错误码、`core` / `ports`、单测、`kemaolife` 跑通 | 未启动 |
-| M0.5 → M4 | Android 门面 spike、Linux CLI、Windows 托盘、Android App、校园网自动登录 | 未启动 |
+| M0 · 契约 + core | DTO、错误码、`core` / `ports`、单测、`kemaolife` 跑通 | 已实现 |
+| M1 · Linux CLI + skill | 单二进制 `kemaolife` + 子命令、`config`、快照缓存、SKILL.md、离线查询、电费合并查询 | 已实现（aarch64 Linux 真机验证） |
+| M0.5 → M4 | Android 门面 spike、Windows 托盘、Android App、校园网自动登录 | 未启动 |
 
 完整里程碑与验收见 [000 文档 §7](./docs/000-需求与产品定位.md#7-里程碑)。
 
