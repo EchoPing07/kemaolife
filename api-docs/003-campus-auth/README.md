@@ -340,7 +340,7 @@ fmt.Println("复探状态:", p2.State)
 | 项 | 要求 |
 |---|---|
 | 账号密码 | 独立配置字段，不复用教务密码；DPAPI（Windows）或 Keystore（Android）加密存储 |
-| 日志 | 不打印密码、`wlanuserip`、`mac`、`distoken` |
+| 日志 | 不打印密码、`wlanuserip`、本机 `mac`、`distoken`、指纹值。Portal / 探测 IP 与 BRAS 名称属学校协议事实，可写入协议文档；用户本机内网 IP / MAC 一律用占位符 |
 | 指纹 | `browserFingerprint` 作为配置项，不在仓库硬编码抓包值 |
 | 频率 | 认证失败指数退避，起点 = 电费轮询间隔（默认 4 小时），逐步增大且上限大于起点；不重复弹通知。自动模式仅在 Windows 启用；Windows 手动与 Android 手动动作无退避轮询 |
 

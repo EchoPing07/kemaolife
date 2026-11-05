@@ -32,7 +32,7 @@
 curl -s -X POST 'https://xqh5.17wanxiao.com/smartWaterAndElectricityService/SWAEServlet' \
   -H 'Content-Type: application/x-www-form-urlencoded;charset=UTF-8' \
   --data-urlencode 'param={"cmd":"getbindroom","account":"<学号>"}' \
-  --data-urlencode 'customercode=<学校代码>' \
+  --data-urlencode 'customercode=3126' \
   --data-urlencode 'method=getbindroom'
 ```
 
@@ -61,7 +61,7 @@ curl -s -X POST 'https://xqh5.17wanxiao.com/smartWaterAndElectricityService/SWAE
 | 字段 | 必填 | 说明 |
 |---|---|---|
 | `param` | 是 | JSON **字符串**，内容为命令名 + 业务参数 |
-| `customercode` | 是 | 学校代码，因校而异（配置项，不硬编码） |
+| `customercode` | 是 | 学校代码，因校而异；本项目内置默认 `3126`（`cmd` 层，可覆盖），不写成 core 通用常量 |
 | `method` | 是 | 命令名，与 `param.cmd` **保持一致** |
 
 ### 3.2 `param` 结构
@@ -85,7 +85,7 @@ curl -s -X POST 'https://xqh5.17wanxiao.com/smartWaterAndElectricityService/SWAE
 
 ## 4. 响应结构
 
-外层固定包装：
+外层固定包装（最常见形态）：
 
 ```json
 {
@@ -95,6 +95,21 @@ curl -s -X POST 'https://xqh5.17wanxiao.com/smartWaterAndElectricityService/SWAE
   "body": "{...}",         // 业务数据（JSON 字符串）
   "message_": "获取成功！"
 }
+```
+
+实测存在三种兼容形状，客户端必须都接受（`internal/core/electricity/flexjson.go`）：
+
+| 字段 | 常见 | 实测变体 |
+|---|---|---|
+| `code_` | 数字 `0` | 字符串（如拒绝分支的 `"8099"`） |
+| `result_` | 字符串 `"true"` | 布尔 `true` / `false`；拒绝分支为 `false` 且可能无 `body` |
+| `body` | JSON 字符串 | 直接内联的 JSON 对象 |
+| 错误说明 | `message_` | `exception_` |
+
+拒绝分支示例（学校代码 / 前置地址配置问题，不含任何个人信息）：
+
+```json
+{"code_":8099,"result_":false,"exception_":"<上游提示>"}
 ```
 
 业务层还有一层：
@@ -126,7 +141,7 @@ curl -s -X POST 'https://xqh5.17wanxiao.com/smartWaterAndElectricityService/SWAE
 | `bindroom` | 绑定房间 | `zoneid`, `buildid`, `floorid`, `roomnum` |
 | `unbindroom` | 解绑房间 | — |
 
-> 本工具实际只用 **`getbindroom`**（余额）与 **`getusedetail`**（每日用量）。其余命令记录在此以便排查。
+> 本工具主路径用 **`getbindroom`**（余额）与 **`getusedetail`**（每日用量），另用 **`getstuindexpage`** 的 `collecdate` 作为「数据截至」的准确采集时刻；该请求失败或缺失时降级到 `getusedetail.opdtdate`（只有截止日）。其余命令记录在此以便排查。
 
 ---
 
@@ -489,11 +504,11 @@ for _, d := range usage {
 
 1. **接口无鉴权（IDOR）**。仅填学号即可查询对应学生的姓名、宿舍、每日用电曲线。
    仅可用于查询**本人**数据；批量遍历、公开服务化、售卖查询均属违法
-   （《刑法》285 条、《个人信息保护法》）。
-2. **学校代码因校而异**。作为配置项下发，不要写成通用常量对外发布；获取方式为公众号菜单链接中的 `customerid=`。
+   （《刑法》285 条、《个人信息保护法》）。上游返回的 `message_` / `exception_` / `body.message` 可能夹带个人信息，客户端必须先脱敏再写入错误输出。
+2. **学校代码因校而异**（本项目实测值 `3126`）。作为 `cmd` 层内置默认值下发并支持用户覆盖，不要写成 `internal/core` 通用常量对外发布；获取方式为公众号菜单链接中的 `customerid=`。
 3. **隐私字段**。响应含真实姓名（`login.empname`）、楼栋房间号、用电作息，属个人信息，勿记录、勿分享、勿写日志。
 4. **调用频率**。服务端未见频控，但不代表无日志。轮询 ≥ 600 秒/次；Windows 默认 4 小时一次，设置低于下限钳制到 600 秒并提示。
 5. **数据延迟**。电表约 1 天延迟（`opdtdate` 为截止日，`collecdate` 为采集时刻），不能当实时功率使用；所有输出必须标注「数据截至」。
 6. **接口稳定性**。学校侧可能升级网关、加签名或鉴权，届时本文档失效。
 7. **`sign` 字段**是响应签名，客户端不校验；请求侧无签名机制。
-8. **字段以实测为准**。`getstuindexpage` 的 `odd` / `todayuse` 实测缺失，查余额用 `getbindroom`。
+8. **字段以实测为准**。`getstuindexpage` 的 `odd` / `todayuse` 实测缺失，查余额用 `getbindroom`；外层 `result_` 的布尔写法、`body` 内联对象、`code_:8099` 与 `exception_` 均为实测形状。
