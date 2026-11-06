@@ -17,6 +17,7 @@ const (
 	IDLogin   = 1101 // 手动模式：登录
 	IDLogout  = 1102 // 手动模式：下线
 	IDRelogin = 1103 // 两种模式都有：重登
+	IDProbe   = 1104 // 立即探测一次校园网状态（不登录）
 
 	IDSep2     = 1200
 	IDRefresh  = 1201 // 立即查询一次电费

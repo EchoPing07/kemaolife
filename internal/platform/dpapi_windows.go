@@ -101,7 +101,16 @@ func Unprotect(protected []byte) ([]byte, error) {
 	}
 	defer freeBlob(&out)
 
-	return unsafe.Slice(out.data, out.size), nil
+	// 必须先复制再返回：CryptUnprotectData 的输出缓冲由 LocalFree 释放，
+	// 直接 `return unsafe.Slice(out.data, out.size)` 得到的是**悬垂切片**。
+	//
+	// 这是实测过的真实故障：切片长度正确、内容却是被堆分配器复写过的垃圾
+	// （前 16 字节变成堆元数据），调用方 json.Unmarshal 解析失败 → 配置回落
+	// 默认值 → 用户每次重启都要重填账号。长度对、内容错，靠断言长度抓不到，
+	// 所以 regression 测试连内容一起比对并跑多轮。
+	plain := make([]byte, out.size)
+	copy(plain, unsafe.Slice(out.data, out.size))
+	return plain, nil
 }
 
 // freeBlob 释放 CryptProtectData / CryptUnprotectData 分配的内存（必须 LocalFree）。

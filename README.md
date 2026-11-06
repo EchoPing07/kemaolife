@@ -106,6 +106,18 @@ kemaolife --json electricity                  # 余额 + 每日用量
 
 正式发布在 [Releases](https://github.com/EchoPing07/kemaolife/releases) 提供 Linux `amd64` / `arm64` / `armv7` 静态二进制压缩包、单独的 agent skill zip 与 `SHA256SUMS`；解压后用 `install -m 0755 kemaolife ~/.local/bin/kemaolife` 安装，校验和用 `sha256sum -c SHA256SUMS --ignore-missing` 核对。打 `vX.Y.Z` tag 会触发 [`.github/workflows/release.yml`](./.github/workflows/release.yml) 自动构建发布，tag 必须与 `internal/version.Version` 一致。
 
+## 安装与构建（Windows）
+
+Windows 端是托盘常驻程序，**必须按 GUI 子系统构建**，否则系统会给它挂一个控制台窗口，关掉那个黑框就等于退出程序：
+
+```bash
+GOOS=windows GOARCH=amd64 go build -trimpath `
+  -ldflags "-s -w -H=windowsgui" `
+  -o kemaolife-agent.exe ./cmd/kemaolife-agent
+```
+
+首次运行没有学号时会直接弹出设置窗口；之后只在托盘出现图标，左键单击开设置、右键出菜单。关掉设置窗口只是隐藏它，程序继续在托盘里轮询电费（默认 4 小时）。托盘菜单「退出」才是结束进程。程序启动时会自己摘掉可能存在的控制台，所以即使漏了 `-H=windowsgui` 也不会留一个黑框，但正式构建仍必须带上该参数。
+
 ## 交流
 
 **QQ 交流群：1126474633** · [点此加群](https://qm.qq.com/q/rf4PfFM5RA)（也可以在 QQ 里搜群号加群）。

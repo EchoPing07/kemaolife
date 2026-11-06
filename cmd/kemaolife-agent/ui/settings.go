@@ -22,6 +22,7 @@ const (
 	IDAutoMode  = 2006
 	IDAutoStart = 2007
 	IDPollSecs  = 2008
+	IDProbeSecs = 2013
 	IDBalance   = 2009
 	IDDays      = 2010
 	IDQuietFrom = 2011
@@ -34,7 +35,7 @@ const (
 // 设计尺寸（逻辑像素，96 DPI 基准）。
 const (
 	designClientW = 640
-	designClientH = 690
+	designClientH = 726
 	designMargin  = 16
 	designLabelW  = 100
 	designFieldW  = 236
@@ -190,30 +191,35 @@ func buildSettings(hwnd uintptr, form agent.SettingsForm) map[int]uintptr {
 	y += s(88)
 	// —— 轮询与提醒 ——
 	group("轮询与提醒", y)
-	label("轮询间隔", y+s(30))
+	label("电费间隔", y+s(30))
 	field(IDPollSecs, strconv.Itoa(form.PollSeconds), y+s(30), s(80), false)
 	note("秒，默认 14400", y+s(30))
 
-	label("余额阈值", y+s(62))
-	field(IDBalance, form.BalanceThreshold, y+s(62), s(80), false)
-	note("度", y+s(62))
+	// 校园网判态比电费轻得多（1 个探测请求），所以单独一个更短的周期。
+	label("探测间隔", y+s(62))
+	field(IDProbeSecs, strconv.Itoa(form.CampusProbeSecs), y+s(62), s(80), false)
+	note("秒，默认 120", y+s(62))
 
-	label("可用天数", y+s(94))
-	field(IDDays, strconv.Itoa(form.DaysThreshold), y+s(94), s(80), false)
-	note("天", y+s(94))
+	label("余额阈值", y+s(94))
+	field(IDBalance, form.BalanceThreshold, y+s(94), s(80), false)
+	note("度", y+s(94))
 
-	label("静默时段", y+s(126))
-	field(IDQuietFrom, strconv.Itoa(form.QuietFrom), y+s(126), s(44), false)
+	label("可用天数", y+s(126))
+	field(IDDays, strconv.Itoa(form.DaysThreshold), y+s(126), s(80), false)
+	note("天", y+s(126))
+
+	label("静默时段", y+s(158))
+	field(IDQuietFrom, strconv.Itoa(form.QuietFrom), y+s(158), s(44), false)
 	dash := CreateChild(classNameStatic, "—", 0, hwnd, 0)
-	Move(dash, fieldX+s(50), y+s(130), s(14), rowH)
+	Move(dash, fieldX+s(50), y+s(162), s(14), rowH)
 	// 第二个输入框要显式指定 x：field() 固定从 fieldX 起，直接用会重叠。
 	to := CreateChild(classNameEdit, strconv.Itoa(form.QuietTo),
 		ES_AUTOHSCROLL|WS_BORDER|WS_TABSTOP, hwnd, IDQuietTo)
-	Move(to, fieldX+s(68), y+s(126), s(44), rowH)
+	Move(to, fieldX+s(68), y+s(158), s(44), rowH)
 	ctl[IDQuietTo] = to
-	note("时，相同=不静默", y+s(126))
+	note("时，相同=不静默", y+s(158))
 
-	y += s(164)
+	y += s(196)
 	hint := CreateChild(classNameStatic, "", 0, hwnd, IDHint)
 	Move(hint, margin, y, s(designClientW)-2*margin, s(34))
 	ctl[IDHint] = hint
@@ -242,6 +248,7 @@ func fillSettings(ctl map[int]uintptr, form agent.SettingsForm) {
 	set(IDCampusP, form.CampusPassword)
 	set(IDFinger, form.CampusFingerprint)
 	set(IDPollSecs, strconv.Itoa(form.PollSeconds))
+	set(IDProbeSecs, strconv.Itoa(form.CampusProbeSecs))
 	set(IDBalance, form.BalanceThreshold)
 	set(IDDays, strconv.Itoa(form.DaysThreshold))
 	set(IDQuietFrom, strconv.Itoa(form.QuietFrom))
@@ -277,6 +284,7 @@ func collectSettings(ctl map[int]uintptr) agent.SettingsResult {
 		AutoMode:          checked(IDAutoMode),
 		AutoStart:         checked(IDAutoStart),
 		PollSeconds:       get(IDPollSecs),
+		CampusProbeSecs:   get(IDProbeSecs),
 		BalanceThreshold:  get(IDBalance),
 		DaysThreshold:     get(IDDays),
 		QuietFrom:         get(IDQuietFrom),

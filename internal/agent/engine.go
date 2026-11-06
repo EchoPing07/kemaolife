@@ -15,15 +15,16 @@ import (
 
 // Status 是托盘要展示的两行只读状态（docs/002 §5.2「托盘右键」）。
 type Status struct {
-	Campus        model.CampusState
-	CampusMsg     string
-	HasReport     bool
-	Balance       float64
-	Unit          string
-	CollectedAt   string
-	EstimatedDays *int
-	LastError     string
-	LastCheckedAt time.Time
+	Campus          model.CampusState
+	CampusMsg       string
+	CampusCheckedAt time.Time
+	HasReport       bool
+	Balance         float64
+	Unit            string
+	CollectedAt     string
+	EstimatedDays   *int
+	LastError       string
+	LastCheckedAt   time.Time
 }
 
 // Engine 是常驻轮询的编排层：把 app 用例、告警纯函数、通知端口串起来。
@@ -126,7 +127,26 @@ func (e *Engine) RefreshCampusStatus(ctx context.Context) {
 		}
 		s.Campus = status.State
 		s.CampusMsg = status.ErrorMsg
+		s.CampusCheckedAt = e.deps.Clock.Now()
 	})
+}
+
+// ProbeCampus 是「手动触发探测」：立即探一次判态，不登录、不改任何凭据。
+//
+// 与 RefreshCampusStatus 分开的原因是返回值：手动探测要把结果/错误直接告诉
+// 调用方（托盘要反馈本次动作），而 RefreshCampusStatus 是内部串联调用。
+func (e *Engine) ProbeCampus(ctx context.Context) (model.CampusState, error) {
+	status, err := app.GetCampusNetworkStatus(ctx, e.campus)
+	if err != nil {
+		e.updateStatus(func(s *Status) { s.LastError = model.MessageOf(err) })
+		return model.CampusOffline, err
+	}
+	e.updateStatus(func(s *Status) {
+		s.Campus = status.State
+		s.CampusMsg = status.ErrorMsg
+		s.CampusCheckedAt = e.deps.Clock.Now()
+	})
+	return status.State, nil
 }
 
 // PollOnce 完整执行一轮：自动模式先恢复网络 → 查电费 → 判告警 → 通知。
@@ -188,6 +208,10 @@ func (e *Engine) PollOnce(ctx context.Context) error {
 //
 // stop 关闭后立即退出；ctx 用于随进程退出取消在途请求。
 func (e *Engine) Run(ctx context.Context, stop <-chan struct{}, onErr func(error)) {
+	// 校园网判态轮询与电费轮询是两个独立周期（docs/002 §5.2）：
+	// 判态只是 1 个探测请求，可以密得多，单独跑才不会把电费接口拉上。
+	go e.runCampusProbe(ctx, stop)
+
 	for {
 		err := e.PollOnce(ctx)
 		if err != nil && onErr != nil {
@@ -217,6 +241,30 @@ func (e *Engine) Run(ctx context.Context, stop <-chan struct{}, onErr func(error
 	}
 }
 
+// runCampusProbe 按设置的探测间隔反复判态（默认 120s）。
+//
+// 只调 Status（1 个探测请求）：不发登录、不改状态，也不因失败退避 ——
+// 探测失败在本端已被归为 offline，它是正常结果而不是故障（docs/002 §3.3）。
+// 间隔每轮重读设置，设置窗口保存后立即生效。
+func (e *Engine) runCampusProbe(ctx context.Context, stop <-chan struct{}) {
+	// 首轮立即探：否则托盘上的校园网状态要等一个完整周期才有值。
+	for {
+		// ProbeCampus 自己会经 sink 回报状态（成功与失败都报），这里不重复推。
+		e.ProbeCampus(ctx)
+
+		timer := time.NewTimer(e.settings().CampusProbeInterval())
+		select {
+		case <-ctx.Done():
+			timer.Stop()
+			return
+		case <-stop:
+			timer.Stop()
+			return
+		case <-timer.C:
+		}
+	}
+}
+
 // TrayLine 返回托盘右键的两行只读状态文本（docs/002 §5.2）。
 //
 // 这里是纯格式化，不含 IO；数字与「数据截至」必须同时出现，
@@ -232,6 +280,10 @@ func TrayLine(s Status) (campusLine, powerLine string) {
 	}
 	if s.CampusMsg != "" {
 		campusLine += "（" + s.CampusMsg + "）"
+	}
+	// 带上探测时刻：轮询默认 120s，用户看到时间才知道这个状态有多新。
+	if !s.CampusCheckedAt.IsZero() {
+		campusLine += "｜探测于 " + s.CampusCheckedAt.In(time.Local).Format("15:04:05")
 	}
 
 	switch {

@@ -34,11 +34,22 @@ type Settings struct {
 	// AutoStart 与轮询 / 告警参数。
 	AutoStart        bool    `json:"autoStart"`
 	PollSeconds      int     `json:"pollSeconds"`
+	CampusProbeSecs  int     `json:"campusProbeSeconds,omitempty"`
 	BalanceThreshold float64 `json:"balanceThreshold"`
 	DaysThreshold    int     `json:"daysThreshold"`
 	QuietStartHour   int     `json:"quietStartHour"`
 	QuietEndHour     int     `json:"quietEndHour"`
 }
+
+// 校园网状态探测间隔的默认值与下限（docs/002 §5.2）。
+//
+// 下限取 30s 而不是 0：每次探测都是一次真实 HTTP 请求，间隔过小等于
+// 持续打 Portal，既没必要也容易被判异常。与电费轮询的 600s 硬下限无关 ——
+// 那一条约束的是电费接口（AGENTS §5.5）。
+const (
+	DefaultCampusProbeSeconds = 120
+	CampusProbeFloorSeconds   = 30
+)
 
 // DefaultSettings 返回首次启动的默认值（轮询 4 小时、阈值 10 度 / 3 天、静默 23–07）。
 func DefaultSettings() Settings {
@@ -46,6 +57,7 @@ func DefaultSettings() Settings {
 		AutoMode:         false, // 默认手动
 		AutoStart:        true,  // 登录时自启一次
 		PollSeconds:      int(alert.DefaultPollInterval / time.Second),
+		CampusProbeSecs:  DefaultCampusProbeSeconds,
 		BalanceThreshold: alert.DefaultBalanceThreshold,
 		DaysThreshold:    alert.DefaultDaysThreshold,
 		QuietStartHour:   alert.DefaultQuietStartHour,
@@ -63,6 +75,10 @@ func (s *Settings) normalize() (clamped bool) {
 	}
 	if d, c := alert.NormalizePollInterval(time.Duration(s.PollSeconds) * time.Second); c {
 		s.PollSeconds = int(d / time.Second)
+		clamped = true
+	}
+	if d, c := NormalizeCampusProbeInterval(secondsDuration(s.CampusProbeSecs)); c {
+		s.CampusProbeSecs = int(d / time.Second)
 		clamped = true
 	}
 	if s.BalanceThreshold <= 0 {
@@ -85,6 +101,27 @@ func (s *Settings) normalize() (clamped bool) {
 func (s Settings) PollInterval() time.Duration {
 	d, _ := alert.NormalizePollInterval(time.Duration(s.PollSeconds) * time.Second)
 	return d
+}
+
+// CampusProbeInterval 返回已钳制的校园网探测间隔。
+func (s Settings) CampusProbeInterval() time.Duration {
+	d, _ := NormalizeCampusProbeInterval(secondsDuration(s.CampusProbeSecs))
+	return d
+}
+
+// NormalizeCampusProbeInterval 把探测间隔钳制进 [30s, ∞)，零值取默认 120s。
+//
+// 零值取默认而不是报错：老配置里没有这个字段（omitempty），
+// 升级后必须能继续用默认 120s 跑起来（docs/002 §4 规则 2）。
+func NormalizeCampusProbeInterval(d time.Duration) (time.Duration, bool) {
+	floor := CampusProbeFloorSeconds * time.Second
+	if d <= 0 {
+		return DefaultCampusProbeSeconds * time.Second, false
+	}
+	if d < floor {
+		return floor, true
+	}
+	return d, false
 }
 
 // AlertConfig 把设置里的告警参数转成 core/alert 的配置。

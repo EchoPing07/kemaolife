@@ -30,6 +30,39 @@ func TestProtectUnprotectRoundTrip(t *testing.T) {
 	}
 }
 
+// Unprotect 必须返回**独立副本**，而不是指向 LocalFree 后内存的悬垂切片。
+//
+// 曾经的 bug：`return unsafe.Slice(out.data, out.size)` 在 `defer freeBlob`
+// 之后返回，长度对、内容被堆分配器覆写。后果是每拉取一次配置就解析失败，
+// 用户每次重启都要重填账号 —— 而只断言长度是掤不住的，必须比内容。
+// 多轮循环是为了让堆分配器有机会覆写那块内存（单次可能侥幸通过）。
+func TestUnprotectReturnsIndependentCopy(t *testing.T) {
+	plain := []byte(`{"studentId":"<学号>","campusUser":"<账号>","pollSeconds":14400}`)
+	for i := 0; i < 50; i++ {
+		protected, err := Protect(plain)
+		if err != nil {
+			t.Fatalf("第 %d 轮 Protect: %v", i, err)
+		}
+		back, err := Unprotect(protected)
+		if err != nil {
+			t.Fatalf("第 %d 轮 Unprotect: %v", i, err)
+		}
+		if string(back) != string(plain) {
+			t.Fatalf("第 %d 轮解出内容被破坏: got %q", i, back)
+		}
+
+		// 释放后返回的内存不得再被引用：改返回值不能影响下一次解密。
+		// （若返回的仍是 Win32 缓冲，这里会直接撞堆损坏。）
+		for j := range back {
+			back[j] = 'x'
+		}
+		again, err := Unprotect(protected)
+		if err != nil || string(again) != string(plain) {
+			t.Fatalf("第 %d 轮二次解密被前一次返回值影响: %q, %v", i, again, err)
+		}
+	}
+}
+
 // 空输入保持空（首次启动没有配置文件时不该报错）。
 func TestProtectEmpty(t *testing.T) {
 	if out, err := Protect(nil); err != nil || out != nil {

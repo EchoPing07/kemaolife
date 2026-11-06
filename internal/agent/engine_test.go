@@ -296,6 +296,7 @@ func TestParseSettingsResultClampsPollInterval(t *testing.T) {
 	res := agent.SettingsResult{
 		StudentID:        "<学号>",
 		PollSeconds:      "60",
+		CampusProbeSecs:  "5",
 		BalanceThreshold: "10",
 		DaysThreshold:    "3",
 		QuietFrom:        "23",
@@ -308,6 +309,95 @@ func TestParseSettingsResultClampsPollInterval(t *testing.T) {
 	if next.PollSeconds != 600 {
 		t.Errorf("PollSeconds = %d, want 600（钳制到下限）", next.PollSeconds)
 	}
+	if next.CampusProbeSecs != agent.CampusProbeFloorSeconds {
+		t.Errorf("CampusProbeSecs = %d, want %d（钳制到下限）",
+			next.CampusProbeSecs, agent.CampusProbeFloorSeconds)
+	}
+}
+
+// 探测间隔：默认 120s，钳制下限 30s，自定义值原样保留。
+func TestCampusProbeIntervalNormalization(t *testing.T) {
+	cases := []struct {
+		name  string
+		input int
+		want  int
+	}{
+		{"零值取默认", 0, agent.DefaultCampusProbeSeconds},
+		{"默认值保持", agent.DefaultCampusProbeSeconds, agent.DefaultCampusProbeSeconds},
+		{"低于下限钳制", 5, agent.CampusProbeFloorSeconds},
+		{"自定义值保留", 300, 300},
+	}
+	for _, c := range cases {
+		s := agent.DefaultSettings()
+		s.CampusProbeSecs = c.input
+		if got := int(s.CampusProbeInterval().Seconds()); got != c.want {
+			t.Errorf("%s: CampusProbeInterval = %d, want %d", c.name, got, c.want)
+		}
+	}
+}
+
+// 老配置没有探测间隔字段（omitempty）时必须能读起来并跑默认 120s。
+func TestSettingsStoreDefaultsProbeIntervalOnOldConfig(t *testing.T) {
+	inner := porttest.NewMemStore()
+	// 模拟升级前的配置：没有 campusProbeSeconds。
+	if err := inner.Put(agent.ConfigStoreKey, []byte(`{"studentId":"<学号>","pollSeconds":14400}`)); err != nil {
+		t.Fatal(err)
+	}
+
+	store := agent.NewSettingsStore(inner)
+	cfg, err := store.Load()
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if cfg.CampusProbeSecs != agent.DefaultCampusProbeSeconds {
+		t.Errorf("老配置探测间隔 = %d, want %d", cfg.CampusProbeSecs, agent.DefaultCampusProbeSeconds)
+	}
+}
+
+// 手动探测：只发判态、不触发登录，且把探测时刻记到状态里。
+func TestProbeCampusDoesNotLogin(t *testing.T) {
+	campus := newFakeCampus(model.CampusUnauth)
+	srv := electricityServer(t, 50, 1)
+	eng, _, _ := buildEngine(t, campus, defaultSettings(), srv)
+
+	state, err := eng.ProbeCampus(context.Background())
+	if err != nil {
+		t.Fatalf("ProbeCampus: %v", err)
+	}
+	if state != model.CampusUnauth {
+		t.Errorf("state = %q, want unauth", state)
+	}
+	login, logout, relogin, ensure := campus.counts()
+	if login != 0 || logout != 0 || relogin != 0 || ensure != 0 {
+		t.Errorf("探测不得触发任何认证动作: login=%d logout=%d relogin=%d ensure=%d",
+			login, logout, relogin, ensure)
+	}
+	if st := eng.Status(); st.CampusCheckedAt.IsZero() {
+		t.Error("探测后应记录 CampusCheckedAt")
+	}
+	if campus, _ := agent.TrayLine(eng.Status()); !strings.Contains(campus, "探测于") {
+		t.Errorf("托盘状态应带探测时刻: %q", campus)
+	}
+}
+
+// 设置校验：探测间隔非数字 / 为零必须报错。
+func TestParseSettingsResultRejectsBadProbeInterval(t *testing.T) {
+	base := agent.DefaultSettings()
+	valid := agent.SettingsResult{
+		PollSeconds:      "14400",
+		CampusProbeSecs:  "120",
+		BalanceThreshold: "10",
+		DaysThreshold:    "3",
+		QuietFrom:        "23",
+		QuietTo:          "7",
+	}
+	for _, bad := range []string{"abc", "0", "-5"} {
+		r := valid
+		r.CampusProbeSecs = bad
+		if _, err := agent.ParseSettingsResult(r, base); err == nil {
+			t.Errorf("探测间隔 %q: 应报错", bad)
+		}
+	}
 }
 
 // 设置校验：非法输入必须报错而不是静默接受。
@@ -315,6 +405,7 @@ func TestParseSettingsResultRejectsInvalid(t *testing.T) {
 	base := agent.DefaultSettings()
 	valid := agent.SettingsResult{
 		PollSeconds:      "14400",
+		CampusProbeSecs:  "120",
 		BalanceThreshold: "10",
 		DaysThreshold:    "3",
 		QuietFrom:        "23",
@@ -417,5 +508,46 @@ func TestDoCampusRecordsError(t *testing.T) {
 	}
 	if st := eng.Status(); st.LastError == "" {
 		t.Error("错误应记录到状态")
+	}
+}
+
+// 探测轮询：到点只发判态、不触发任何认证动作（默认 120s 周期靠设置控制）。
+func TestRunCampusProbeOnlyProbes(t *testing.T) {
+	campus := newFakeCampus(model.CampusUnauth)
+	srv := electricityServer(t, 50, 1)
+	settings := defaultSettings()
+	settings.CampusProbeSecs = 30 // 下限，测试里不等默认的 120s
+
+	eng, _, _ := buildEngine(t, campus, settings, srv)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	stop := make(chan struct{})
+	done := make(chan struct{})
+	go func() {
+		eng.Run(ctx, stop, nil)
+		close(done)
+	}()
+
+	// 首轮立即探测：等到状态被写入即可，不必等满一个周期。
+	deadline := time.Now().Add(10 * time.Second)
+	for eng.Status().CampusCheckedAt.IsZero() {
+		if time.Now().After(deadline) {
+			t.Fatal("启动后应立刻探测一次")
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+
+	cancel()
+	select {
+	case <-done:
+	case <-time.After(10 * time.Second):
+		t.Fatal("Run 未在取消后退出")
+	}
+
+	login, logout, relogin, ensure := campus.counts()
+	if login != 0 || logout != 0 || relogin != 0 || ensure != 0 {
+		t.Errorf("探测轮询不得触发认证动作: login=%d logout=%d relogin=%d ensure=%d",
+			login, logout, relogin, ensure)
 	}
 }

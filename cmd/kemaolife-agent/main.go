@@ -52,6 +52,10 @@ type agentApp struct {
 }
 
 func main() {
+	// 托盘程序不占控制台：构建成 GUI 子系统时这里是空操作，
+	// 万一按 console 子系统构建，也能摘掉黑框而不是被黑框一起带走（见 console_windows.go）。
+	detachConsole()
+
 	// Win32 消息队列属于 OS 线程：必须锁住主 goroutine，
 	// 否则 goroutine 迁移后 GetMessage 收不到自己的窗口消息（界面「假死」）。
 	runtime.LockOSThread()
@@ -260,6 +264,7 @@ func (a *agentApp) buildMenu() []ui.MenuItem {
 	// 顶号 / 换账号这类情况必须由用户主动发起（000 §3.2）。
 	items = append(items,
 		ui.MenuItem{Title: "重登", ID: ui.IDRelogin},
+		ui.MenuItem{Title: "立即探测校园网", ID: ui.IDProbe},
 		ui.MenuItem{Sep: true},
 		ui.MenuItem{Title: "立即查询电费", ID: ui.IDRefresh},
 		ui.MenuItem{Title: "设置…", ID: ui.IDSettings},
@@ -270,26 +275,50 @@ func (a *agentApp) buildMenu() []ui.MenuItem {
 }
 
 // handleCommand 分派托盘菜单命令。
+//
+// 分两条路：⚠️ 所有网络动作必须离开 UI 线程。窗口过程在消息循环里同步执行，
+// 一个 5s 探测 / 3s 认证生效等待 / 3 个电费请求就能让右键菜单卡成「无响应」。
+// 网络动作在 goroutine 里跑，结果经 PostStatus / PostTrigger 回到 UI 线程。
+type campusJob func(context.Context, app.CampusDeps) error
+
+var campusJobs = map[int]campusJob{
+	ui.IDLogin:   app.LoginCampusNetwork,
+	ui.IDLogout:  app.LogoutCampusNetwork,
+	ui.IDRelogin: app.ReloginCampusNetwork,
+}
+
 func (a *agentApp) handleCommand(id int) {
-	ctx, cancel := a.commandContext()
-	defer cancel()
+	if job, ok := campusJobs[id]; ok {
+		a.runAsync(func(ctx context.Context) {
+			a.reportCampusErr(ctx, job(ctx, a.engine.CampusDeps()))
+		})
+		return
+	}
 
 	switch id {
-	case ui.IDLogin:
-		a.reportCampusErr(ctx, app.LoginCampusNetwork(ctx, a.engine.CampusDeps()))
-	case ui.IDLogout:
-		a.reportCampusErr(ctx, app.LogoutCampusNetwork(ctx, a.engine.CampusDeps()))
-	case ui.IDRelogin:
-		a.reportCampusErr(ctx, app.ReloginCampusNetwork(ctx, a.engine.CampusDeps()))
+	case ui.IDProbe:
+		a.runAsync(func(ctx context.Context) { a.engine.ProbeCampus(ctx) })
 	case ui.IDRefresh:
-		a.engine.PollOnce(ctx)
+		a.runAsync(func(ctx context.Context) {
+			if err := a.engine.PollOnce(ctx); err != nil {
+				a.engine.ReportError(err)
+			}
+		})
 	case ui.IDSettings:
 		a.openSettings()
 	case ui.IDExit:
 		a.shutdown()
 	}
-	// 任何动作之后都刷新一次提示，让用户立刻看到结果。
-	a.refreshTrayTip()
+}
+
+// runAsync 在后台执行网络动作，完成后把状态刷新推回 UI 线程。
+func (a *agentApp) runAsync(fn func(context.Context)) {
+	go func() {
+		ctx, cancel := a.commandContext()
+		defer cancel()
+		fn(ctx)
+		ui.PostTrigger(a.wnd, ui.WM_QUERY_DONE)
+	}()
 }
 
 // reportCampusErr 把校园网动作结果反映到托盘（不弹窗打断用户）。

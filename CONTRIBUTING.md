@@ -157,7 +157,9 @@ grep -rniE '<把已知的真实学号/房间号写在这里>' . && echo FAIL
 
 # 桌面两端可交叉编译
 GOOS=linux   GOARCH=amd64 go build ./internal/... ./cmd/kemaolife/...
-GOOS=windows GOARCH=amd64 go build ./internal/... ./cmd/kemaolife-agent/...
+GOOS=windows GOARCH=amd64 go build ./internal/...
+# 托盘端必须是 GUI 子系统：console 子系统会挂一个终端窗口，关掉它就等于退出程序
+GOOS=windows GOARCH=amd64 go build -ldflags "-H=windowsgui" -o kemaolife-agent.exe ./cmd/kemaolife-agent/
 ```
 
 任一项失败先修完再提交，不要用 `//nolint`、注释掉检查或 `--no-verify` 绕过。设计阶段（无 Go 代码）只需执行隐私与占位符相关检查。

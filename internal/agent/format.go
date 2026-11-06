@@ -37,6 +37,7 @@ func ToSettingsForm(s Settings) SettingsForm {
 		AutoMode:          s.AutoMode,
 		AutoStart:         s.AutoStart,
 		PollSeconds:       s.PollSeconds,
+		CampusProbeSecs:   s.CampusProbeSecs,
 		BalanceThreshold:  strconv.FormatFloat(s.BalanceThreshold, 'f', -1, 64),
 		DaysThreshold:     s.DaysThreshold,
 		QuietFrom:         s.QuietStartHour,
@@ -67,6 +68,16 @@ func ParseSettingsResult(res SettingsResult, base Settings) (Settings, error) {
 		poll = int(d.Seconds())
 	}
 	next.PollSeconds = poll
+
+	probe, err := strconv.Atoi(strings.TrimSpace(res.CampusProbeSecs))
+	if err != nil || probe <= 0 {
+		return base, fmt.Errorf("校园网探测间隔必须是正整数（秒）")
+	}
+	// 低于下限钳制而非拒绝，与轮询间隔同一套口径（钳制要提示，不能静默改）。
+	if d, clamped := NormalizeCampusProbeInterval(secondsDuration(probe)); clamped {
+		probe = int(d.Seconds())
+	}
+	next.CampusProbeSecs = probe
 
 	balance, err := strconv.ParseFloat(strings.TrimSpace(res.BalanceThreshold), 64)
 	if err != nil || balance <= 0 {
@@ -122,6 +133,7 @@ type SettingsForm struct {
 	AutoMode          bool
 	AutoStart         bool
 	PollSeconds       int
+	CampusProbeSecs   int
 	BalanceThreshold  string
 	DaysThreshold     int
 	QuietFrom         int
@@ -138,6 +150,7 @@ type SettingsResult struct {
 	AutoMode          bool
 	AutoStart         bool
 	PollSeconds       string
+	CampusProbeSecs   string
 	BalanceThreshold  string
 	DaysThreshold     string
 	QuietFrom         string

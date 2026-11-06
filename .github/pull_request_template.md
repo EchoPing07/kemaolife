@@ -46,7 +46,7 @@
 - [ ] `grep -rn 'runtime.GOOS' internal/core internal/app` 无匹配
 - [ ] 已知真实敏感值逐个检索无匹配
 - [ ] `GOOS=linux GOARCH=amd64 go build ./internal/... ./cmd/kemaolife/...`
-- [ ] `GOOS=windows GOARCH=amd64 go build ./internal/...`（`cmd/kemaolife-agent` 未启动时只编译 `internal`；M2 启动后恢复完整目标）
+- [ ] `GOOS=windows GOARCH=amd64 go build -ldflags "-H=windowsgui" ./cmd/kemaolife-agent/`（托盘端必须是 GUI 子系统，console 子系统会挂黑框，关掉黑框即退出进程）
 - [ ] CI（`.github/workflows/ci.yml`）通过；列表输出显式排序；时间统一经 `Clock` 获取
 
 补充说明（可选）：
