@@ -13,17 +13,21 @@ import (
 // AppName 是三端共用的展示名（窗口标题 / 通知标题 / 托盘提示）。
 const AppName = "科贸生活"
 
-// FormatStatus 把引擎状态渲染成托盘提示的三行文本。
+// FormatStatus 把引擎状态渲染成托盘悬浮提示的文本。
 //
-// 只放用户能行动的信息：校园网状态、剩余电费（含数据截至）、最近一次错误。
+// 只放用户能行动的信息：校园网状态、剩余电费、最近一次错误。
+// 每行都短，换行分条展示（悬浮提示宽度有限，过长会在末尾被截断）；
 // 不放 roomName / roomVerify（P2）。
+//
+// 不展示「数据截至」：托盘两处 UI 只给当前值，采集时刻不进提示；
+// 告警通知仍会写明数据截至（core/alert），那里需要它来判断数据新鲜度。
 func FormatStatus(s Status) string {
 	campus, power := TrayLine(s)
-	line := AppName + "\n" + campus + "\n" + power
-	if s.LastError != "" {
-		line += "\n" + s.LastError
+	lines := []string{AppName, campus, power}
+	if l := errorLine(s); l != "" {
+		lines = append(lines, l)
 	}
-	return line
+	return strings.Join(lines, "\n")
 }
 
 // toSettingsForm 把持久化设置转成 UI 表单初始值。

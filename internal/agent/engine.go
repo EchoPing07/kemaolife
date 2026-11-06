@@ -267,43 +267,24 @@ func (e *Engine) runCampusProbe(ctx context.Context, stop <-chan struct{}) {
 
 // TrayLine 返回托盘右键的两行只读状态文本（docs/002 §5.2）。
 //
-// 这里是纯格式化，不含 IO；数字与「数据截至」必须同时出现，
-// 避免用户把 1 天前的数据当实时值。
+// 这里是纯格式化，不含 IO。每行必须单行放得下（菜单项不换行，过长会被吃掉），
+// 因此只留状态与余额：
+//   - 探测时刻不展示（轮询默认 120s，刷新反而刷屏，时刻也不能说明网络是否可用）；
+//   - 上游长文案（如「正在进行外网拨号请稍候…」）不展示，一律收敛为「已在线」；
+//   - 可用天数不展示：它是本地估算，容易被误读为承诺。
 func TrayLine(s Status) (campusLine, powerLine string) {
-	switch s.Campus {
-	case model.CampusOnline:
-		campusLine = "校园网：已在线"
-	case model.CampusUnauth:
-		campusLine = "校园网：未认证"
-	default:
-		campusLine = "校园网：不在校园网"
-	}
-	if s.CampusMsg != "" {
-		campusLine += "（" + s.CampusMsg + "）"
-	}
-	// 带上探测时刻：轮询默认 120s，用户看到时间才知道这个状态有多新。
-	if !s.CampusCheckedAt.IsZero() {
-		campusLine += "｜探测于 " + s.CampusCheckedAt.In(time.Local).Format("15:04:05")
-	}
-
-	switch {
-	case !s.HasReport:
+	campusLine = "校园网：" + campusStateText(s.Campus)
+	if !s.HasReport {
 		powerLine = "剩余电费：未获取"
-		if s.LastError != "" {
-			powerLine += "（" + s.LastError + "）"
-		}
-	case s.EstimatedDays != nil:
-		powerLine = fmt.Sprintf("剩余电费：%.2f %s（约可用 %d 天）",
-			s.Balance, unitOr(s.Unit), *s.EstimatedDays)
-	default:
-		powerLine = fmt.Sprintf("剩余电费：%.2f %s", s.Balance, unitOr(s.Unit))
+		return campusLine, powerLine
 	}
-	if s.HasReport {
-		if until := formatCollected(s.CollectedAt); until != "" {
-			powerLine += "｜数据截至 " + until
-		}
-	}
+	powerLine = fmt.Sprintf("剩余电费：%.2f %s", s.Balance, unitOr(s.Unit))
 	return campusLine, powerLine
+}
+
+// errorLine 返回附加在提示里的错误文案（失败原因必须可在本机看到）。
+func errorLine(s Status) string {
+	return strings.TrimSpace(s.LastError)
 }
 
 func unitOr(u string) string {
@@ -311,17 +292,6 @@ func unitOr(u string) string {
 		return "度"
 	}
 	return u
-}
-
-// formatCollected 把 RFC3339 转成本地「MM-DD HH:MM」；解析失败原样返回。
-func formatCollected(raw string) string {
-	if raw == "" {
-		return ""
-	}
-	if t, err := time.Parse(time.RFC3339, raw); err == nil {
-		return t.In(time.Local).Format("01-02 15:04")
-	}
-	return raw
 }
 
 // withSettingsHint 给凭据类错误补上「在托盘程序里怎么修」的指引。

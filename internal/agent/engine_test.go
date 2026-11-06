@@ -249,7 +249,8 @@ func TestPollFailureDoesNotNotify(t *testing.T) {
 	}
 }
 
-// 托盘两行状态：必须带「数据截至」，且不含房间名（P2）。
+// 托盘右键两行状态 + 悬浮提示：只留单行短状态，不含房间名（P2），
+// 也不展示探测时刻、可用天数与「数据截至」。
 func TestTrayLineText(t *testing.T) {
 	days := 3
 	st := agent.Status{
@@ -261,17 +262,42 @@ func TestTrayLineText(t *testing.T) {
 		EstimatedDays: &days,
 	}
 	campus, power := agent.TrayLine(st)
-	if !strings.Contains(campus, "已在线") {
+	if campus != "校园网：已在线" {
 		t.Errorf("campus = %q", campus)
 	}
-	if !strings.Contains(power, "35.99") || !strings.Contains(power, "约可用 3 天") {
-		t.Errorf("power = %q", power)
-	}
-	if !strings.Contains(power, "数据截至") {
-		t.Errorf("功率行必须含「数据截至」: %q", power)
+	if power != "剩余电费：35.99 度" {
+		t.Errorf("power = %q, want 剩余电费：35.99 度", power)
 	}
 	if strings.Contains(power, "房间") || strings.Contains(power, "<校区>") {
 		t.Errorf("托盘不得显示房间信息: %q", power)
+	}
+
+	// 菜单行是单行项目：不带换行 / 分隔符，也不带可用天数。
+	for _, line := range []string{campus, power} {
+		if strings.ContainsAny(line, "\n｜（）") {
+			t.Errorf("菜单行必须单行简短: %q", line)
+		}
+	}
+	if strings.Contains(power, "约可用") {
+		t.Errorf("菜单行不应带可用天数: %q", power)
+	}
+
+	// 悬浮提示同样不展示「数据截至」（采集时刻不进托盘 UI）。
+	tip := agent.FormatStatus(st)
+	if strings.Contains(tip, "数据截至") || strings.Contains(tip, "11-04") {
+		t.Errorf("悬浮提示不应展示数据截至: %q", tip)
+	}
+}
+
+// 上游长文案（如「正在进行外网拨号请稍候…」）不得进单行的菜单状态行。
+func TestTrayLineDropsUpstreamMessage(t *testing.T) {
+	st := agent.Status{
+		Campus:    model.CampusOnline,
+		CampusMsg: "正在进行外网拨号请稍候…",
+	}
+	campus, _ := agent.TrayLine(st)
+	if campus != "校园网：已在线" {
+		t.Errorf("campus = %q, want 校园网：已在线", campus)
 	}
 }
 
@@ -375,8 +401,9 @@ func TestProbeCampusDoesNotLogin(t *testing.T) {
 	if st := eng.Status(); st.CampusCheckedAt.IsZero() {
 		t.Error("探测后应记录 CampusCheckedAt")
 	}
-	if campus, _ := agent.TrayLine(eng.Status()); !strings.Contains(campus, "探测于") {
-		t.Errorf("托盘状态应带探测时刻: %q", campus)
+	// 探测时刻只存不展：菜单行就是简短状态。
+	if campus, _ := agent.TrayLine(eng.Status()); campus != "校园网：未认证" {
+		t.Errorf("菜单行不得带探测时刻: %q", campus)
 	}
 }
 
