@@ -123,7 +123,7 @@ D 项的定稿只能由用户决策；遇到 D 项阻塞实现时取最保守默
 - 协议事实只来自 `api-docs/`，不凭记忆写接口。
 - 教务 CAS 会话失效也返回 200，必须判响应内容；教务强制 IPv4（`tcp4`），在 `HTTPDoer` 适配器里禁用 v6。
 - 电费 `body` 是字符串且缺参数时外层仍可能 `result_:"true"`，必须解 `body` 再判 `body.result`。
-- Portal 必须禁跟随重定向，成败只看 body 的 `success`；自签证书跳过校验仅作用于 Portal 与探测地址，禁止全局 `InsecureSkipVerify`。
+- Portal 必须禁跟随重定向，成败只看 body 的 `success`；自签证书跳过校验仅作用于 Portal HTTPS 客户端（探测地址是 HTTP 明文），禁止全局 `InsecureSkipVerify`。
 - 测试禁止访问真实学校接口，全部用 `httptest` + 本地夹具；禁止依赖系统时间与真实文件系统路径。
 
 ## 4. 代码与分层要求（M0 起）
@@ -158,7 +158,7 @@ grep -rniE '<把已知的真实学号/房间号写在这里>' . && echo FAIL
 # 桌面两端可交叉编译
 GOOS=linux   GOARCH=amd64 go build ./internal/... ./cmd/kemaolife/...
 GOOS=windows GOARCH=amd64 go build ./internal/...
-# 托盘端必须是 GUI 子系统：console 子系统会挂一个终端窗口，关掉它就等于退出程序
+# 托盘端必须是 GUI 子系统：console 子系统会挂一个控制台窗口（启动会 FreeConsole 摘掉，但不符合 docs/002 §5.2 形态）
 GOOS=windows GOARCH=amd64 go build -ldflags "-H=windowsgui" -o kemaolife-agent.exe ./cmd/kemaolife-agent/
 ```
 

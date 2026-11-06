@@ -51,7 +51,7 @@ func LogoutCampusNetwork(ctx context.Context, d CampusDeps) error {
 	return d.Net.Logout(ctx)
 }
 
-// ReloginCampusNetwork 手动重登：下线 → 复探 → 登录 → 复探确认。
+// ReloginCampusNetwork 手动重登：先判态，在线才下线并复探；随后登录 → 复探确认。
 func ReloginCampusNetwork(ctx context.Context, d CampusDeps) error {
 	if err := ensureCampusDeps(d); err != nil {
 		return err

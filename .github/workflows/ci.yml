@@ -27,8 +27,8 @@ jobs:
           fi
       - name: Layering
         run: |
-          if grep -rn 'runtime.GOOS' internal/core internal/app; then
-            echo 'FAIL: platform check in core/app'; exit 1
+          if grep -rn 'runtime.GOOS' internal/core internal/app internal/agent; then
+            echo 'FAIL: platform check in core/app/agent'; exit 1
           fi
           if go list -deps ./internal/core/... | grep -E 'x/sys/windows|gioui|fyne|android'; then
             echo 'FAIL: core depends on platform/UI packages'; exit 1
@@ -37,8 +37,8 @@ jobs:
         run: |
           GOOS=linux   GOARCH=amd64 go build ./internal/... ./cmd/kemaolife/...
           GOOS=windows GOARCH=amd64 go build ./internal/...
-          # 托盘端必须按 GUI 子系统构建（docs/001 §3）：console 子系统会挂黑框，
-          # 关掉黑框就等于退出程序。这里用与文档一致的参数做交叉编译。
+          # 托盘端必须按 GUI 子系统构建（docs/001 §7）：console 子系统会挂控制台窗口，
+          # 不符合 docs/002 §5.2 的 GUI 子系统形态。这里用与文档一致的参数做交叉编译。
           GOOS=windows GOARCH=amd64 go build -ldflags "-H=windowsgui" -o /tmp/kemaolife-agent.exe ./cmd/kemaolife-agent/
       - name: No personal credentials in repo
         run: |

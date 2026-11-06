@@ -34,6 +34,7 @@ type fakeCampus struct {
 
 	loginErr  error
 	statusErr error
+	ensureErr error
 }
 
 func newFakeCampus(state model.CampusState) *fakeCampus {
@@ -80,11 +81,20 @@ func (f *fakeCampus) EnsureCampusNetwork(context.Context) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.ensureCalls++
+	if f.ensureErr != nil {
+		return f.ensureErr
+	}
 	if f.state == model.CampusUnauth {
 		f.loginCalls++
 		f.state = model.CampusOnline
 	}
 	return nil
+}
+
+func (f *fakeCampus) setEnsureErr(err error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.ensureErr = err
 }
 
 func (f *fakeCampus) counts() (login, logout, relogin, ensure int) {
@@ -204,6 +214,57 @@ func TestPollAutoModeEnsuresCampusNetwork(t *testing.T) {
 	}
 	if !eng.Status().HasReport {
 		t.Error("应拿到电费数据")
+	}
+}
+
+// 自动模式前置失败：只记到托盘状态，不阻断电费查询与余额提醒（docs/002 §6 规则 5）。
+func TestPollAutoModePreflightFailureDoesNotBlockElectricity(t *testing.T) {
+	campus := newFakeCampus(model.CampusUnauth)
+	campus.setEnsureErr(model.NewError(model.CodeNetworkDown, "不在校园网环境"))
+	srv := electricityServer(t, 5, 1) // 低余额：成功路径应照常告警
+	settings := defaultSettings()
+	settings.AutoMode = true
+
+	eng, rec, _ := buildEngine(t, campus, settings, srv)
+	if err := eng.PollOnce(context.Background()); err != nil {
+		t.Fatalf("前置失败不应阻断电费查询: %v", err)
+	}
+
+	st := eng.Status()
+	if !st.HasReport {
+		t.Error("应拿到电费数据")
+	}
+	if !strings.Contains(st.LastError, "不在校园网环境") ||
+		!strings.Contains(agent.FormatStatus(st), "不在校园网环境") {
+		t.Errorf("前置失败应留在托盘提示: %q / %q", st.LastError, agent.FormatStatus(st))
+	}
+	if rec.Count() != 1 {
+		t.Errorf("前置失败不应阻断余额提醒, got %d 次", rec.Count())
+	}
+}
+
+// 下一轮前置成功后清掉上一轮的前置失败提示，不把旧错误一直挂在托盘上。
+func TestPollAutoModePreflightErrorClearsAfterRecovery(t *testing.T) {
+	campus := newFakeCampus(model.CampusUnauth)
+	campus.setEnsureErr(model.NewError(model.CodeNetworkDown, "不在校园网环境"))
+	srv := electricityServer(t, 50, 1)
+	settings := defaultSettings()
+	settings.AutoMode = true
+
+	eng, _, _ := buildEngine(t, campus, settings, srv)
+	if err := eng.PollOnce(context.Background()); err != nil {
+		t.Fatalf("第一轮: %v", err)
+	}
+	if eng.Status().LastError == "" {
+		t.Fatal("第一轮应记录前置失败")
+	}
+
+	campus.setEnsureErr(nil)
+	if err := eng.PollOnce(context.Background()); err != nil {
+		t.Fatalf("第二轮: %v", err)
+	}
+	if got := eng.Status().LastError; got != "" {
+		t.Errorf("前置恢复后应清空旧提示, got %q", got)
 	}
 }
 

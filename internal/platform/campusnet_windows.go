@@ -48,8 +48,8 @@ type PortalCredential struct {
 
 // PortalNetwork 是 core.CampusNetwork + core.NetworkReady 的 Windows 实现。
 //
-// 平台细节集中在这里：探测用明文 HTTP、Portal 用自签证书（仅对这两个地址
-// 跳过校验）、禁跟随重定向。core 只拿到纯函数构造的表单与判态结果。
+// 平台细节集中在这里：探测用明文 HTTP、Portal 客户端用自签证书（仅该客户端
+// 跳过校验）、探测禁跟随重定向。core 只拿到纯函数构造的表单与判态结果。
 type PortalNetwork struct {
 	probe  *http.Client
 	portal *http.Client
@@ -159,7 +159,7 @@ func (p *PortalNetwork) Logout(ctx context.Context) error {
 	return p.confirm(ctx, model.CampusUnauth)
 }
 
-// Relogin 重登：下线 → 等生效 → 登录 → 等生效 → 复探确认。
+// Relogin 重登：先判态；在线才下线并复探，未认证跳过下线；随后登录并复探确认。
 func (p *PortalNetwork) Relogin(ctx context.Context) error {
 	// 已在线才先下线；未认证态直接登录，避免无谓的下线请求。
 	if probe, err := p.probeOnce(ctx); err == nil && probe.State == model.CampusOnline {
@@ -171,8 +171,9 @@ func (p *PortalNetwork) Relogin(ctx context.Context) error {
 	return p.Login(ctx)
 }
 
-// EnsureCampusNetwork 是自动模式的前置：已在线不动，未认证就登录，
-// 不在校园网就返回错误但不重试（由调用方的指数退避接管）。
+// EnsureCampusNetwork 是自动模式下的电费轮询前置：已在线不动，未认证就登录，
+// 不在校园网就返回错误；失败不阻断本轮电费查询，也不单独重试。
+// 电费查询连续失败时的指数退避由 agent.Engine.Run 统一接管。
 // TODO(D11): 待定 —— 当前只按固定探测地址判态，未以电费接口可达性为准。
 func (p *PortalNetwork) EnsureCampusNetwork(ctx context.Context) error {
 	probe, err := p.probeOnce(ctx)

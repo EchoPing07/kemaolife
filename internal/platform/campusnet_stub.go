@@ -11,7 +11,7 @@ import (
 
 // StubCampusNetwork 是 Linux 的校园网空实现（000 §3.1：Linux 不提供校园网功能）。
 //
-// 它让 app 的 Deps 组装在三端一致（001 §5），被调用即返回参数错误 ——
+// 它是备用适配器，当前无装配点；被调用即返回参数错误 ——
 // 不静默成功，也不假装「不在校园网」。
 type StubCampusNetwork struct{}
 

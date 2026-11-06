@@ -176,14 +176,20 @@ func (e *Engine) ProbeCampus(ctx context.Context) (model.CampusState, error) {
 // 失败只走退避与状态更新，不弹余额通知（docs/002 §6 规则 5）。
 func (e *Engine) PollOnce(ctx context.Context) error {
 	cfg := e.settings()
+	var preflightErr error
 
 	// 自动模式的前置恢复；失败不阻断（也许只是没连校园网 WiFi），
 	// 但要让用户知道，所以刷新一次状态。
 	if cfg.AutoMode {
 		if err := app.EnsureCampusNetwork(ctx, e.campus); err != nil {
-			e.updateStatus(func(s *Status) { s.LastError = model.MessageOf(err) })
+			preflightErr = err
 		}
 		e.RefreshCampusStatus(ctx)
+		// 判态轮询把 4001 归为 offline 时会清 LastError；前置失败要留在提示里，
+		// 否则用户只看到「不在校园网」，不知道自动恢复为什么没做。
+		if preflightErr != nil {
+			e.updateStatus(func(s *Status) { s.LastError = model.MessageOf(preflightErr) })
+		}
 	}
 
 	report, err := app.CheckElectricity(ctx, e.deps, cfg.ElectricityConfig(e.deps.DefaultCustomerCode), "")
@@ -210,7 +216,13 @@ func (e *Engine) PollOnce(ctx context.Context) error {
 		s.Unit = report.Status.Unit
 		s.CollectedAt = report.Status.CollectedAt
 		s.EstimatedDays = report.Status.EstimatedDays
-		s.LastError = ""
+		// 前置认证失败与电费查询是独立链路：电费成功不能把它从托盘提示里抹掉，
+		// 但下一轮前置成功时要清掉旧提示（docs/002 §6 规则 5）。
+		if preflightErr != nil {
+			s.LastError = model.MessageOf(preflightErr)
+		} else {
+			s.LastError = ""
+		}
 		s.LastCheckedAt = now
 	})
 

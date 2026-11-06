@@ -12,7 +12,8 @@ import (
 // cmdElectricity 实现 `electricity [--month YYYY-MM]`（docs/002 §1.1）。
 //
 // 一次调用内部 2 个主请求 + 1 个采集时刻请求；主请求任一失败整体报错（R2）。
-// 任何输出都必须标注「数据截至」：电表约 1 天延迟，不能当实时值。
+// CLI 人类可读输出必须标注「数据截至」：电表约 1 天延迟，不能当实时值；
+// Windows 托盘两处 UI 按 docs/002 §5.2 不展示采集时刻。
 func cmdElectricity(ctx context.Context, opts options, rt *session, args []string) error {
 	yearMonth := ""
 	for i := 0; i < len(args); i++ {
