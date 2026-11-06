@@ -45,10 +45,12 @@
 - [ ] `go list -deps ./internal/core/... | grep -E 'x/sys/windows|gioui|fyne|android'` 无匹配
 - [ ] `grep -rniE 'webview|cef|wails|pwa|electron|tauri' --include='*.go' --include='*.kt' .` 无匹配
 - [ ] `grep -rn 'runtime.GOOS' internal/core internal/app internal/agent` 无匹配
-- [ ] 已知真实敏感值逐个检索无匹配
+- [ ] 已知真实敏感值逐个检索无匹配（检查命令需排除模板自身所在的 `AGENTS.md` / `CONTRIBUTING.md` / `ci.yml`）
 - [ ] `GOOS=linux GOARCH=amd64 go build ./internal/... ./cmd/kemaolife/...`
+- [ ] `GOOS=windows GOARCH=amd64 go build ./internal/...`；`GOOS=windows GOARCH=arm64 go build ./internal/...`
 - [ ] `GOOS=windows GOARCH=amd64 go build -ldflags "-H=windowsgui" -o kemaolife-agent.exe ./cmd/kemaolife-agent/`（托盘端必须是 GUI 子系统；console 子系统会挂控制台窗口，启动虽会 `FreeConsole` 摘掉，但不符合 docs/002 §5.2 形态）
-- [ ] CI（`.github/workflows/ci.yml`）通过；列表输出显式排序；时间统一经 `Clock` 获取
+- [ ] `GOOS=android GOARCH=arm64 go build ./internal/... ./cmd/kemaolife-mobile/`
+- [ ] CI（`.github/workflows/ci.yml`）通过：另含 PE GUI 子系统校验、Windows 安装脚本 BOM / CRLF 校验；列表输出显式排序；时间统一经 `Clock` 获取
 
 补充说明（可选）：
 

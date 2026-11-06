@@ -1,0 +1,58 @@
+name: Setup Android + gomobile
+description: 安装 JDK 17 / Android SDK / NDK，生成 gomobile AAR；工具链版本取自 android/README.md 基线
+
+# TODO(D13): NDK / gomobile 工具链是否纳入仍是待确认项；这里按描述性基线落地，不代表定稿。
+# 版本与 android/README.md §1 保持一致：compileSdk 34 / build-tools 34.0.0 / NDK r27c。
+
+runs:
+  using: composite
+  steps:
+    - uses: actions/setup-java@v4
+      with:
+        distribution: temurin
+        java-version: '17'
+
+    - name: SDK / NDK / AAR
+      shell: bash
+      env:
+        # 显式传给 sdkmanager：runner 预装的 cmdline-tools 在 ANDROID_HOME 下，
+        # 不依赖它自己猜 SDK 根目录。
+        ANDROID_HOME: /usr/local/lib/android/sdk
+        ANDROID_SDK_ROOT: /usr/local/lib/android/sdk
+      run: |
+        set -euo pipefail
+        SDK="${ANDROID_HOME}"
+        SDKMANAGER="$(find "$SDK/cmdline-tools" -type f -name sdkmanager 2>/dev/null | sort | tail -1 || true)"
+        if [[ -z "$SDKMANAGER" || ! -x "$SDKMANAGER" ]]; then
+          echo "::error::找不到 sdkmanager（SDK=$SDK）"
+          exit 1
+        fi
+        yes | "$SDKMANAGER" --sdk_root="$SDK" --licenses > /dev/null 2>&1 || true
+        "$SDKMANAGER" --sdk_root="$SDK" --install \
+          "platform-tools" "platforms;android-34" "build-tools;34.0.0" \
+          "ndk;27.2.12479018" > /dev/null
+
+        export ANDROID_HOME="$SDK"
+        export ANDROID_SDK_ROOT="$SDK"
+        export ANDROID_NDK_HOME="$SDK/ndk/27.2.12479018"
+        export PATH="$(go env GOPATH)/bin:$PATH"
+
+        # gomobile 必须与 go.mod 中 golang.org/x/mobile 同版本，否则 gobind 找不到 bind 包。
+        MOBILE_VERSION="$(go list -m -f '{{.Version}}' golang.org/x/mobile)"
+        go install "golang.org/x/mobile/cmd/gomobile@${MOBILE_VERSION}"
+        go install "golang.org/x/mobile/cmd/gobind@${MOBILE_VERSION}"
+        gomobile init
+        mkdir -p android/app/libs
+        gomobile bind -target=android -androidapi 24 \
+          -javapkg com.github.echoping07.kemaolife.bridge \
+          -o android/app/libs/kemaolife.aar ./cmd/kemaolife-mobile
+
+        # 供后续步骤定位 SDK 工具；写进 GITHUB_ENV 才能在同一个 job 的其它 step 里读到。
+        {
+          echo "ANDROID_HOME=$SDK"
+          echo "ANDROID_SDK_ROOT=$SDK"
+          echo "ANDROID_NDK_HOME=$SDK/ndk/27.2.12479018"
+          echo "KEMAOLIFE_BUILD_TOOLS=$SDK/build-tools/34.0.0"
+        } >> "$GITHUB_ENV"
+        # AGP 从 ANDROID_HOME 也能定位 SDK，写 local.properties 只是避免镜像差异。
+        echo "sdk.dir=$SDK" > android/local.properties

@@ -1,6 +1,6 @@
 # 安全与隐私报告
 
-本项目只处理使用者本人的校园数据。真实学号、姓名、宿舍房间号、密码、Cookie、课表快照内容、内网 IP、MAC、`distoken`、指纹值及真实学校代码，禁止出现在仓库、Issue、PR 与提交信息中。
+本项目只处理使用者本人的校园数据。真实学号、姓名、宿舍房间号、密码、Cookie、课表快照内容、用户本机内网 IP、MAC、`distoken` 与指纹值，禁止出现在仓库、Issue、PR 与提交信息中。学校代码 `customercode`、学校公开的 Portal / 探测 IP 与 BRAS 名称属学校与协议事实，允许入仓。
 
 ## 请报告
 
@@ -33,6 +33,6 @@
 - 电费接口无鉴权，仅限查询本人数据；不实现多账号、批量遍历或代查。
 - 不把电费 / 教务 / Portal 接口包装成 HTTP API、公开脚本或 SaaS。
 - 凭据只进平台加密存储：Linux `0600`、Windows DPAPI、Android Keystore。
-- 课表快照含 Cookie，等同凭据；日志只记录错误类别、耗时、状态码。
+- 课表快照含 Cookie，等同凭据；日志只记录错误类别、耗时、状态码；上游错误文案必须先脱敏再输出。
 
-更完整的约束见 [README.md](README.md#合规边界) 与 [CONTRIBUTING.md](CONTRIBUTING.md#1-适用范围与隐私前置条件)。
+更完整的约束见 [README.md](README.md#安全与隐私) 与 [CONTRIBUTING.md](CONTRIBUTING.md#1-适用范围与隐私前置条件)。

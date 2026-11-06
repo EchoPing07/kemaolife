@@ -330,6 +330,27 @@ func TestTrailingGlobalFlags(t *testing.T) {
 	if !strings.Contains(env.Data.ConfigPath, "custom") {
 		t.Errorf("尾部 --config 未生效: %q", env.Data.ConfigPath)
 	}
+
+	code, out, _ = runCLI(t, nil, "", "config", "show", "-v")
+	if code != 0 {
+		t.Fatalf("尾部 -v exit = %d", code)
+	}
+	if !strings.Contains(out, version) {
+		t.Errorf("尾部 -v 应输出版本: %q", out)
+	}
+
+	code, out, _ = runCLI(t, nil, "", "config", "show", "--version")
+	if code != 0 {
+		t.Fatalf("尾部 --version exit = %d", code)
+	}
+	if !strings.Contains(out, version) {
+		t.Errorf("尾部 --version 应输出版本: %q", out)
+	}
+
+	code, _, _ = runCLI(t, nil, "", "timetable", "--", "today", "--json")
+	if code != 0 && code != 3 && code != 4 {
+		t.Errorf("尾部 -- 终止符应按子命令参数处理, exit = %d", code)
+	}
 }
 
 // --verbose 只写 stderr，不污染 stdout 信封，且不含个人信息。

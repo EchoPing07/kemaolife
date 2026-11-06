@@ -22,7 +22,7 @@
 | 编码 | UTF-8 |
 
 > H5 页面 URL 上的 `token=`、`code=`、`command=`、`openid=`、`Bopenid=`、`userid=` **全部不参与接口调用**。
-> 实际只用两个 query 参数语义：`customerid`（学校代码）与 `outid`（学号）。
+> H5 页面链接上的 `customerid`（学校代码）与 `outid`（学号）只是页面入口参数；实际接口调用使用表单字段 `customercode` 与 `param.account`（见 §3.1 / §3.2）。
 
 ---
 
@@ -130,7 +130,7 @@ curl -s -X POST 'https://xqh5.17wanxiao.com/smartWaterAndElectricityService/SWAE
 |---|---|---|
 | `login` | 校验身份，返回姓名 / 学校 | `account` |
 | `getbindroom` | 已绑定房间 + 余额概况 | `account` |
-| `getstuindexpage` | 首页数据：近 7 天、历史月份、供电状态 | `account`（可选 `roomverify`） |
+| `getstuindexpage` | 首页数据：近 7 天、历史月份、供电状态；本项目两个主请求成功后固定发一次，仅取 `collecdate` | `account`（可选 `roomverify`） |
 | `getusedetail` | 指定月份的每日用量 | `account`, `roomverify`, `businesstype`, `yearmonth` |
 | `getrechargelist` | 充值记录（按月分组） | `account`, `roomnum`, `roomverify`, `businesstype`, `chargetype` |
 | `getorderdetail` | 单笔订单详情（电价、状态流转） | `account`, `orderid`, `type`, `businesstype`, `chargetype` |
@@ -217,12 +217,11 @@ curl -s -X POST 'https://xqh5.17wanxiao.com/smartWaterAndElectricityService/SWAE
 {
   "result": "0",
   "message": "操作成功",
-  "yearmonth": "2026-11",
+  "yearmonth": "<YYYY-MM>",
   "monthuse": "<当月累计>",
-  "opdtdate": "2026-11-04",
+  "opdtdate": "<YYYY-MM-DD>",
   "dayuselist": [
-    {"date": "2026-11-04", "daydate": "2026-11-04", "status": "1", "dayuse": 11.75, "use": 11.75},
-    {"date": "2026-11-03", "daydate": "2026-11-03", "status": "1", "dayuse": 11.64, "use": 11.64}
+    {"date": "<YYYY-MM-DD>", "daydate": "<YYYY-MM-DD>", "status": "1", "dayuse": "<当日用量>", "use": "<当日用量>"}
   ]
 }
 ```
@@ -243,23 +242,23 @@ curl -s -X POST 'https://xqh5.17wanxiao.com/smartWaterAndElectricityService/SWAE
 
 `roomverify` 可省略（省略则用已绑定房间）。
 
-响应节选：
+响应节选（示例值与真实用电数据无关，仅示意字段形状）：
 
 ```json
 {
   "result": "0",
-  "collecdate": "2026-11-04 22:41:37",
-  "status": "1",
+  "collecdate": "<采集时间>",
+  "status": "<状态>",
   "modlist": [
     {
-      "collecdate": "2026-11-04 22:41:37",
-      "modstatus": "1路:一般送电,2路:一般送电",
+      "collecdate": "<采集时间>",
+      "modstatus": "<供电状态>",
       "isshowpay": 1,
       "weekuselist": [
-        {"date": "10-30", "weekday": "星期五", "use": 20.02, "dayuse": 20.02}
+        {"date": "<MM-DD>", "weekday": "<星期>", "use": "<当日用量>", "dayuse": "<当日用量>"}
       ],
       "monthuselist": [
-        {"yearmonth": "2021.09", "monthuse": 117.82}
+        {"yearmonth": "<YYYY.MM>", "monthuse": "<当月累计>"}
       ]
     }
   ]
@@ -400,16 +399,20 @@ func (c *Client) call(ctx context.Context, cmd, account, schoolCode string, extr
 	defer resp.Body.Close()
 
 	var outer struct {
-		Code     int    `json:"code_"`
-		Result   string `json:"result_"`
-		Body     string `json:"body"`
-		Message  string `json:"message_"`
+		Code      int    `json:"code_"`
+		Result    string `json:"result_"`
+		Body      string `json:"body"`
+		Message   string `json:"message_"`
+		Exception string `json:"exception_"`
 	}
 	if err := json.NewDecoder(resp.Body).Decode(&outer); err != nil {
 		return nil, fmt.Errorf("外层 JSON 解析失败: %w", err)
 	}
 	if outer.Result != "true" {
-		return nil, fmt.Errorf("请求失败: %s", outer.Message)
+		// 上游文案只用于错误分类，不得原样进 error.message（P2）。
+		_ = outer.Message
+		_ = outer.Exception
+		return nil, fmt.Errorf("电费接口请求失败")
 	}
 
 	var body map[string]any
@@ -417,7 +420,9 @@ func (c *Client) call(ctx context.Context, cmd, account, schoolCode string, extr
 		return nil, fmt.Errorf("body 解析失败: %w", err)
 	}
 	if fmt.Sprint(body["result"]) != "0" {
-		return nil, fmt.Errorf("业务失败: %v", body["message"])
+		// body.message 同样可能夹带个人信息，不外传。
+		_ = body["message"]
+		return nil, fmt.Errorf("电费业务失败")
 	}
 	return body, nil
 }
@@ -487,7 +492,7 @@ if err != nil {
 }
 fmt.Printf("剩余 %.2f 度（数据截至 %s）\n", balance, dataUntil)
 
-usage, err := c.DailyUsage(ctx, account, schoolCode, roomVerify, "2026-11")
+usage, err := c.DailyUsage(ctx, account, schoolCode, roomVerify, "<YYYY-MM>")
 if err != nil {
 	return err
 }
@@ -496,7 +501,7 @@ for _, d := range usage {
 }
 ```
 
-> `ctx` 建议带 15s 超时；轮询间隔 ≥ 600 秒（默认 4 小时）。`Balance` 与 `DailyUsage` 是 `core` 内部两个请求；对外一次 `ElectricityReport` 查询同时取两者，任一失败整体报错（见 `docs/002` §3.2）。
+> `ctx` 由 CLI 的 `--timeout` 与 `HTTPDoer` 统一控制（默认 30s）；轮询间隔 ≥ 600 秒（默认 4 小时）。`Balance` 与 `DailyUsage` 是 `core` 内部两个主请求；两个主请求成功后还会固定发一次 `getstuindexpage` 取采集时刻，失败静默降级到 `opdtdate`；对外一次 `ElectricityReport` 查询同时取余额与用量，主请求任一失败整体报错（见 `docs/002` §3.2）。
 
 ---
 

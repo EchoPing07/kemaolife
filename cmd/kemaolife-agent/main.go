@@ -161,7 +161,7 @@ func run() (err error) {
 			Password:    s.CampusPassword,
 			Fingerprint: s.CampusFingerprint,
 		}
-	})
+	}, "")
 	campusDeps := app.CampusDeps{Clock: platform.RealClock{}, Net: portal, Ready: portal}
 
 	ctx, cancel := context.WithCancel(context.Background())

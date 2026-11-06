@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- 自适应图标的背景层：前景是铺满的合成图，这层只在部分 launcher 做视差时露出。 -->
+    <color name="ic_launcher_background">#EAF3FD</color>
+</resources>

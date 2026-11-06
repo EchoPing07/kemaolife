@@ -1,6 +1,6 @@
 # 贡献指南
 
-谢谢参与。M0（契约 + core）、M1（Linux CLI + skill）与 M2（Windows 托盘常驻）已实现，Android 尚未启动；贡献以 Linux CLI 与 Windows 端改进、文档契约审阅、D 项讨论与 Issue 为主，按本文规范提交代码。
+谢谢参与。M0（契约 + core）、M0.5（Android 复用 spike）、M1（Linux CLI + skill）、M2（Windows 托盘常驻）与 M3（Android App）已实现；M4 仅剩 D8 / D11 结论复核。贡献以三端改进、文档契约审阅、D 项讨论与 Issue 为主，按本文规范提交代码。
 
 参与前请先阅读 [README.md](README.md) 与 [docs/000-需求与产品定位.md](docs/000-需求与产品定位.md)。需求与契约以 `docs/` 为准，协议事实只以 `api-docs/` 为准；两者冲突时**不要自行纠偏**，开 Issue 说明具体条目。
 
@@ -151,16 +151,29 @@ grep -rniE 'webview|cef|wails|pwa|electron|tauri' --include='*.go' --include='*.
 # 分层：core / app / agent 里不该有平台判断
 grep -rn 'runtime.GOOS' internal/core internal/app internal/agent && echo FAIL
 
-# 隐私：不得出现个人凭据（按自己已知的敏感值逐个检查）
+# 隐私：把占位模板替换成自己已知的真实敏感值（每行一个）后逐个检查；
+# 模板自身会出现在 AGENTS.md / CONTRIBUTING.md / ci.yml / release.yml，需排除以免自匹配误报。
 # 学校代码 3126 与协议 IP 属学校事实，不在此检查范围
-grep -rniE '<把已知的真实学号/房间号写在这里>' . && echo FAIL
+SENSITIVE_VALUES='<把已知的真实学号/房间号写在这里>'
+printf '%s\n' "$SENSITIVE_VALUES" | while IFS= read -r value; do
+  [ -z "$value" ] && continue
+  if grep -rniF -e "$value" . \
+      --exclude-dir=.git \
+      --exclude=ci.yml --exclude=release.yml --exclude=AGENTS.md --exclude=CONTRIBUTING.md; then
+    echo 'FAIL: personal data found'; exit 1
+  fi
+done
 
 # 桌面两端可交叉编译
 GOOS=linux   GOARCH=amd64 go build ./internal/... ./cmd/kemaolife/...
 GOOS=windows GOARCH=amd64 go build ./internal/...
+GOOS=windows GOARCH=arm64 go build ./internal/...
 # 托盘端必须是 GUI 子系统：console 子系统会挂一个控制台窗口（启动会 FreeConsole 摘掉，但不符合 docs/002 §5.2 形态）
 GOOS=windows GOARCH=amd64 go build -ldflags "-H=windowsgui" -o kemaolife-agent.exe ./cmd/kemaolife-agent/
+GOOS=android GOARCH=arm64 go build ./internal/... ./cmd/kemaolife-mobile/
 ```
+
+CI 还校验托盘 PE 的 GUI 子系统（Subsystem=2）与 `packaging/windows/*.ps1` / `*.bat` 的 UTF-8 BOM、CRLF；完整 Android AAR / APK（NDK + Gradle + gomobile）由 `.github/workflows/ci-android.yml` 在 Android 路径变更时构建并跑单元测试；权威清单见 `.github/workflows/ci.yml` 与 `.github/workflows/ci-android.yml`。
 
 任一项失败先修完再提交，不要用 `//nolint`、注释掉检查或 `--no-verify` 绕过。设计阶段（无 Go 代码）只需执行隐私与占位符相关检查。
 

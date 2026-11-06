@@ -4,7 +4,7 @@
 > **更新**：2026-11-05
 > **适用**：广东科贸职业学院清远校区 Portal（`km-bras`）
 
-**核心链路只有 3 个请求，全部无 Cookie、无 Token、无签名。**
+**核心协议请求为探测 + 登录 / 下线三类，全部无 Cookie、无 Token、无签名；客户端在登录 / 下线后还会等待生效并复探一次。**
 
 ---
 
@@ -14,10 +14,10 @@
 |---|---|
 | Portal 基地址 | `https://10.0.128.3`（**自签证书**，仅此地址跳过 TLS 校验） |
 | 探测地址 | `http://5.5.5.5/`（**必须 http**，https 拿不到 302） |
-| 重定向 | **一律禁跟随**，自己读 `Location` |
+| 重定向 | **探测客户端禁跟随**，自己读 `Location`；POST 客户端不跟随 Portal 重定向 |
 | 鉴权 | 无。凭据只有学号 + 密码（明文） |
 | 请求格式 | `application/x-www-form-urlencoded` |
-| 响应判定 | HTTP 恒为 **200**，成败只看 body 的 `success`（`code:500` 是业务错误，不是 HTTP 500） |
+| 响应判定 | Portal POST 的 HTTP 恒为 **200**，成败只看 body 的 `success`（`code:500` 是业务错误，不是 HTTP 500）；最终状态以复探为准 |
 | 生效确认 | 登录 / 下线后约 2~3s 再探测一次即可 |
 
 ---
@@ -52,7 +52,7 @@ Location: https://10.0.128.3/portal/webauth?wlanacip=<BRAS 地址>&wlanacname=km
 | `vlan` | 通常 `0` |
 | `url` | 原访问目标，原样回传 |
 
-> 已在线态的 `errorMsg` 只是历史文案（如顶号提示），仅用于展示，不参与判态。
+> 已在线态的 `errorMsg` 只是历史文案（如顶号提示），仅用于展示，不参与判态；进入 DTO 前必须经已知安全短语白名单过滤，未命中时置空，避免上游夹带个人信息（P2）。
 
 ### ② 登录：`POST https://10.0.128.3/api/portal/webauth`
 
@@ -101,8 +101,8 @@ Location: https://10.0.128.3/portal/webauth?wlanacip=<BRAS 地址>&wlanacname=km
 ## 3. 数据结构
 
 ```go
-// PortalParams 是探测 302 下发、登录/下线必须原样回传的六参数。
-type PortalParams struct {
+// Params 是探测 302 下发、登录/下线必须原样回传的六参数。
+type Params struct {
 	WlanAcIP   string // wlanacip
 	WlanAcName string // wlanacname
 	WlanUserIP string // wlanuserip
@@ -113,19 +113,11 @@ type PortalParams struct {
 
 // Probe 是探测结果，只保留判定所需字段。
 type Probe struct {
-	State    State  // Online / Unauth / Offline
-	Params   PortalParams
-	Distoken string // 仅 Online 态有值，用于下线
-	ErrorMsg string // 历史提示文案，展示用
+	State    model.CampusState // online / unauth / offline
+	Params   Params
+	Distoken string // 仅在线态有值，用于下线
+	ErrorMsg string // 已知安全提示文案，展示用
 }
-
-type State int
-
-const (
-	StateOffline State = iota // 不在校园网 / 探测失败
-	StateUnauth               // 未认证
-	StateOnline               // 已在线
-)
 ```
 
 判态是纯函数：`ParseProbe(statusCode int, location string) Probe`。
@@ -157,8 +149,8 @@ const (
 	webauthReferer = portalBase + "/portal/webauth"
 )
 
-// NewPortalClient 返回一个「探测不跟随重定向 + 仅对 Portal 跳过 TLS 校验」的客户端组。
-func NewPortalClient() (probe *http.Client, portal *http.Client) {
+// NewPortalNetwork 返回一个「探测不跟随重定向 + 仅对 Portal 跳过 TLS 校验」的平台适配器。
+func NewPortalNetwork() (probe *http.Client, portal *http.Client) {
 	probe = &http.Client{
 		Timeout: 5 * time.Second,
 		CheckRedirect: func(*http.Request, []*http.Request) error {
@@ -177,16 +169,16 @@ func NewPortalClient() (probe *http.Client, portal *http.Client) {
 	return probe, portal
 }
 
-// Probe 探测当前认证状态。
-func Probe(ctx context.Context, c *http.Client) (Probe, error) {
+// Status 探测当前认证状态。
+func Status(ctx context.Context, c *http.Client) (Probe, error) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, probeURL, nil)
 	if err != nil {
-		return Probe{State: StateOffline}, err
+		return Probe{State: model.CampusOffline}, err
 	}
 
 	resp, err := c.Do(req)
 	if err != nil {
-		return Probe{State: StateOffline}, err // 超时 = 不在校园网
+		return Probe{State: model.CampusOffline}, err // 超时 = 不在校园网
 	}
 	defer resp.Body.Close()
 	io.Copy(io.Discard, resp.Body)
@@ -197,16 +189,16 @@ func Probe(ctx context.Context, c *http.Client) (Probe, error) {
 // ParseProbe 纯函数：由状态码 + Location 判定状态并抽取六参数。
 func ParseProbe(status int, location string) Probe {
 	if status != http.StatusFound || location == "" {
-		return Probe{State: StateOffline}
+		return Probe{State: model.CampusOffline}
 	}
 	u, err := url.Parse(location)
 	if err != nil || !strings.Contains(u.Path, "/portal/webauth") {
-		return Probe{State: StateOffline}
+		return Probe{State: model.CampusOffline}
 	}
 
 	q := u.Query()
 	p := Probe{
-		Params: PortalParams{
+		Params: Params{
 			WlanAcIP:   q.Get("wlanacip"),
 			WlanAcName: q.Get("wlanacname"),
 			WlanUserIP: q.Get("wlanuserip"),
@@ -215,18 +207,18 @@ func ParseProbe(status int, location string) Probe {
 			URL:        q.Get("url"),
 		},
 		Distoken: q.Get("distoken"),
-		ErrorMsg: q.Get("errorMsg"),
+		ErrorMsg: SanitizeMessage(q.Get("errorMsg")),
 	}
 	if q.Get("act") == "LOGINSUCC" {
-		p.State = StateOnline
+		p.State = model.CampusOnline
 	} else {
-		p.State = StateUnauth
+		p.State = model.CampusUnauth
 	}
 	return p
 }
 
-// Login 用六参数 + 账号密码认证。成败只看响应 body 的 success。
-func Login(ctx context.Context, c *http.Client, p PortalParams, user, pass, fingerprint string) (bool, string, error) {
+// BuildLoginForm 构造登录表单。成败只看响应 body 的 success。
+func BuildLoginForm(p Params, user, pass, fingerprint string) url.Values {
 	form := url.Values{
 		"wlanacip":            {p.WlanAcIP},
 		"wlanacname":          {p.WlanAcName},
@@ -240,11 +232,11 @@ func Login(ctx context.Context, c *http.Client, p PortalParams, user, pass, fing
 		"recordTerminalMac":   {"Y"},
 		"browserFingerprint":  {fingerprint},
 	}
-	return postPortal(ctx, c, loginPath, form)
+	return form
 }
 
-// Logout 下线：mac 转大写，distoken 必须来自本次探测。
-func Logout(ctx context.Context, c *http.Client, p PortalParams, distoken string) (bool, string, error) {
+// BuildLogoutForm 构造下线表单：mac 转大写，distoken 必须来自本次探测。
+func BuildLogoutForm(p Params, distoken string) url.Values {
 	form := url.Values{
 		"wlanacip":   {p.WlanAcIP},
 		"wlanacname": {p.WlanAcName},
@@ -257,7 +249,7 @@ func Logout(ctx context.Context, c *http.Client, p PortalParams, distoken string
 		"act":        {""},
 		"ssid":       {""},
 	}
-	return postPortal(ctx, c, disconnPath, form)
+	return form
 }
 
 func postPortal(ctx context.Context, c *http.Client, path string, form url.Values) (bool, string, error) {
@@ -268,7 +260,8 @@ func postPortal(ctx context.Context, c *http.Client, path string, form url.Value
 	}
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	req.Header.Set("Referer", webauthReferer)
-	req.Header.Set("Content-Length", fmt.Sprint(len(body)))
+	req.Header.Set("User-Agent", userAgent)
+	// Content-Length 由 net/http 自动设置。
 
 	resp, err := c.Do(req)
 	if err != nil {
@@ -299,27 +292,28 @@ func postPortal(ctx context.Context, c *http.Client, path string, form url.Value
 编排（与 `app.EnsureCampusNetwork` 对应）：
 
 ```go
-probeClient, portalClient := NewPortalClient()
+probeClient, portalClient := NewPortalNetwork()
 
-p, err := Probe(ctx, probeClient)
-if err != nil || p.State == StateOffline {
+p, err := Status(ctx, probeClient)
+if err != nil || p.State == model.CampusOffline {
 	fmt.Println("不在校园网环境")
 	return nil
 }
-if p.State == StateOnline {
+if p.State == model.CampusOnline {
 	fmt.Println("已在线，无需登录")
 	return nil
 }
 
-ok, msg, err := Login(ctx, portalClient, p.Params, user, pass, fingerprint)
+form := BuildLoginForm(p.Params, user, pass, fingerprint)
+ok, msg, err := postPortal(ctx, portalClient, loginPath, form)
 if err != nil {
 	return err
 }
-fmt.Println("认证受理:", ok, msg)
+fmt.Println("认证受理:", ok, sanitizeError(msg))
 
 // 约 3s 后再探测一次确认生效
 time.Sleep(3 * time.Second)
-p2, _ := Probe(ctx, probeClient)
+p2, _ := Status(ctx, probeClient)
 fmt.Println("复探状态:", p2.State)
 ```
 

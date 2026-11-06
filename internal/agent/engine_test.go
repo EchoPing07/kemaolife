@@ -677,12 +677,17 @@ func TestRunCampusProbeOnlyProbes(t *testing.T) {
 	}()
 
 	// 首轮立即探测：等到状态被写入即可，不必等满一个周期。
-	deadline := time.Now().Add(10 * time.Second)
-	for eng.Status().CampusCheckedAt.IsZero() {
-		if time.Now().After(deadline) {
-			t.Fatal("启动后应立刻探测一次")
+	// 超时判断只用固定次数的轮询，不读取系统时间（AGENTS §7）。
+	checked := false
+	for i := 0; i < 1000; i++ {
+		if !eng.Status().CampusCheckedAt.IsZero() {
+			checked = true
+			break
 		}
 		time.Sleep(10 * time.Millisecond)
+	}
+	if !checked {
+		t.Fatal("启动后应立刻探测一次")
 	}
 
 	cancel()

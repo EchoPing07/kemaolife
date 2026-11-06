@@ -64,16 +64,22 @@ func TestParseProbeOffline(t *testing.T) {
 	}
 }
 
-// 已在线态的 errorMsg 只是历史文案，不参与判态。
-func TestParseProbeKeepsHistoryMessageWithoutChangingState(t *testing.T) {
-	loc := "https://" + portalHost + "/portal/webauth?wlanacip=x&wlanacname=km-bras" +
-		"&wlanuserip=y&mac=aa:bb:cc:dd:ee:ff&vlan=0&act=LOGINSUCC&errorMsg=<历史提示>"
-	p := campusnet.ParseProbe(302, loc)
+// 已在线态的 errorMsg 只是历史文案，不参与判态；上游原文必须脱敏后才进 DTO。
+func TestParseProbeSanitizesHistoryMessage(t *testing.T) {
+	known := "https://" + portalHost + "/portal/webauth?wlanacip=x&wlanacname=km-bras" +
+		"&wlanuserip=y&mac=<小写MAC>&vlan=0&act=LOGINSUCC&errorMsg=%E8%B4%A6%E5%8F%B7%E6%88%96%E5%AF%86%E7%A0%81%E9%94%99%E8%AF%AF"
+	p := campusnet.ParseProbe(302, known)
 	if p.State != model.CampusOnline {
 		t.Fatalf("state = %q, want online", p.State)
 	}
-	if p.ErrorMsg != "<历史提示>" {
-		t.Errorf("errorMsg = %q", p.ErrorMsg)
+	if p.ErrorMsg != "账号或密码错误" {
+		t.Errorf("errorMsg 应为已知安全短语, got %q", p.ErrorMsg)
+	}
+
+	unknown := "https://" + portalHost + "/portal/webauth?wlanacip=x&wlanacname=km-bras" +
+		"&wlanuserip=y&mac=<小写MAC>&vlan=0&act=LOGINSUCC&errorMsg=%3C%E5%AD%A6%E5%8F%B7%3E%3C%E5%8E%86%E5%8F%B2%E6%8F%90%E7%A4%BA%3E"
+	if got := campusnet.ParseProbe(302, unknown).ErrorMsg; got != "" {
+		t.Errorf("未知历史文案必须置空: %q", got)
 	}
 }
 
@@ -128,7 +134,7 @@ func TestBuildLogoutForm(t *testing.T) {
 		}
 	}
 
-	// 用真实形态的 MAC 验证大写转换。
+	// 用 16 进制字母占位形态验证大写转换；不是真实设备 MAC。
 	p.Mac = "aa:bb:cc:dd:ee:ff"
 	if got := campusnet.BuildLogoutForm(p, "<distoken>").Get("mac"); got != "AA:BB:CC:DD:EE:FF" {
 		t.Errorf("下线 mac 应转大写, got %q", got)

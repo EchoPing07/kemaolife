@@ -1,0 +1,67 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">科贸生活</string>
+
+    <!-- 底栏三个 tab（docs/002 §5.3）。 -->
+    <string name="tab_timetable">课表</string>
+    <string name="tab_more">更多</string>
+    <string name="tab_settings">设置</string>
+
+    <!-- 课表。 -->
+    <string name="action_sync">同步</string>
+    <string name="action_refresh">刷新</string>
+    <string name="timetable_today">今日</string>
+    <string name="timetable_week">本周</string>
+    <string name="timetable_pick_date">选日期</string>
+    <string name="timetable_no_class">当天没课</string>
+    <string name="timetable_not_in_semester">不在本学期范围</string>
+    <string name="timetable_prev_week">上一周</string>
+    <string name="timetable_next_week">下一周</string>
+
+    <!-- 数据时间提示：所有课表 / 电费输出都必须能说明数据来自何时。 -->
+    <string name="data_synced_at">同步于 %1$s</string>
+    <string name="data_stale">离线数据（同步于 %1$s）</string>
+    <string name="data_collected_at">数据截至 %1$s</string>
+
+    <!-- 更多页。 -->
+    <string name="section_today">今日课表</string>
+    <string name="section_electricity">电费</string>
+    <string name="section_campusnet">校园网</string>
+    <string name="balance_unit">%1$s %2$s</string>
+    <string name="estimated_days">约可用 %1$d 天</string>
+    <string name="estimated_days_unknown">可用天数无法估算</string>
+    <string name="month_usage">本月已用 %1$s %2$s</string>
+
+    <string name="campusnet_online">已在线</string>
+    <string name="campusnet_unauth">未认证</string>
+    <string name="campusnet_offline">不在校园网</string>
+    <string name="campusnet_offline_hint">校园网认证需要连接校园网 WiFi，蜂窝数据下无法使用。</string>
+    <string name="action_login">登录</string>
+    <string name="action_logout">下线</string>
+    <string name="action_relogin">重登</string>
+    <string name="action_probe">重新探测</string>
+
+    <!-- 设置页。 -->
+    <string name="section_edu">教务（课表）</string>
+    <string name="section_power">电费</string>
+    <string name="section_portal">校园网认证</string>
+    <string name="field_student_id">学号</string>
+    <string name="field_edu_password">教务密码</string>
+    <string name="field_customer_code">学校代码</string>
+    <string name="field_campus_user">校园网账号</string>
+    <string name="field_campus_password">校园网密码</string>
+    <string name="field_campus_fingerprint">浏览器指纹（选填）</string>
+    <string name="action_save">保存</string>
+    <string name="save_done">已保存</string>
+    <string name="password_kept_hint">密码已加密保存，留空表示不修改</string>
+    <string name="power_no_password_hint">电费接口无密码，学号与教务共用。</string>
+    <string name="campus_independent_hint">校园网凭据独立保存，不复用教务密码。</string>
+    <string name="credentials_keystore_hint">凭据经 Android Keystore 加密后保存在本机，不上传、不进日志。</string>
+
+    <!-- 通用。 -->
+    <string name="action_retry">重试</string>
+    <string name="action_ok">知道了</string>
+    <string name="loading">加载中…</string>
+    <string name="empty_placeholder">—</string>
+    <string name="bridge_not_ready">桥接尚未初始化</string>
+</resources>

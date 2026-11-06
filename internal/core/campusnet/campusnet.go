@@ -57,7 +57,7 @@ func ParseProbe(statusCode int, location string) Probe {
 			URL:        q.Get("url"),
 		},
 		Distoken: q.Get("distoken"),
-		ErrorMsg: q.Get("errorMsg"),
+		ErrorMsg: SanitizeMessage(q.Get("errorMsg")),
 	}
 	if q.Get("act") == "LOGINSUCC" {
 		p.State = model.CampusOnline
@@ -65,6 +65,22 @@ func ParseProbe(statusCode int, location string) Probe {
 		p.State = model.CampusUnauth
 	}
 	return p
+}
+
+// SanitizeMessage 只放行已知的短安全短语：上游 Location 或 POST 响应可能夹带账号、IP 等
+// 个人信息，不得原样进入 CampusStatus / 错误输出（P2 / docs/002 §3.3）。
+func SanitizeMessage(raw string) string {
+	m := strings.TrimSpace(raw)
+	if m == "" {
+		return ""
+	}
+	known := []string{"账号或密码错误", "此IP已在线", "已在线", "正在进行外网拨号", "下线失败", "非法请求", "认证失败"}
+	for _, k := range known {
+		if strings.Contains(m, k) {
+			return k
+		}
+	}
+	return ""
 }
 
 // 常量字段值（api-docs/003 §2 ②）。

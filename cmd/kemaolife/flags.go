@@ -36,10 +36,12 @@ func parseGlobalFlags(args []string) (options, []string, error) {
 	rest := make([]string, 0, len(args))
 
 	i := 0
+	terminated := false
 	for i < len(args) {
 		arg := args[i]
 		if arg == "--" {
 			rest = append(rest, args[i+1:]...)
+			terminated = true
 			break
 		}
 		if !strings.HasPrefix(arg, "-") {
@@ -81,6 +83,11 @@ func parseGlobalFlags(args []string) (options, []string, error) {
 		i++
 	}
 
+	// `--` 之后全部按原样参数处理，不再解析任何全局开关。
+	if terminated {
+		return opts, rest, nil
+	}
+
 	// 子命令之后仍可能带全局参数（agent 习惯写在末尾）；把它们摘出来。
 	tail, err := extractTrailingGlobals(&opts, rest)
 	if err != nil {
@@ -90,7 +97,8 @@ func parseGlobalFlags(args []string) (options, []string, error) {
 }
 
 // extractTrailingGlobals 把子命令参数里的全局开关摘走，其余保持原序。
-// 带值参数（--config / --timeout）也支持放在末尾，agent 不必记住参数位置。
+// 带值参数（--config / --timeout）也支持放在末尾，agent 不必记住参数位置；
+// -v / --version 与 -- 在子命令前后均可生效，-- 之后按子命令原样参数处理（docs/002 §1.1）。
 func extractTrailingGlobals(opts *options, args []string) ([]string, error) {
 	if len(args) == 0 {
 		return args, nil
@@ -106,6 +114,13 @@ func extractTrailingGlobals(opts *options, args []string) ([]string, error) {
 			opts.verbose = true
 		case "-h", "--help":
 			opts.help = true
+		case "-v", "--version":
+			opts.version = true
+		case "--":
+			// 子命令之后仍支持终止符：其后的内容一律按子命令原样参数处理，
+			// 终止符自身不传给子命令。
+			out = append(out, args[i+1:]...)
+			return out, nil
 		case "--config", "--timeout":
 			v, err := flagValue(name, value, hasValue, args, &i)
 			if err != nil {

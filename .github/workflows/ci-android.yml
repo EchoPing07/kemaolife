@@ -1,0 +1,78 @@
+name: CI · Android
+
+# 完整 AAR / APK 构建较重，只在 Android 相关路径变更时跑；
+# ci.yml 保留每次 PR 都跑的 GOOS=android GOARCH=arm64 Go 交叉编译快速检查。
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'android/**'
+      - 'cmd/kemaolife-mobile/**'
+      - '.github/actions/setup-android-gomobile/**'
+      - '.github/workflows/ci-android.yml'
+      - '.github/workflows/release.yml'
+      - 'go.mod'
+      - 'go.sum'
+  pull_request:
+    paths:
+      - 'android/**'
+      - 'cmd/kemaolife-mobile/**'
+      - '.github/actions/setup-android-gomobile/**'
+      - '.github/workflows/ci-android.yml'
+      - '.github/workflows/release.yml'
+      - 'go.mod'
+      - 'go.sum'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      # TODO(D13): NDK / gomobile 工具链仍是待确认项；此处按 android/README.md 的描述性基线落地。
+      - name: Setup Android toolchain
+        uses: ./.github/actions/setup-android-gomobile
+
+      - name: Assemble debug APKs
+        run: |
+          set -euo pipefail
+          cd android
+          # CI 不注入发布密钥 → release 变体按 build.gradle.kts 回落 debug 签名；
+          # 这里直接构建 debug 变体，验证 AAR 门面、Compose 代码与 ABI splits 都能编出来。
+          # gradlew 在仓库里是 100644（Windows 侧不依赖可执行位）；Linux runner
+          # 直接执行会 Permission denied，显式交给 bash 更稳，也避免改文件模式。
+          bash ./gradlew --no-daemon :app:assembleDebug :app:testDebugUnitTest -PversionCode=1
+
+          out="app/build/outputs/apk/debug"
+          for abi in armeabi-v7a arm64-v8a x86 x86_64; do
+            test -s "$out/app-${abi}-debug.apk"
+          done
+          echo 'Android debug APK (4 ABIs) + unit tests OK'
+
+      - name: Verify ABI split
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import zipfile
+
+          out = "android/app/build/outputs/apk/debug"
+          for abi in ("armeabi-v7a", "arm64-v8a", "x86", "x86_64"):
+              path = f"{out}/app-{abi}-debug.apk"
+              with zipfile.ZipFile(path) as z:
+                  names = z.namelist()
+              assert "AndroidManifest.xml" in names, (path, "no manifest")
+              assert any(n == "classes.dex" for n in names), (path, "no dex")
+              assert any(n.startswith(f"lib/{abi}/") and n.endswith(".so") for n in names), \
+                  (path, "missing ABI lib")
+              assert not any(n.startswith("lib/") and not n.startswith(f"lib/{abi}/")
+                             for n in names), (path, "foreign ABI lib")
+              print(f"{abi}: split OK")
+          PY
