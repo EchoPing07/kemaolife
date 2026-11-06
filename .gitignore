@@ -27,6 +27,8 @@ Thumbs.db
 local.properties
 *.iml
 *.aar
+# gobind 顺手生成的源码包，同属构建产物
+*-sources.jar
 *.apk
 *.aab
 *.keystore

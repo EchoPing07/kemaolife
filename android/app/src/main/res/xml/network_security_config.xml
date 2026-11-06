@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  明文 / 自签证书的放行范围（001 §6.2）。
+
+  只有两个地址需要放行，都属学校协议事实（api-docs/003 §1）：
+  - 探测地址 http://5.5.5.5/：必须明文，https 拿不到 302。
+  - Portal https://10.0.128.3：自签证书。
+
+  不设 android:usesCleartextTraffic="true"，也不全局关闭 TLS 校验：
+  其余域名（教务、电费）仍走系统默认安全策略。
+-->
+<network-security-config>
+    <base-config cleartextTrafficPermitted="false">
+        <trust-anchors>
+            <certificates src="system" />
+        </trust-anchors>
+    </base-config>
+
+    <domain-config cleartextTrafficPermitted="true">
+        <domain includeSubdomains="false">5.5.5.5</domain>
+    </domain-config>
+
+    <domain-config cleartextTrafficPermitted="false">
+        <domain includeSubdomains="false">10.0.128.3</domain>
+        <trust-anchors>
+            <certificates src="system" />
+            <certificates src="user" />
+        </trust-anchors>
+    </domain-config>
+</network-security-config>

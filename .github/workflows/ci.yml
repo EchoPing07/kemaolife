@@ -87,6 +87,13 @@ jobs:
             crlf_ok "$f"
           done
           echo 'Windows packaging scripts OK'
+
+      - name: Android cross build
+        run: |
+          # Android 侧只验证 Go 代码能交叉编译到 android/arm64。
+          # 完整 AAR / APK 需要 NDK 与 Gradle，不进 CI（见 android/README.md）。
+          GOOS=android GOARCH=arm64 go build ./internal/... ./cmd/kemaolife-mobile/
+
       - name: No personal credentials in repo
         run: |
           # 个人隐私（学号 / 房间号 / Cookie 值）不得入仓；按已知值逐个检查

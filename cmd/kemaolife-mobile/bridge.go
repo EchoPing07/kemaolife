@@ -1,0 +1,302 @@
+// Package kemaolife 是 Android 侧的唯一门面：只导出两个字符串入口
+// Init / Call（docs/002 §2.1、001 §6.1）。
+//
+// 为什么只有字符串：gobind 对导出类型限制很严（结构体切片、跨 JNI 接口都不行），
+// 所以领域对象一律不跨边界，Go 内部保持强类型，只在边界付一次 JSON 编解码。
+//
+// 构建（TODO(D13)：工具链待定稿）：
+//
+//	gomobile bind -target=android -androidapi 24 \
+//	    -javapkg com.github.echoping07.kemaolife.bridge \
+//	    -o android/app/libs/kemaolife.aar ./cmd/kemaolife-mobile
+package kemaolife
+
+import (
+	"context"
+	"encoding/json"
+	"strings"
+	"sync"
+	"time"
+
+	"github.com/EchoPing07/kemaolife/internal/app"
+	"github.com/EchoPing07/kemaolife/internal/core/model"
+	"github.com/EchoPing07/kemaolife/internal/platform"
+	buildversion "github.com/EchoPing07/kemaolife/internal/version"
+)
+
+// defaultCustomerCode 是学校代码内置默认值（学校事实，非个人隐私）。
+//
+// 按 AGENTS §5.6 放在 cmd 层而不是 internal/core，用户可在设置页覆盖。
+const defaultCustomerCode = "3126"
+
+// defaultTimeout 是单次网络请求上限；课表同步含 CAS 登录 + 2 个请求，留足余量。
+const defaultTimeout = 30 * time.Second
+
+// initConfig 是 Kotlin 通过 Init 传入的全部信息（凭据已由 Keystore 解密）。
+//
+// 凭据只存在于内存，Go 侧不落盘、不进日志（P5 / P2）。
+type initConfig struct {
+	// CacheDir 是应用私有目录下的可写目录，用于存快照（含 Cookie，等同凭据）。
+	CacheDir string `json:"cacheDir"`
+
+	// 教务：学号 + 密码（课表）。
+	StudentID   string `json:"studentId"`
+	EduPassword string `json:"eduPassword"`
+
+	// 电费：复用教务学号 + 学校代码，无密码（api-docs/002 §1）。
+	CustomerCode string `json:"customerCode"`
+
+	// 校园网：独立凭据，不复用教务密码（D9 已定稿）。
+	CampusUser        string `json:"campusUser"`
+	CampusPassword    string `json:"campusPassword"`
+	CampusFingerprint string `json:"campusFingerprint"`
+}
+
+// session 是一次 Init 组装好的依赖；配置随 Init 更新，避免每次调用重复解析。
+type session struct {
+	deps   app.Deps
+	campus app.CampusDeps
+	cfg    model.Config
+	clock  platform.RealClock
+}
+
+var (
+	mu  sync.Mutex
+	cur *session
+)
+
+// Init is called by Kotlin once at startup and again after the settings page
+// saves (docs/002 §2.1). It returns the §2 envelope as JSON.
+//
+// gobind copies exported doc comments into generated Java sources, and javac
+// reads them with the platform default charset (GBK on the build machine).
+// Keep every comment on an exported symbol ASCII-only, otherwise the AAR build
+// fails on non-ASCII bytes. Chinese rationale stays on the unexported helpers.
+//
+// A failed Init keeps the previous session alive: one bad call must not brick
+// a running app. TODO(D12): envelope unification still pending user decision.
+func Init(configJSON string) string {
+	var cfg initConfig
+	if err := json.Unmarshal([]byte(configJSON), &cfg); err != nil {
+		return failure(model.WrapError(model.CodeInvalidArgument, "初始化参数无法解析", err))
+	}
+	cacheDir := strings.TrimSpace(cfg.CacheDir)
+	if cacheDir == "" {
+		return failure(model.NewError(model.CodeInvalidArgument, "初始化缺少可写目录"))
+	}
+
+	store, err := platform.NewFileStore(cacheDir)
+	if err != nil {
+		return failure(model.WrapError(model.CodeInvalidArgument, "无法使用缓存目录", err))
+	}
+
+	clock := platform.RealClock{}
+	doer := platform.NewHTTPDoer(defaultTimeout)
+
+	customerCode := strings.TrimSpace(cfg.CustomerCode)
+	if customerCode == "" {
+		customerCode = defaultCustomerCode
+	}
+
+	// 校园网凭据每轮现读：设置页保存后重新 Init 即生效，不需要重启 App。
+	cred := cfg
+	portal := platform.NewPortalNetwork(func() platform.PortalCredential {
+		return platform.PortalCredential{
+			UserID:      cred.CampusUser,
+			Password:    cred.CampusPassword,
+			Fingerprint: cred.CampusFingerprint,
+		}
+	}, "")
+
+	s := &session{
+		deps: app.Deps{
+			Clock:               clock,
+			HTTP:                doer,
+			Store:               store,
+			DefaultCustomerCode: customerCode,
+		},
+		campus: app.CampusDeps{Clock: clock, Net: portal, Ready: portal},
+		cfg: model.Config{
+			StudentID:    strings.TrimSpace(cfg.StudentID),
+			EduPassword:  cfg.EduPassword,
+			CustomerCode: customerCode,
+		},
+		clock: clock,
+	}
+
+	mu.Lock()
+	cur = s
+	mu.Unlock()
+
+	return success(clock.Now(), map[string]any{
+		"version": buildversion.Version,
+	})
+}
+
+// callRequest 是门面请求（docs/002 §2.1）。op 之外的字段按 op 取用。
+type callRequest struct {
+	Op    string `json:"op"`
+	Week  int    `json:"week"`
+	Date  string `json:"date"`
+	Month string `json:"month"`
+}
+
+// Call takes a request JSON and returns a response JSON. Unknown op yields
+// error code 2001 instead of an empty success (docs/002 §2.1 rule 5).
+//
+// ASCII-only comment on purpose: see Init.
+func Call(reqJSON string) string {
+	var req callRequest
+	if err := json.Unmarshal([]byte(reqJSON), &req); err != nil {
+		return failure(model.WrapError(model.CodeInvalidArgument, "请求无法解析", err))
+	}
+
+	s := currentSession()
+	if s == nil {
+		return failure(model.NewError(model.CodeInvalidArgument, "门面尚未初始化"))
+	}
+	op := strings.TrimSpace(req.Op)
+
+	switch op {
+	case "ping":
+		return success(s.clock.Now(), map[string]any{
+			"pong":    true,
+			"version": buildversion.Version,
+		})
+	case "timetable.sync":
+		return s.timetableSync()
+	case "timetable.today":
+		return s.timetableDate(model.NewDate(s.clock.Now()))
+	case "timetable.date":
+		date, err := model.ParseDate(strings.TrimSpace(req.Date))
+		if err != nil {
+			return failure(model.WrapError(model.CodeInvalidArgument, "日期格式应为 YYYY-MM-DD", err))
+		}
+		return s.timetableDate(date)
+	case "timetable.week":
+		return s.timetableWeek(req.Week)
+	case "electricity.report":
+		return s.electricityReport(req.Month)
+	case "campusnet.status":
+		return s.campusStatus()
+	case "campusnet.login":
+		return s.campusAction(app.LoginCampusNetwork)
+	case "campusnet.logout":
+		return s.campusAction(app.LogoutCampusNetwork)
+	case "campusnet.relogin":
+		return s.campusAction(app.ReloginCampusNetwork)
+	}
+	return failure(model.NewError(model.CodeInvalidArgument, "未知 op: "+op))
+}
+
+func currentSession() *session {
+	mu.Lock()
+	defer mu.Unlock()
+	return cur
+}
+
+// timetableSync 对应 CLI 的 `timetable sync`：只刷新、不查询。
+func (s *session) timetableSync() string {
+	result, err := app.SyncTimetable(ctx(), s.deps, s.cfg)
+	if err != nil {
+		return failure(err)
+	}
+	return success(s.clock.Now(), result)
+}
+
+// timetableDate 对应 `timetable today` / `timetable date`。
+//
+// 刷新失败但有旧快照时照常返回，信封带 stale:true（docs/002 §1.3）；
+// 这里不弹错误，由 UI 显示「数据时间」。
+func (s *session) timetableDate(date model.Date) string {
+	result, err := app.GetSchedule(ctx(), s.deps, s.cfg, date)
+	if err != nil {
+		return failure(err)
+	}
+	return envelopeWithStale(s.clock.Now(), result.Day, result.Stale, result.SyncedAt)
+}
+
+// timetableWeek 对应 `timetable week [N]`；week <= 0 表示当周。
+func (s *session) timetableWeek(week int) string {
+	result, err := app.GetWeekSchedule(ctx(), s.deps, s.cfg, week)
+	if err != nil {
+		return failure(err)
+	}
+	data := map[string]any{"week": result.Week, "days": result.Days}
+	return envelopeWithStale(s.clock.Now(), data, result.Stale, result.SyncedAt)
+}
+
+// electricityReport 对应 `kemaolife electricity`（ElectricityReport）。
+func (s *session) electricityReport(month string) string {
+	report, err := app.CheckElectricity(ctx(), s.deps, s.cfg, month)
+	if err != nil {
+		return failure(err)
+	}
+	return success(s.clock.Now(), report)
+}
+
+// campusStatus 判态；offline 是正常状态，不是错误（docs/002 §3.3）。
+func (s *session) campusStatus() string {
+	status, err := app.GetCampusNetworkStatus(ctx(), s.campus)
+	if err != nil {
+		return failure(err)
+	}
+	return success(s.clock.Now(), status)
+}
+
+// campusAction 执行手动登录 / 下线 / 重登，成功后回带最新判态。
+//
+// 回带判态的理由：动作本身可能「受理成功但未生效」，UI 需要立刻看到真实状态。
+func (s *session) campusAction(action func(ctx context.Context, d app.CampusDeps) error) string {
+	if err := action(ctx(), s.campus); err != nil {
+		return failure(err)
+	}
+	status, err := app.GetCampusNetworkStatus(ctx(), s.campus)
+	if err != nil {
+		return failure(err)
+	}
+	return success(s.clock.Now(), status)
+}
+
+// envelopeWithStale 组装带 stale / syncedAt 的课表信封（docs/002 §2）。
+func envelopeWithStale(now time.Time, data any, stale bool, syncedAt time.Time) string {
+	env := model.Success(now, data)
+	env.Stale = model.BoolPtr(stale)
+	env.SyncedAt = formatRFC3339(syncedAt)
+	return encode(env)
+}
+
+func success(now time.Time, data any) string { return encode(model.Success(now, data)) }
+
+func failure(err error) string {
+	// 时间用固定语义即可：失败信封的 ts 只用于展示，不必读时钟端口。
+	return encode(model.Failure(time.Now(), sanitize(err)))
+}
+
+// sanitize 保证进信封的文案不带上游原文（P2：上游文案脱敏后才可输出）。
+func sanitize(err error) error {
+	return model.NewError(model.CodeOf(err), model.MessageOf(err))
+}
+
+func encode(env model.Envelope) string {
+	var b strings.Builder
+	enc := json.NewEncoder(&b)
+	enc.SetEscapeHTML(false)
+	if err := enc.Encode(env); err != nil {
+		// 编码失败是内部错误：返回一个手工构造的最小失败信封，绝不返回空串。
+		return `{"ok":false,"error":{"code":2001,"message":"响应编码失败"}}`
+	}
+	return strings.TrimRight(b.String(), "\n")
+}
+
+// formatRFC3339 与 app 层同口径：本地时区，零值输出空串。
+func formatRFC3339(t time.Time) string {
+	if t.IsZero() {
+		return ""
+	}
+	return t.In(time.Local).Format(time.RFC3339)
+}
+
+// ctx 是各用例的上下文：门面不接收 Kotlin 的取消信号（gobind 边界只有字符串），
+// 因此统一用 Background，超时由 HTTP 适配器与用例内部的请求超时兜住。
+func ctx() context.Context { return context.Background() }

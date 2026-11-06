@@ -10,6 +10,7 @@ import (
 )
 
 // StubCampusNetwork 是 Linux 的校园网空实现（000 §3.1：Linux 不提供校园网功能）。
+// Android 不复用这个桩：它走 portal.go + portal_android.go 的真实适配器。
 //
 // 它是备用适配器，当前无装配点；被调用即返回参数错误 ——
 // 不静默成功，也不假装「不在校园网」。

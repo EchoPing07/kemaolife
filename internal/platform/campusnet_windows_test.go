@@ -42,7 +42,7 @@ func newProbeFixture(t *testing.T, status int, location string) *probeFixture {
 // newTestPortal 构造一个把探测 / Portal 请求都指向本地 fixture 的适配器。
 func newTestPortal(t *testing.T, cred PortalCredential, probe *httptest.Server, portal *httptest.Server) *PortalNetwork {
 	t.Helper()
-	p := NewPortalNetwork(func() PortalCredential { return cred })
+	p := NewPortalNetwork(func() PortalCredential { return cred }, "")
 	// 立即生效的等待：真实实现要等 3s，测试里不能真的睡。
 	p.sleep = func(context.Context, time.Duration) error { return nil }
 
@@ -103,7 +103,7 @@ func TestPortalStatusOfflineOnProbeFailure(t *testing.T) {
 	deadURL := dead.URL
 	dead.Close()
 
-	p := NewPortalNetwork(func() PortalCredential { return testCred() })
+	p := NewPortalNetwork(func() PortalCredential { return testCred() }, "")
 	p.sleep = func(context.Context, time.Duration) error { return nil }
 	u, _ := url.Parse(deadURL)
 	p.probe = &http.Client{Timeout: time.Second, Transport: rewriteTransport{base: u}}

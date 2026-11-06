@@ -1,5 +1,3 @@
-//go:build windows
-
 package platform
 
 import (
@@ -46,7 +44,7 @@ type PortalCredential struct {
 	Fingerprint string `json:"fingerprint"` // browserFingerprint，配置项而非硬编码
 }
 
-// PortalNetwork 是 core.CampusNetwork + core.NetworkReady 的 Windows 实现。
+// PortalNetwork 是 core.CampusNetwork + core.NetworkReady 的 Portal 实现（Windows / Android）。
 //
 // 平台细节集中在这里：探测用明文 HTTP、Portal 客户端用自签证书（仅该客户端
 // 跳过校验）、探测禁跟随重定向。core 只拿到纯函数构造的表单与判态结果。
@@ -57,10 +55,18 @@ type PortalNetwork struct {
 	sleep  func(context.Context, time.Duration) error
 	// base 是 Portal 基地址；正常为 portalBase，测试覆盖为 httptest 地址。
 	base string
+	// ua 是 POST 时的 User-Agent（实测缺失会被拦）。
+	ua string
 }
 
 // NewPortalNetwork 构造适配器。cred 是凭据提供者（每轮重新读，支持设置窗口热更新）。
-func NewPortalNetwork(cred func() PortalCredential) *PortalNetwork {
+//
+// userAgent 由调用方给出：实测缺 UA 会被拦（api-docs/003 §2 ②），但平台说法不同，
+// 因此不在协议层硬编码；留空则用桌面形态的默认值。
+func NewPortalNetwork(cred func() PortalCredential, userAgent string) *PortalNetwork {
+	if strings.TrimSpace(userAgent) == "" {
+		userAgent = defaultPortalUserAgent
+	}
 	probe := &http.Client{
 		Timeout: probeTimeout,
 		// 必须禁跟随：状态完全由 302 的 Location 决定（api-docs/003 §2 ①）。
@@ -95,6 +101,7 @@ func NewPortalNetwork(cred func() PortalCredential) *PortalNetwork {
 		cred:   cred,
 		sleep:  sleepCtx,
 		base:   portalBase,
+		ua:     userAgent,
 	}
 }
 
@@ -211,7 +218,7 @@ func (p *PortalNetwork) post(ctx context.Context, path string, form url.Values) 
 	}
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	req.Header.Set("Referer", p.base+"/portal/webauth")
-	req.Header.Set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64)")
+	req.Header.Set("User-Agent", p.ua)
 
 	resp, err := p.portal.Do(req)
 	if err != nil {
