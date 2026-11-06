@@ -77,11 +77,28 @@ jobs:
 
       # 完整分层 / 浏览器内核 / 隐私检查由 ci.yml 负责，靠「tag 必须在 main 上」兜底。
       - name: Quality gates
+        env:
+          SENSITIVE_VALUES: ${{ vars.SENSITIVE_VALUES }}
         run: |
           set -euo pipefail
           test -z "$(gofmt -l .)"
           go vet ./...
           go test ./...
+
+          # 与 ci.yml 同一口径：已知真实敏感值由仓库变量提供，未配置时只做占位模板自检。
+          patterns='<把已知的真实学号/房间号写在这里>'
+          if [[ -n "${SENSITIVE_VALUES:-}" ]]; then
+            patterns="$SENSITIVE_VALUES"
+          fi
+          printf '%s\n' "$patterns" | while IFS= read -r value; do
+            [[ -z "$value" ]] && continue
+            if grep -rniF -e "$value" . \
+                --exclude-dir=.git \
+                --exclude=ci.yml --exclude=release.yml --exclude=AGENTS.md --exclude=CONTRIBUTING.md; then
+              echo 'FAIL: personal data found'; exit 1
+            fi
+          done
+          echo 'privacy scan OK'
 
       - name: Build assets
         env:
@@ -339,7 +356,7 @@ jobs:
           cat > dist/RELEASE_NOTES.md <<'EOF'
           ## kemaolife __TAG__
 
-          三个原生端共用一份 Go `core` 的校园工具：课表查询、电费余额与每日用量、校园网认证。本版提供 Linux CLI 静态二进制、Windows 托盘便携包与 agent skill；Android 尚未启动。源码版本 `internal/version.Version` = `__VERSION__`；构建提交 `__SHORT_SHA__`（完整提交号见 `kemaolife --version --json`）。
+          三个原生端共用一份 Go `core` 的校园工具：课表查询、电费余额与每日用量、校园网认证。本版提供 Linux CLI 静态二进制、Windows 托盘便携包与 agent skill；Android App 源码与 `gomobile` 门面已入库，需按 `android/README.md` 自行构建 AAR / APK，本工作流不产 Android 包。源码版本 `internal/version.Version` = `__VERSION__`；构建提交 `__SHORT_SHA__`（完整提交号见 `kemaolife --version --json`）。
 
           ### 产物
 

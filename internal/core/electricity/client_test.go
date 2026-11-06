@@ -318,6 +318,23 @@ func TestCallOuterRejectedWithoutBody(t *testing.T) {
 	}
 }
 
+// 实测形状：body 直接内联对象、code_ 为字符串；flexjson 必须都兼容。
+func TestCallAcceptsInlineBodyAndStringCode(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		fmt.Fprint(w, `{"code_":"0","result_":"true","body":`+bindRoomBody+`,"message_":"获取成功！"}`)
+	}))
+	defer srv.Close()
+
+	c := NewClient(srv.Client(), srv.URL)
+	status, _, err := c.GetBindRoom(context.Background(), testAccount, testSchool)
+	if err != nil {
+		t.Fatalf("内联 body 与字符串 code_ 应可解析: %v", err)
+	}
+	if status.Balance != 35.99 {
+		t.Errorf("Balance = %v", status.Balance)
+	}
+}
+
 // result_ 是字符串 "true" 或布尔 true 都要能读。
 func TestCallAcceptsBooleanResult(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -349,6 +366,9 @@ func TestCallOuterSchoolNotProvisionedIsNotCredentialError(t *testing.T) {
 	if model.CodeOf(err) != model.CodeNetworkDown {
 		t.Errorf("code = %d, want %d（学校接口未开通属不可用，不是配置错误）",
 			model.CodeOf(err), model.CodeNetworkDown)
+	}
+	if msg := model.MessageOf(err); strings.Contains(msg, "客户未配置") || strings.Contains(msg, "前置地址") {
+		t.Errorf("exception_ 原文不得进入 error.message: %q", msg)
 	}
 }
 

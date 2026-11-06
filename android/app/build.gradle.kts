@@ -13,7 +13,8 @@ android {
         minSdk = 24
         targetSdk = 34
         versionCode = 1
-        versionName = "0.1.0"
+        // 与 internal/version.Version 保持一致；发版只改 Go 侧唯一来源并同步这里。
+        versionName = "0.2.0"
     }
 
     buildFeatures {
@@ -51,7 +52,7 @@ android {
 
 dependencies {
     // gomobile bind 产出的门面（cmd/kemaolife-mobile → android/app/libs/kemaolife.aar）。
-    // 重新生成：make -C android aar（或见 android/README.md）。
+    // 重新生成：gomobile bind -target=android -androidapi 24 -javapkg ...（见 android/README.md §2）。
     implementation(files("libs/kemaolife.aar"))
 
     implementation("androidx.core:core-ktx:1.13.1")

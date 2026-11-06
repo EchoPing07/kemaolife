@@ -139,7 +139,7 @@ func (p *PortalNetwork) Login(ctx context.Context) error {
 	}
 	if !ok {
 		// 上游文案先脱敏再进错误（AGENTS §5、P2）。
-		return model.NewError(model.CodeUpstreamRejected, sanitizePortalMessage(msg))
+		return model.NewError(model.CodeUpstreamRejected, sanitizeError(msg))
 	}
 	return p.confirm(ctx, model.CampusOnline)
 }
@@ -160,7 +160,7 @@ func (p *PortalNetwork) Logout(ctx context.Context) error {
 		return err
 	}
 	if !ok {
-		return model.NewError(model.CodeUpstreamRejected, sanitizePortalMessage(msg))
+		return model.NewError(model.CodeUpstreamRejected, sanitizeError(msg))
 	}
 	// 下线后复探的期望是「不再在线」：未认证或不在校园网都算下线成功。
 	return p.confirm(ctx, model.CampusUnauth)
@@ -277,20 +277,11 @@ func (p *PortalNetwork) confirm(ctx context.Context, want model.CampusState) err
 	return nil
 }
 
-// sanitizePortalMessage 只放行已知的短文案形态，其余一律替换。
-//
-// 为什么需要：登录失败时上游可能回显账号等敏感内容（P2），
-// 而这条文案会进用户可见的错误与日志。
-func sanitizePortalMessage(msg string) string {
-	m := strings.TrimSpace(msg)
-	if m == "" {
-		return "认证被拒绝"
-	}
-	known := []string{"账号或密码错误", "此IP已在线", "已在线", "正在进行外网拨号", "下线失败", "非法请求", "认证失败"}
-	for _, k := range known {
-		if strings.Contains(m, k) {
-			return k
-		}
+// sanitizeError 把上游失败文案收敛成对外错误：已知安全短语由
+// core/campusnet.SanitizeMessage 统一过滤，其余一律用中性提示（P2）。
+func sanitizeError(msg string) string {
+	if s := campusnet.SanitizeMessage(msg); s != "" {
+		return s
 	}
 	return "认证被拒绝"
 }

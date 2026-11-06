@@ -94,15 +94,29 @@ jobs:
           # 完整 AAR / APK 需要 NDK 与 Gradle，不进 CI（见 android/README.md）。
           GOOS=android GOARCH=arm64 go build ./internal/... ./cmd/kemaolife-mobile/
 
+      # 个人隐私（学号 / 房间号 / Cookie / 会话值 / 凭据 / 指纹）不得入仓。
+      # 学校代码 3126、学校公开 Portal / 探测 IP、BRAS 名称属学校事实，不在此检查范围。
+      # CI 默认无法知道维护者的真实值；把已知敏感值（每行一个）配到仓库变量
+      # SENSITIVE_VALUES 后即可在 CI 逐个拦截；未配置时本步骤只做占位模板自检，
+      # 权威的「已知真实值逐个检索」仍由 AGENTS §8 / CONTRIBUTING §5 的本地命令承担。
       - name: No personal credentials in repo
+        env:
+          SENSITIVE_VALUES: ${{ vars.SENSITIVE_VALUES }}
         run: |
-          # 个人隐私（学号 / 房间号 / Cookie 值）不得入仓；按已知值逐个检查
-          # 学校代码 3126 与协议 IP 属学校事实，不在此检查范围
-          # grep 目标是占位模板（见 AGENTS §8，本地替换成已知真实值后逐个检查）。
-          # ci.yml / AGENTS.md / CONTRIBUTING.md 记录的正是这条命令，若一并扫描会
-          # 自匹配，导致 CI 永久误报；排除后真实值仍在其他任何文件里被拦截。
-          if grep -rniE '<把已知的真实学号/房间号写在这里>' . \
-              --exclude-dir=.git \
-              --exclude=ci.yml --exclude=AGENTS.md --exclude=CONTRIBUTING.md; then
-            echo 'FAIL: personal data found'; exit 1
+          set -euo pipefail
+          patterns='<把已知的真实学号/房间号写在这里>'
+          if [[ -n "${SENSITIVE_VALUES:-}" ]]; then
+            patterns="$SENSITIVE_VALUES"
           fi
+          # 占位模板自身会出现在检查命令的记录文件里，必须排除以免自匹配误报；
+          # 真实值配置后仍需排除这些文件（它们只含说明文字，不含值）。
+          printf '%s\n' "$patterns" | while IFS= read -r value; do
+            [[ -z "$value" ]] && continue
+            if grep -rniF -e "$value" . \
+                --exclude-dir=.git \
+                --exclude=ci.yml --exclude=release.yml \
+                --exclude=AGENTS.md --exclude=CONTRIBUTING.md; then
+              echo 'FAIL: personal data found'; exit 1
+            fi
+          done
+          echo 'privacy scan OK'

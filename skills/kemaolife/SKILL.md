@@ -26,7 +26,7 @@ description: 用 kemaolife CLI 查询广东科贸职业学院的课表与宿舍�
 
 ## 2. 固定用法
 
-- **所有命令带 `--json`**，只解析 `stdout`。`stderr` 只有诊断文本与交互提示，不是数据。全局参数可放在子命令前后；支持 `--flag=value`、`-h` / `-v` 与 `--`。
+- **所有命令带 `--json`**，只解析 `stdout`。`stderr` 只有诊断文本与交互提示，不是数据。全局参数可放在子命令前后；支持 `--flag=value`、`-h` / `-v` 与 `--`。`-v` / `--version` 与 `--` 在子命令前后均可生效，`--` 之后的内容按子命令原样参数处理；子命令之后也可用 `--json` / `--verbose` / `--config` / `--timeout` / `-h` / `--help`。
 - 退出码表达结果类别，先看退出码再看 `error.code`：
 
 | 退出码 | 含义 | 怎么办 |
@@ -37,19 +37,21 @@ description: 用 kemaolife CLI 查询广东科贸职业学院的课表与宿舍�
 | `3` | 凭据缺失 / 会话失效 / 快照缺失 | 引导用户配置或同步 |
 | `4` | 网络或接口不可用 | 课表通常已自动回落旧快照（看 `stale:true` + `syncedAt`，退出码仍 `0`）；电费明确报错 |
 
-信封：`{"ok":true,"data":{...},"ts":"...","syncedAt":"..."}` 或 `{"ok":false,"error":{"code":3002,"message":"..."},"ts":"..."}`。
+信封：`{"ok":true,"data":{...},"ts":"..."}`（课表查询另有 `stale` 与 `syncedAt`）或 `{"ok":false,"error":{"code":3002,"message":"..."},"ts":"..."}`。
 
 ## 3. 输出怎么读
 
 ### 课表（`DaySchedule`）
 
+示例为字段示意；`<...>` 是占位符字符串，实际数值字段按 DTO 编码。
+
 ```json
 {
-  "date": "2026-11-05", "week": 10, "weekday": 4, "weekdayCn": "四",
+  "date": "<YYYY-MM-DD>", "week": "<周次>", "weekday": "<1-7>", "weekdayCn": "<一/二/…/日>",
   "inSemester": true,
   "entries": [
-    {"name": "课程名", "periods": "1-2", "time": "08:30~10:00",
-     "teacher": "教师", "location": "地点", "weeksText": "1-16周"}
+    {"name": "<课程名>", "periods": "<起始小节>-<结束小节>", "time": "<上课时间>",
+     "teacher": "<教师>", "location": "<地点>", "weeksText": "<周次文本>"}
   ]
 }
 ```
@@ -65,16 +67,18 @@ description: 用 kemaolife CLI 查询广东科贸职业学院的课表与宿舍�
 
 ### 电费（`ElectricityReport`）
 
+示例为字段示意；`<...>` 是占位符字符串，实际数值字段按 DTO 编码（数值或 `null`）。
+
 ```json
 {
   "status": {
-    "balance": 35.99, "unit": "度", "collectedAt": "2026-11-04T22:41:37+08:00",
-    "dailyAvg": 11.7, "estimatedDays": 3,
-    "roomName": "校区_楼栋_楼层_房间", "meterStatus": "1"
+    "balance": "<剩余量>", "unit": "度", "collectedAt": "<采集时间>",
+    "dailyAvg": "<近七日均量或 null>", "estimatedDays": "<估算天数或 null>",
+    "roomName": "<校区>_<楼栋>_<楼层>_<房间>", "meterStatus": "<状态>"
   },
   "usage": {
-    "yearMonth": "2026-11", "monthUse": 63.13, "dataUntil": "2026-11-04",
-    "days": [{"date": "2026-11-03", "use": 11.64}, {"date": "2026-11-04", "use": 11.75}]
+    "yearMonth": "<YYYY-MM>", "monthUse": "<当月累计>", "dataUntil": "<YYYY-MM-DD>",
+    "days": [{"date": "<YYYY-MM-DD>", "use": "<当日用量>"}]
   }
 }
 ```

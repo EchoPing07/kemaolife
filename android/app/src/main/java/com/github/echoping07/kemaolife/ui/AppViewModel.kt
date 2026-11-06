@@ -15,6 +15,7 @@ import com.github.echoping07.kemaolife.data.Repository
 import com.github.echoping07.kemaolife.data.ScheduleView
 import com.github.echoping07.kemaolife.data.WeekSchedule
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.async
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -50,15 +51,19 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
-    /** 今日课表 + 并行刷新（两个独立动作，见 docs/002 §5.3「每次打开」）。 */
+    /** 今日课表 + 并行同步（两个独立动作，见 docs/002 §5.3「每次打开」）。 */
     private fun loadTodayAndSync() {
         viewModelScope.launch {
             _state.update { it.copy(timetableLoading = true) }
 
-            // ① 先出课表：today 内部会先刷新，失败时回落旧快照（stale:true）。
+            // ① / ② 并行发起：查询内部先刷新，独立同步用于兜底，二者互不阻塞。
+            val todayDeferred = async(Dispatchers.IO) { repo.today() }
+            val syncDeferred = async(Dispatchers.IO) { repo.sync() }
+            val today = todayDeferred.await()
+            val synced = syncDeferred.await()
+
             // 只有「刷新失败 + 连旧快照都没有」才会走到 onFailure，此时必须告知用户，
             // 不能静默留白（否则界面会永远停在空白，用户不知道是没课还是没配置）。
-            val today = withContext(Dispatchers.IO) { repo.today() }
             today.onSuccess { applyToday(it) }
             if (today.isFailure) {
                 val ex = today.exceptionOrNull()
@@ -71,14 +76,12 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                 }
             }
 
-            // ② 独立再同步一次（docs/002 §5.3「每次打开」）：与 ① 是两个动作。
-            // 成功就顺手把 stale 清掉；若 ① 压根没拿到数据，同步成功后重试一次查询。
-            val synced = withContext(Dispatchers.IO) { repo.sync() }
             synced.onSuccess { result ->
                 if (_state.value.today != null) {
+                    // stale 由 Go 查询信封给出；UI 只更新数据时间，不覆写 stale。
                     _state.update { s ->
                         s.copy(
-                            today = s.today?.copy(stale = false, syncedAt = result.syncedAt),
+                            today = s.today?.copy(syncedAt = result.syncedAt),
                             timetableError = null,
                         )
                     }
@@ -90,7 +93,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
-    /** 下拉刷新课表（tab1 的下拉动作）。 */
+    /** 手动刷新课表（tab1 的刷新按钮）。 */
     fun refreshTimetable() {
         viewModelScope.launch {
             _state.update { it.copy(refreshing = true) }

@@ -212,12 +212,16 @@ func currentSession() *session {
 }
 
 // timetableSync 对应 CLI 的 `timetable sync`：只刷新、不查询。
+//
+// data.syncedAt 由用例给出；信封层 syncedAt 也必须给出，保持与 CLI 同构（docs/002 §2）。
 func (s *session) timetableSync() string {
 	result, err := app.SyncTimetable(ctx(), s.deps, s.cfg)
 	if err != nil {
 		return failure(err)
 	}
-	return success(s.clock.Now(), result)
+	env := model.Success(s.clock.Now(), result)
+	env.SyncedAt = result.SyncedAt
+	return encode(env)
 }
 
 // timetableDate 对应 `timetable today` / `timetable date`。

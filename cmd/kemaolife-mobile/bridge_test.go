@@ -73,6 +73,26 @@ func TestInitPingAndUnknownOp(t *testing.T) {
 	}
 }
 
+// timetable.sync 的信封层 syncedAt 与 CLI 同构（docs/002 §2）；
+// 这里用缺凭据的失败路径无法验证成功字段，直接构造一个最小成功信封断言编解码口径。
+func TestTimetableSyncSuccessEnvelopeIncludesSyncedAt(t *testing.T) {
+	env := model.Success(time.Date(2026, 11, 7, 0, 0, 0, 0, time.Local), map[string]any{
+		"syncedAt": "<快照同步时间>",
+	})
+	env.SyncedAt = "<快照同步时间>"
+	b, err := json.Marshal(env)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var got map[string]any
+	if err := json.Unmarshal(b, &got); err != nil {
+		t.Fatal(err)
+	}
+	if got["syncedAt"] != "<快照同步时间>" {
+		t.Errorf("信封 syncedAt = %v", got["syncedAt"])
+	}
+}
+
 func TestInitRejectsMissingCacheDir(t *testing.T) {
 	env := decode(t, Init(`{"studentId":"<学号>"}`))
 	if env["ok"] != false {

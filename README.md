@@ -2,7 +2,7 @@
 
 # 科贸生活 · KeMao Life
 
-**上课前不用翻教务网页，电费一次看全，校园网掉线随手重连 —— 一份 Go 核心，目标覆盖 Linux CLI、Windows 托盘和 Android App。当前已交付 Linux CLI 与 Windows 托盘。**
+**上课前不用翻教务网页，电费一次看全，校园网掉线随手重连 —— 一份 Go 核心，覆盖 Linux CLI、Windows 托盘与 Android App。三端均已落地。**
 
 [![QQ 交流群 1126474633](https://img.shields.io/badge/QQ%20交流群-1126474633-12B7F5?logo=qq&logoColor=white)](https://qm.qq.com/q/rf4PfFM5RA)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](./LICENSE)
@@ -18,7 +18,7 @@
 <br />
 
 > [!NOTE]
-> 仓库当前已实现 Linux CLI（M0 / M1）与 Windows 托盘（M2）；Android 尚未启动。想先搞清楚「要做什么」，从[需求与产品定位](./docs/000-需求与产品定位.md)读起；想直接看命令、字段和退出码，去[功能规格](./docs/002-功能规格.md)。
+> 仓库当前已实现 Linux CLI（M0 / M1）、Windows 托盘（M2）与 Android App（M0.5 / M3，已在 Android 15 真机跑通）；M4 仅剩 D8 / D11 结论复核。想先搞清楚「要做什么」，从[需求与产品定位](./docs/000-需求与产品定位.md)读起；想直接看命令、字段和退出码，去[功能规格](./docs/002-功能规格.md)。
 
 ## KeMao Life 是什么
 
@@ -26,7 +26,7 @@
 
 - **课表查得慢？** 每次查询先联网刷新一次，刷新成功直接给最新数据；断网时回落旧快照并标 `stale:true` + `syncedAt`，飞行模式也能查整学期。Android 每次打开同样先刷新、失败沿用旧快照。
 - **电费只看余额不够** 一条命令 / 一个 `op` 同时返回余额与每日用量，用来估算还能撑几天。电表数据约 1 天延迟，CLI 输出、告警通知与 Android 电费页都标注「数据截至」（Windows 托盘只显示当前值）。
-- **校园网** Portal 探测 302 判出「已在线 / 未认证 / 不在校园网」，Windows 默认手动、自动可选（Android 规划中为全手动），Linux 不碰校园网也不存凭据。
+- **校园网** Portal 探测 302 判出「已在线 / 未认证 / 不在校园网」，Windows 默认手动、自动可选，Android 全手动，Linux 不碰校园网也不存凭据。
 - **三端不漂移** `internal/core` 只做领域逻辑，平台能力经端口注入；三端共享 DTO、错误码与告警判定，UI 只消费数据。单仓库、单 `go.mod`、多 `cmd`。
 
 这是给自己用的工具，**不是学校官方产品**，与教务系统、水电系统、校园网 Portal 的运营方没有关联，也只查本人数据。
@@ -37,7 +37,7 @@
 |---|---|---|---|
 | **Linux** | 单二进制 `kemaolife` + 子命令 + Agent Skill | agent | 配置、课表四维度查询（默认当日）、电费余额与每日用量一次查 |
 | **Windows** | `kemaolife-agent.exe` 原生托盘常驻（登录时自启一次，不保活） | 人 | 托盘看状态、电费轮询（默认 4 小时）、校园网判态轮询（默认 120 秒）、阈值提醒、托盘 `NIF_INFO` 通知、校园网默认手动 / 自动可选 |
-| **Android**（未启动） | 原生 App（Kotlin / Compose），底栏三 tab | 人 | 课表、电费与校园网手动动作、设置；打开即刷新 |
+| **Android** | 原生 App（Kotlin / Compose），底栏三 tab | 人 | 课表、电费与校园网手动动作、设置；每次打开并行发起查询与独立同步 |
 
 > [!IMPORTANT]
 > Windows 与 Android 都是原生 UI，三端一律不引入浏览器内核（WebView / CEF / Wails / PWA / Electron / Tauri）。Windows 不做课表主界面，Android 不加后台服务，Linux 不要 TUI / GUI 富文本输出。
@@ -63,8 +63,8 @@ Portal   ──探测 302──► 判态 ──► 登录 / 下线 / 重登（W
 | M0 · 契约 + core | DTO、错误码、`core` / `ports`、单测、`kemaolife` 跑通 | 已实现 |
 | M1 · Linux CLI + skill | 单二进制 `kemaolife` + 子命令、`config`、快照缓存、SKILL.md、刷新降级、电费合并查询 | 已实现（aarch64 Linux 真机验证） |
 | M2 · Windows 托盘 | 托盘状态与按模式切换的按钮组、4 小时电费轮询（600s 硬下限）、120 秒判态轮询（30s 下限）、阈值去重与静默时段、失败退避、托盘通知、DPAPI 凭据、原生设置窗口、开机自启 | 已实现（本机 Win11 验证） |
-| M3 · Android App | 门面 spike、三 tab、打开即刷新、电费页、校园网手动动作 | 未启动 |
-| M4 · 校园网自动登录 | Windows 自动模式已在 M2 同进程实现；M4 补齐 Android 手动适配器与平台网络配置，并按 D8 / D11 结论复核 Windows 探测与认证链路 | 待启动 |
+| M3 · Android App | `gomobile` 门面、三 tab、打开即查询 + 并行同步、电费页、校园网手动动作、Keystore 设置页 | 已实现（Android 15 真机验证） |
+| M4 · 校园网自动登录复核 | Windows 自动模式已随 M2 实现，Android 手动适配器与平台网络配置已随 M3 落地；M4 仅按 D8 / D11 结论复核 Windows 链路 | 待 D8 / D11 定稿 |
 
 完整里程碑与验收见 [000 文档 §7](./docs/000-需求与产品定位.md#7-里程碑)。
 
@@ -86,13 +86,13 @@ Portal   ──探测 302──► 判态 ──► 登录 / 下线 / 重登（W
 
 ## 参与贡献
 
-欢迎 Issue 和 PR。M0/M1/M2 已实现，当前可参与 Linux CLI 与 Windows 端改进、文档契约审阅与 D 项讨论；Android 尚未启动。完整规范在 [CONTRIBUTING.md](./CONTRIBUTING.md)，几条最容易踩的：
+欢迎 Issue 和 PR。M0/M1/M2/M3 已实现，当前可参与 Linux CLI、Windows 托盘、Android App 改进、文档契约审阅与 D 项讨论。完整规范在 [CONTRIBUTING.md](./CONTRIBUTING.md)，几条最容易踩的：
 
 - **一个 PR 只做一件事**，从最新 `main` 拉分支，别夹带格式化或顺手优化。
 - **标题写实际改动**，格式 `类型(范围): 说明`，例如 `feat(core): 快照版本升级到 2`；正文写清改了什么、为什么、怎么验证。
 - **改契约先改文档**：CLI 命令与退出码、JSON 信封字段、DTO 字段名、错误码、门面 `op` 任一变动，先改 `docs/002-功能规格.md` 再动代码，三端字段名同步，新增字段必须可选。
 - **Issue 用模板**：`[bug]` / `[feat]` / `[docs]` / `[protocol]` / `[question]`，按「背景 / 要求 / 验收」写，别贴日志原文或响应体。
-- **提交前自检**：`gofmt -l .`、`go vet ./...`、`go test ./...`、分层与浏览器内核检查、Linux 构建与 `GOOS=windows go build ./internal/...` 都要过（CI 在 `.github/workflows/ci.yml`）；测试只用 `httptest` + 本地夹具，不碰真实学校接口。
+- **提交前自检**：`gofmt -l .`、`go vet ./...`、`go test ./...`、分层与浏览器内核检查、Linux / Windows / Android 交叉编译、托盘 GUI 子系统、打包脚本 BOM 与 CRLF 都要过（权威清单见 `.github/workflows/ci.yml`）；测试只用 `httptest` + 本地夹具，不碰真实学校接口。
 
 ## 安装与构建（Linux）
 

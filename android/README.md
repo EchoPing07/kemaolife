@@ -1,6 +1,6 @@
 # Android 构建说明
 
-> 状态：M3 骨架可安装可启动（`adb install` 后 App 能打开三 tab）。
+> 状态：M3 已落地并在 Android 15 真机跑通课表、电费与校园网手动动作。
 > 契约以 `docs/002` 为准，本文件只说「怎么把 APK 造出来」。
 
 ## 1. 前置工具
@@ -117,10 +117,10 @@ adb shell am start -n com.github.echoping07.kemaolife/.MainActivity
 
 ## 7. 明文与证书
 
-`app/src/main/res/xml/network_security_config.xml` 只对两个地址做例外：
+`app/src/main/res/xml/network_security_config.xml` 只对探测地址放行明文：
 
 - `5.5.5.5`（探测地址，必须明文 http，否则拿不到 302）
-- `10.0.128.3`（Portal，自签证书）
+- `10.0.128.3`（Portal 域另配仅该域生效的信任锚点；自签证书跳过校验由 Go 侧 Portal 专用 HTTPS 客户端完成）
 
 其余域名仍走系统默认策略；不设全局 `usesCleartextTraffic`，
 也不全局关闭 TLS 校验（001 §6.2、AGENTS §5.4）。
