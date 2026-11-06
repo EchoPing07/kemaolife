@@ -47,7 +47,9 @@ jobs:
           cd android
           # CI 不注入发布密钥 → release 变体按 build.gradle.kts 回落 debug 签名；
           # 这里直接构建 debug 变体，验证 AAR 门面、Compose 代码与 ABI splits 都能编出来。
-          ./gradlew --no-daemon :app:assembleDebug :app:testDebugUnitTest -PversionCode=1
+          # gradlew 在仓库里是 100644（Windows 侧不依赖可执行位）；Linux runner
+          # 直接执行会 Permission denied，显式交给 bash 更稳，也避免改文件模式。
+          bash ./gradlew --no-daemon :app:assembleDebug :app:testDebugUnitTest -PversionCode=1
 
           out="app/build/outputs/apk/debug"
           for abi in armeabi-v7a arm64-v8a x86 x86_64; do

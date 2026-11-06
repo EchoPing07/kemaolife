@@ -247,7 +247,7 @@ jobs:
 
           (
             cd android
-            ./gradlew --no-daemon :app:assembleRelease "-PversionCode=${VERSION_CODE}"
+            bash ./gradlew --no-daemon :app:assembleRelease "-PversionCode=${VERSION_CODE}"
           )
 
           APK_DIR="android/app/build/outputs/apk/release"
