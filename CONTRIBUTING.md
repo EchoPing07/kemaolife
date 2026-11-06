@@ -173,7 +173,7 @@ GOOS=windows GOARCH=amd64 go build -ldflags "-H=windowsgui" -o kemaolife-agent.e
 GOOS=android GOARCH=arm64 go build ./internal/... ./cmd/kemaolife-mobile/
 ```
 
-CI 还校验托盘 PE 的 GUI 子系统（Subsystem=2）与 `packaging/windows/*.ps1` / `*.bat` 的 UTF-8 BOM、CRLF；权威清单见 `.github/workflows/ci.yml`。
+CI 还校验托盘 PE 的 GUI 子系统（Subsystem=2）与 `packaging/windows/*.ps1` / `*.bat` 的 UTF-8 BOM、CRLF；完整 Android AAR / APK（NDK + Gradle + gomobile）由 `.github/workflows/ci-android.yml` 在 Android 路径变更时构建并跑单元测试；权威清单见 `.github/workflows/ci.yml` 与 `.github/workflows/ci-android.yml`。
 
 任一项失败先修完再提交，不要用 `//nolint`、注释掉检查或 `--no-verify` 绕过。设计阶段（无 Go 代码）只需执行隐私与占位符相关检查。
 

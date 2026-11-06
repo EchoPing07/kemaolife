@@ -67,13 +67,23 @@ jobs:
             exit 1
           fi
 
+          # Android versionCode 由 tag 派生：major*10000 + minor*100 + patch（v0.3.0 → 300）。
+          # 必须跨版本严格递增，否则 Android 拒绝覆盖安装。
+          IFS='.' read -r MAJOR MINOR PATCH <<< "$VERSION"
+          VERSION_CODE=$(( 10#$MAJOR * 10000 + 10#$MINOR * 100 + 10#$PATCH ))
+          if (( VERSION_CODE < 1 || VERSION_CODE > 2100000000 )); then
+            echo "::error::versionCode 越界：$VERSION_CODE"
+            exit 1
+          fi
+
           {
             echo "TAG=$TAG"
             echo "VERSION=$VERSION"
+            echo "VERSION_CODE=$VERSION_CODE"
             echo "COMMIT=$COMMIT"
             echo "SHORT_SHA=${COMMIT:0:12}"
           } >> "$GITHUB_OUTPUT"
-          echo "发布 $TAG：版本 $VERSION，提交 ${COMMIT:0:12}"
+          echo "发布 $TAG：版本 $VERSION，versionCode $VERSION_CODE，提交 ${COMMIT:0:12}"
 
       # 完整分层 / 浏览器内核 / 隐私检查由 ci.yml 负责，靠「tag 必须在 main 上」兜底。
       - name: Quality gates
@@ -100,10 +110,19 @@ jobs:
           done
           echo 'privacy scan OK'
 
+      # TODO(D13): NDK / gomobile 工具链仍是待确认项；此处按 android/README.md 的描述性基线落地。
+      - name: Setup Android toolchain
+        uses: ./.github/actions/setup-android-gomobile
+
       - name: Build assets
         env:
           VERSION: ${{ steps.meta.outputs.VERSION }}
+          VERSION_CODE: ${{ steps.meta.outputs.VERSION_CODE }}
           COMMIT: ${{ steps.meta.outputs.COMMIT }}
+          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
         run: |
           set -euo pipefail
           PY="$(command -v python3 2>/dev/null || true)"
@@ -212,6 +231,58 @@ jobs:
               print(out)
           PY
 
+          # Android：按 ABI 出 4 个已签名 release APK。签名密钥由 GitHub Secrets 注入，
+          # 跨 release 复用同一把私钥，保证用户能直接覆盖安装而不丢 Keystore 凭据 / 快照。
+          : "${ANDROID_KEYSTORE_BASE64:?缺少 Secret ANDROID_KEYSTORE_BASE64}"
+          : "${ANDROID_KEYSTORE_PASSWORD:?缺少 Secret ANDROID_KEYSTORE_PASSWORD}"
+          : "${ANDROID_KEY_ALIAS:?缺少 Secret ANDROID_KEY_ALIAS}"
+          : "${ANDROID_KEY_PASSWORD:?缺少 Secret ANDROID_KEY_PASSWORD}"
+          : "${KEMAOLIFE_BUILD_TOOLS:?未定位 Android build-tools}"
+
+          KS="${RUNNER_TEMP}/kemaolife-release.jks"
+          printf '%s' "$ANDROID_KEYSTORE_BASE64" | base64 -d > "$KS"
+          chmod 600 "$KS"
+          export KEMAOLIFE_KEYSTORE_FILE="$KS"
+          echo "KEMAOLIFE_KEYSTORE_FILE=$KS" >> "$GITHUB_ENV"
+
+          (
+            cd android
+            ./gradlew --no-daemon :app:assembleRelease "-PversionCode=${VERSION_CODE}"
+          )
+
+          APK_DIR="android/app/build/outputs/apk/release"
+          for abi in armeabi-v7a arm64-v8a x86 x86_64; do
+            src="${APK_DIR}/app-${abi}-release.apk"
+            if [[ ! -f "$src" ]]; then
+              echo "::error::缺少 Android 产物 $src"
+              find "$APK_DIR" -maxdepth 1 -type f || true
+              exit 1
+            fi
+            cp "$src" "dist/kemaolife_${VERSION}_android_${abi}.apk"
+          done
+
+          APKSIGNER="${KEMAOLIFE_BUILD_TOOLS}/apksigner"
+          CERT_SHA256=""
+          for apk in dist/kemaolife_${VERSION}_android_*.apk; do
+            "$APKSIGNER" verify --min-sdk-version 24 "$apk" > /dev/null
+            # 某些 build-tools 版本把 --print-certs 结果写到 stderr，统一并流后再取值；
+            # tr -d '\r' 避免 Windows 构建工具输出 CRLF 时留下尾随回车。
+            fp="$("$APKSIGNER" verify --print-certs "$apk" 2>&1 | tr -d '\r' \
+              | sed -nE 's/^Signer #1 certificate SHA-256 digest: *(.+)$/\1/p' | head -1)"
+            if [[ -z "$fp" ]]; then
+              echo "::error::无法读取 $apk 的签名证书指纹"
+              exit 1
+            fi
+            if [[ -z "$CERT_SHA256" ]]; then
+              CERT_SHA256="$fp"
+            elif [[ "$CERT_SHA256" != "$fp" ]]; then
+              echo "::error::四个 APK 的签名证书不一致"
+              exit 1
+            fi
+          done
+          echo "ANDROID_CERT_SHA256=$CERT_SHA256" >> "$GITHUB_ENV"
+          echo "Android 签名证书 SHA-256：$CERT_SHA256"
+
           mkdir -p dist/skill/kemaolife
           cp skills/kemaolife/SKILL.md dist/skill/kemaolife/SKILL.md
           cat > dist/skill/kemaolife/README.txt <<'EOF'
@@ -247,6 +318,10 @@ jobs:
             "kemaolife_${VERSION}_linux_armv7.tar.gz" \
             "kemaolife-agent_${VERSION}_windows_amd64.zip" \
             "kemaolife-agent_${VERSION}_windows_arm64.zip" \
+            "kemaolife_${VERSION}_android_armeabi-v7a.apk" \
+            "kemaolife_${VERSION}_android_arm64-v8a.apk" \
+            "kemaolife_${VERSION}_android_x86.apk" \
+            "kemaolife_${VERSION}_android_x86_64.apk" \
             "kemaolife-skill_${VERSION}.zip" > SHA256SUMS)
           cat dist/SHA256SUMS
 
@@ -261,6 +336,23 @@ jobs:
             PY="$(command -v python)"
           fi
           (cd dist && sha256sum -c SHA256SUMS)
+
+          # Android 四个包逐一验证 v2/v3 签名，且证书指纹必须与发版时记录的一致。
+          : "${KEMAOLIFE_BUILD_TOOLS:?未定位 Android build-tools}"
+          : "${ANDROID_CERT_SHA256:?未记录 Android 签名证书指纹}"
+          APKSIGNER="${KEMAOLIFE_BUILD_TOOLS}/apksigner"
+          for abi in armeabi-v7a arm64-v8a x86 x86_64; do
+            apk="dist/kemaolife_${VERSION}_android_${abi}.apk"
+            test -s "$apk"
+            "$APKSIGNER" verify --min-sdk-version 24 "$apk" > /dev/null
+            fp="$("$APKSIGNER" verify --print-certs "$apk" 2>&1 | tr -d '\r' \
+              | sed -nE 's/^Signer #1 certificate SHA-256 digest: *(.+)$/\1/p' | head -1)"
+            if [[ -z "$fp" || "$fp" != "$ANDROID_CERT_SHA256" ]]; then
+              echo "::error::$apk 签名证书指纹与发版记录不一致"
+              exit 1
+            fi
+          done
+          echo 'Android APK signature OK'
 
           # 读 ELF 头判架构，避免依赖 file 的输出文案；二进制按 CGO_ENABLED=0 构建。
           "$PY" - <<'PY'
@@ -324,6 +416,19 @@ jobs:
           with __import__("zipfile").ZipFile(f"dist/kemaolife-skill_{version}.zip") as z:
               names = sorted(z.namelist())
           assert names == ["kemaolife/README.txt", "kemaolife/SKILL.md"], names
+
+          # 每个 ABI 包必须只含自己的 lib/<abi>/*.so，确认 splits 真的生效。
+          for abi in ("armeabi-v7a", "arm64-v8a", "x86", "x86_64"):
+              path = f"dist/kemaolife_{version}_android_{abi}.apk"
+              with __import__("zipfile").ZipFile(path) as z:
+                  names = z.namelist()
+              assert "AndroidManifest.xml" in names, (path, "no manifest")
+              assert any(n == "classes.dex" for n in names), (path, "no dex")
+              assert any(n.startswith(f"lib/{abi}/") and n.endswith(".so")
+                         for n in names), (path, "missing ABI lib")
+              assert not any(n.startswith("lib/") and not n.startswith(f"lib/{abi}/")
+                             for n in names), (path, "foreign ABI lib")
+              print(f"android {abi}: ABI split OK")
           print("archive contents OK")
           PY
 
@@ -346,6 +451,7 @@ jobs:
         env:
           TAG: ${{ steps.meta.outputs.TAG }}
           VERSION: ${{ steps.meta.outputs.VERSION }}
+          VERSION_CODE: ${{ steps.meta.outputs.VERSION_CODE }}
           SHORT_SHA: ${{ steps.meta.outputs.SHORT_SHA }}
         run: |
           set -euo pipefail
@@ -356,21 +462,27 @@ jobs:
           cat > dist/RELEASE_NOTES.md <<'EOF'
           ## kemaolife __TAG__
 
-          三个原生端共用一份 Go `core` 的校园工具：课表查询、电费余额与每日用量、校园网认证。本版提供 Linux CLI 静态二进制、Windows 托盘便携包与 agent skill；Android App 源码与 `gomobile` 门面已入库，需按 `android/README.md` 自行构建 AAR / APK，本工作流不产 Android 包。源码版本 `internal/version.Version` = `__VERSION__`；构建提交 `__SHORT_SHA__`（完整提交号见 `kemaolife --version --json`）。
+          三个原生端共用一份 Go `core` 的校园工具：课表查询、电费余额与每日用量、校园网认证。本版由 tag 自动构建四端产物：Linux CLI 静态二进制、Windows 托盘便携包、Android 按 ABI 拆分的已签名 APK，以及独立的 agent skill。源码版本 `internal/version.Version` = `__VERSION__`；Android `versionCode` = `__VERSION_CODE__`；构建提交 `__SHORT_SHA__`（完整提交号见 `kemaolife --version --json`）。
 
           ### 产物
 
-          | 文件 | 端 | 适用 |
+          | 端 | 文件 | 适用 |
           |---|---|---|
-          | `__ASSET_AMD64__` | Linux | x86_64 |
-          | `__ASSET_ARM64__` | Linux | aarch64 / arm64 |
-          | `__ASSET_ARMV7__` | Linux | 32 位 ARMv7（`GOARCH=arm GOARM=7`） |
-          | `__ASSET_WIN_AMD64__` | Windows | 64 位 x86（x64）托盘程序 |
-          | `__ASSET_WIN_ARM64__` | Windows | Windows on ARM（arm64）托盘程序 |
-          | `__ASSET_SKILL__` | agent skill | 单独安装，依赖同机 `kemaolife` 二进制 |
-          | `SHA256SUMS` | — | 以上六个包的校验和 |
+          | Linux | `__ASSET_AMD64__` | x86_64 |
+          | Linux | `__ASSET_ARM64__` | aarch64 / arm64 |
+          | Linux | `__ASSET_ARMV7__` | 32 位 ARMv7（`GOARCH=arm GOARM=7`） |
+          | Windows | `__ASSET_WIN_AMD64__` | 64 位 x86（x64）托盘程序 |
+          | Windows | `__ASSET_WIN_ARM64__` | Windows on ARM（arm64）托盘程序 |
+          | Android | `__ASSET_ANDROID_ARMV7A__` | 32 位 ARM（`armeabi-v7a`） |
+          | Android | `__ASSET_ANDROID_ARM64__` | 64 位 ARM（`arm64-v8a`，多数新机） |
+          | Android | `__ASSET_ANDROID_X86__` | 32 位 x86 模拟器 / 少量设备 |
+          | Android | `__ASSET_ANDROID_X86_64__` | 64 位 x86 模拟器 / 少量设备 |
+          | agent skill | `__ASSET_SKILL__` | 单独安装，依赖同机 `kemaolife` 二进制 |
+          | — | `SHA256SUMS` | 以上十个包的校验和 |
 
-          Linux 三个包内含 `kemaolife`（`CGO_ENABLED=0` 静态二进制）、`LICENSE` 与 `INSTALL.txt`；Windows 两个包内含 `kemaolife-agent.exe`（GUI 子系统，无控制台窗口）、`install.bat` / `install.ps1` / `uninstall.bat` / `uninstall.ps1`、`LICENSE` 与 `INSTALL.txt`；skill 包内含 `kemaolife/SKILL.md` 与 `kemaolife/README.txt`。
+          Linux 三个包内含 `kemaolife`（`CGO_ENABLED=0` 静态二进制）、`LICENSE` 与 `INSTALL.txt`；Windows 两个包内含 `kemaolife-agent.exe`（GUI 子系统，无控制台窗口）、`install.bat` / `install.ps1` / `uninstall.bat` / `uninstall.ps1`、`LICENSE` 与 `INSTALL.txt`；Android 四个包是按 ABI 拆分的已签名 release APK，使用 v2 + v3 签名；skill 包内含 `kemaolife/SKILL.md` 与 `kemaolife/README.txt`。
+
+          下载后先核对完整性：`sha256sum -c SHA256SUMS --ignore-missing`（Windows 可用 `certutil -hashfile <文件> SHA256` 比对）。
 
           ### 安装（Linux，amd64 示例）
 
@@ -392,13 +504,35 @@ jobs:
           卸载双击 `uninstall.bat`：结束进程、删自启项、删快捷方式与安装目录，**保留** `%LOCALAPPDATA%\Kemaolife\` 配置目录（含 DPAPI 加密的学号与凭据）。
 
           > [!NOTE]
-          > 本版**没有代码签名**。Windows 可能提示「Windows 已保护你的电脑」（点「更多信息 → 仍要运行」），
+          > Windows 端**没有代码签名**。系统可能提示「Windows 已保护你的电脑」（点「更多信息 → 仍要运行」），
           > 或在开启了 Smart App Control 的 Windows 11 设备上直接拦截（关闭 SAC 后无法重新开启）。
           > 申请免费开源签名的跟进项见 [#4](https://github.com/EchoPing07/kemaolife/issues/4)。
 
           > [!IMPORTANT]
-          > **arm64 版本尚未在 ARM 真机上验证**。可以正常构建，但托盘图标、右键菜单、设置窗口与凭据加解密
+          > **Windows arm64 版本尚未在 ARM 真机上验证**。可以正常构建，但托盘图标、右键菜单、设置窗口与凭据加解密
           > 都依赖手写的 Win32 结构体布局，未经实机确认。遇到问题请带 Windows 版本与现象提 Issue。
+
+          ### 安装（Android）
+
+          按设备架构下载一个 APK：多数近几年手机选 `__ASSET_ANDROID_ARM64__`；旧 32 位机选 `__ASSET_ANDROID_ARMV7A__`；x86 / x86_64 包主要给模拟器用。系统需 Android 7.0（API 24）及以上。
+
+          直接在手机上打开下载的 APK 即可安装；首次侧载需要在系统提示中允许该来源的「安装未知应用」。也可用 adb：
+
+          ```bash
+          adb install -r __ASSET_ANDROID_ARM64__
+          ```
+
+          四个 APK 共用同一把发布私钥、同一 `applicationId`，**可以直接覆盖安装升级**，设置页的 Keystore 凭据与应用私有目录里的课表快照都会保留。不要先卸载再装新版（会清掉凭据与快照）。
+
+          > [!IMPORTANT]
+          > 发布签名证书 **SHA-256 指纹**：`__ANDROID_CERT_SHA256__`
+          >
+          > 这是公钥指纹，可公开用于核对 APK 是否确由本仓库发布。若从第三方渠道拿到 APK，可用
+          > `apksigner verify --print-certs <文件>` 比对；指纹不一致时**不要安装**，也不要在里面填任何凭据。
+
+          > [!NOTE]
+          > 本仓库只发 GitHub Releases 的侧载 APK，不上架应用商店，也没有 Play 的自动更新。
+          > 升级请回到本页下载同架构的新版 APK 覆盖安装。
 
           ### skill
 
@@ -408,7 +542,7 @@ jobs:
 
           - 电费数据约 1 天延迟，输出中的「数据截至」是采集时刻，不是实时值。
           - 课表查询每次先联网刷新，失败回落旧快照并标 `stale:true` + `syncedAt`。
-          - Linux 端不提供校园网状态查询，也不存校园网凭据。
+          - Linux 端不提供校园网状态查询，也不存校园网凭据；Android 校园网动作全手动、无后台。
           - 只查本人数据；请勿在 Issue / 交流群提交学号、密码、Cookie 或课表快照。
 
           ### 变更清单
@@ -423,12 +557,18 @@ jobs:
           values = {
               "__TAG__": os.environ["TAG"],
               "__VERSION__": version,
+              "__VERSION_CODE__": os.environ["VERSION_CODE"],
               "__SHORT_SHA__": os.environ["SHORT_SHA"],
+              "__ANDROID_CERT_SHA256__": os.environ["ANDROID_CERT_SHA256"],
               "__ASSET_AMD64__": f"kemaolife_{version}_linux_amd64.tar.gz",
               "__ASSET_ARM64__": f"kemaolife_{version}_linux_arm64.tar.gz",
               "__ASSET_ARMV7__": f"kemaolife_{version}_linux_armv7.tar.gz",
               "__ASSET_WIN_AMD64__": f"kemaolife-agent_{version}_windows_amd64.zip",
               "__ASSET_WIN_ARM64__": f"kemaolife-agent_{version}_windows_arm64.zip",
+              "__ASSET_ANDROID_ARMV7A__": f"kemaolife_{version}_android_armeabi-v7a.apk",
+              "__ASSET_ANDROID_ARM64__": f"kemaolife_{version}_android_arm64-v8a.apk",
+              "__ASSET_ANDROID_X86__": f"kemaolife_{version}_android_x86.apk",
+              "__ASSET_ANDROID_X86_64__": f"kemaolife_{version}_android_x86_64.apk",
               "__ASSET_SKILL__": f"kemaolife-skill_{version}.zip",
           }
           path = "dist/RELEASE_NOTES.md"
@@ -455,6 +595,10 @@ jobs:
             "dist/kemaolife_${VERSION}_linux_armv7.tar.gz"
             "dist/kemaolife-agent_${VERSION}_windows_amd64.zip"
             "dist/kemaolife-agent_${VERSION}_windows_arm64.zip"
+            "dist/kemaolife_${VERSION}_android_armeabi-v7a.apk"
+            "dist/kemaolife_${VERSION}_android_arm64-v8a.apk"
+            "dist/kemaolife_${VERSION}_android_x86.apk"
+            "dist/kemaolife_${VERSION}_android_x86_64.apk"
             "dist/kemaolife-skill_${VERSION}.zip"
             "dist/SHA256SUMS"
           )

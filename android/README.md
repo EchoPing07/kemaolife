@@ -1,6 +1,7 @@
 # Android 构建说明
 
-> 状态：M3 已落地并在 Android 15 真机跑通课表、电费与校园网手动动作。
+> 状态：M3 已落地并在 Android 15 真机跑通课表、电费与校园网手动动作；
+> `v0.3.0` 起 `release.yml` 自动产出四个已签名 APK。
 > 契约以 `docs/002` 为准，本文件只说「怎么把 APK 造出来」。
 
 ## 1. 前置工具
@@ -9,7 +10,7 @@
 |---|---|---|
 | JDK | **17** | AGP 8.7 要求 17；JDK 21+ 不保证可直接用 |
 | Android SDK Platform | `android-34` | `compileSdk = 34` |
-| Android Build-Tools | `34.0.0` | |
+| Android Build-Tools | `34.0.0` | `apksigner` 也来自这里 |
 | Android NDK | **r27c**（`27.2.12479018`） | `gomobile bind` 编译 `libgojni.so` 用 |
 | Go | 1.24+ | 与 `../go.mod` 一致 |
 | `gomobile` / `gobind` | 与 `go.mod` 里的 `golang.org/x/mobile` 同版本 | 见下 |
@@ -27,6 +28,9 @@ gomobile init
 
 > `go.mod` 里出现 `golang.org/x/mobile` 是 gomobile 的硬要求（它要读模块里的
 > `bind` 包）；这条依赖只服务构建工具链，不进 App 的运行时逻辑。
+
+> 工具链版本（NDK / `gomobile` / JDK）仍属 `TODO(D13)` 待确认项；此处按描述性基线记录，
+> 不代表 D13 已定稿。`.github/actions/setup-android-gomobile/action.yml` 与本节保持同一版本。
 
 ## 2. 生成 AAR（把 Go 门面编进 Android）
 
@@ -47,22 +51,42 @@ gomobile bind -target=android -androidapi 24 \
 > `libs/*.aar` 是构建产物，**不入版本库**（见 `.gitignore`）；
 > 新克隆仓库后先跑一次上面的命令。
 
-## 3. 构建 APK
+## 3. 本地构建 APK
 
 ```bash
 cd android
-./gradlew :app:assembleDebug        # 产物：app/build/outputs/apk/debug/app-debug.apk
-./gradlew :app:assembleRelease      # 一期用 debug 签名，只为能直接装真机
+./gradlew :app:assembleDebug        # 4 个 ABI 的 debug APK
+./gradlew :app:assembleRelease      # 未注入发布密钥时回落 debug 签名，仅供自测
+./gradlew :app:testDebugUnitTest    # 信封 → DTO 投影单测
 ```
 
-装到真机：
+产物在 `app/build/outputs/apk/<变体>/app-<ABI>-<变体>.apk`。装到真机：
 
 ```bash
-adb install -r app/build/outputs/apk/debug/app-debug.apk
+adb install -r app/build/outputs/apk/debug/app-arm64-v8a-debug.apk
 adb shell am start -n com.github.echoping07.kemaolife/.MainActivity
 ```
 
-## 4. 已知构建环境坑
+`versionCode` 默认 `1`；发版由 `release.yml` 从 `vX.Y.Z` tag 计算并注入 `-PversionCode=<整数>`，规则 `major*10000 + minor*100 + patch`。跨版本必须严格递增，否则 Android 拒绝覆盖安装。
+
+## 4. 已签名 Release 构建
+
+正式分发用 `release.yml`：它安装本节同一套工具链、生成 AAR、从 GitHub Actions Secrets 解码发布 keystore，再执行 `:app:assembleRelease "-PversionCode=<整数>"`，最后用 `apksigner` 校验四个 APK 的 v2/v3 签名与证书指纹。
+
+四个 Secrets（维护者在本机生成并保管，工作流代码不含任何口令或路径）：
+
+| Secret | 含义 |
+|---|---|
+| `ANDROID_KEYSTORE_BASE64` | JKS 文件的 base64 |
+| `ANDROID_KEYSTORE_PASSWORD` | keystore 口令 |
+| `ANDROID_KEY_ALIAS` | key alias |
+| `ANDROID_KEY_PASSWORD` | key 口令 |
+
+发布私钥**跨 release 固定复用**；一旦丢失或轮换，已安装用户必须卸载重装（Android 不允许换签名覆盖安装），而卸载会清掉 Keystore 凭据与应用私有目录快照。公钥 SHA-256 指纹不是隐私，会写进每版 Release 说明供核对。
+
+本地要用同一把密钥构建时，只需设置 `KEMAOLIFE_KEYSTORE_FILE` 指向 JKS 路径，并导出上面后三个同名环境变量，再跑 `:app:assembleRelease`。本地不注入时 `release` 变体自动回落 debug 签名，**不能作为 Release 资产**。
+
+## 5. 已知构建环境坑
 
 | 现象 | 原因 | 处理 |
 |---|---|---|
@@ -71,10 +95,11 @@ adb shell am start -n com.github.echoping07.kemaolife/.MainActivity
 | `gomobile bind requires golang.org/x/mobile in the current module` | gomobile 要求模块内能解析 `bind` 包 | 见 §1 的 `go install` 与 `go.mod` 依赖 |
 | `javac` 报 `编码 GBK 的不可映射字符` | gobind 把 Go 导出函数的注释原样写进 `.java`，javac 按平台默认编码读 | **导出符号的注释只用 ASCII**（`bridge.go` 的 `Init` / `Call` 已注明） |
 | 启动即闪退 `ClassNotFoundException: ...MainActivity` | Kotlin 文件的 `package` 与所在目录不一致（`MainActivity.kt` 在根包目录却写了 `.ui` 包） | Kotlin 的 `package` 必须与目录一致：`MainActivity.kt` 在 `.../kemaolife/` 下就得是 `package com.github.echoping07.kemaolife` |
-| 所有时间戳都带 `Z`、比实际差 8 小时 | Go 在 Android 上找不到 zoneinfo，`time.Local` 退化为 UTC | 见 §5 |
+| 所有时间戳都带 `Z`、比实际差 8 小时 | Go 在 Android 上找不到 zoneinfo，`time.Local` 退化为 UTC | 见 §6 |
 | 把工程放在中文路径下构建 | Windows + AGP 对非 ASCII 路径仍有零散问题 | 建一个 ASCII junction：`mklink /J C:\kmbuild D:\<中文路径>` |
+| `apksigner verify` 在 PowerShell 里找不到 | 用的是 `apksigner.bat` 而非 Linux 版脚本 | CI 在 `ubuntu-latest` 上用 `$ANDROID_HOME/build-tools/34.0.0/apksigner`；Windows 本地用 `.bat` |
 
-## 5. 时区必须由 Kotlin 传给 Go
+## 6. 时区必须由 Kotlin 传给 Go
 
 **这是一个真机才暴露的坑**：Android 的 tzdata 在 `/system/usr/share/zoneinfo`，
 不在 Go 的默认查找路径里。不处理时 `time.Local` 会退化成 **UTC**，
@@ -91,7 +116,7 @@ adb shell am start -n com.github.echoping07.kemaolife/.MainActivity
 > 为什么不改 `core`：`core` / `app` 一律通过 `Clock` 与 `time.Local` 取时间
 > （AGENTS §6），它们不该知道自己在哪个平台。校准只发生在门面初始化这一处。
 
-## 6. 应用图标
+## 7. 应用图标
 
 图标资源在 `res/mipmap-*/`，由同一张正方形原图派生，**不做裁切、不做放大**。
 真正决定观感的是自适应图标的可见区规则，不是 PNG 本身。
@@ -115,7 +140,7 @@ adb shell am start -n com.github.echoping07.kemaolife/.MainActivity
 > `ic_launcher_round.png` 只服务圆形屏 / 类原生桌面；方形桌面不会读它，
 > 所以它里面画内切圆是安全的，不会影响 MIUI 上的显示。
 
-## 7. 明文与证书
+## 8. 明文与证书
 
 `app/src/main/res/xml/network_security_config.xml` 只对探测地址放行明文：
 

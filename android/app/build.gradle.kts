@@ -12,20 +12,57 @@ android {
         applicationId = "com.github.echoping07.kemaolife"
         minSdk = 24
         targetSdk = 34
-        versionCode = 1
+        // release.yml 从 vX.Y.Z tag 计算 versionCode 并用 -PversionCode 注入；
+        // 本地构建不给该参数时退回 1，仅用于调试，不保证覆盖安装。
+        versionCode = (project.findProperty("versionCode") as String?)?.toIntOrNull() ?: 1
         // 与 internal/version.Version 保持一致；发版只改 Go 侧唯一来源并同步这里。
-        versionName = "0.2.0"
+        versionName = "0.3.0"
     }
 
     buildFeatures {
         compose = true
     }
 
+    signingConfigs {
+        // 分发必须跨 release 复用同一把私钥，否则 Android 拒绝覆盖安装，
+        // 而卸载会清掉 Keystore 凭据与应用私有目录快照。
+        // 四个值都来自 GitHub Actions Secrets，经环境变量注入；本地不写任何口令/路径。
+        val keystorePath = System.getenv("KEMAOLIFE_KEYSTORE_FILE")
+        val ksPassword = System.getenv("ANDROID_KEYSTORE_PASSWORD")
+        val ksAlias = System.getenv("ANDROID_KEY_ALIAS")
+        val ksKeyPassword = System.getenv("ANDROID_KEY_PASSWORD")
+        if (keystorePath != null && ksPassword != null && ksAlias != null && ksKeyPassword != null) {
+            create("release") {
+                storeFile = file(keystorePath)
+                storePassword = ksPassword
+                keyAlias = ksAlias
+                keyPassword = ksKeyPassword
+                // minSdk 24 不需要 v1（JAR signing）；v2 + v3 覆盖全部受支持设备。
+                enableV1Signing = false
+                enableV2Signing = true
+                enableV3Signing = true
+            }
+        }
+    }
+
     buildTypes {
         release {
             isMinifyEnabled = false
-            // 用 debug 签名，保证 release 变体也能直接 adb install 到真机（一期不做分发）。
-            signingConfig = signingConfigs.getByName("debug")
+            // 本地未注入发布密钥时回落 debug 签名，仅供开发自测；
+            // release.yml 会断言四个 Secrets 齐全，不会把 debug 签名当 Release 资产。
+            signingConfig = signingConfigs.findByName("release")
+                ?: signingConfigs.getByName("debug")
+        }
+    }
+
+    splits {
+        // 按 ABI 出 4 个 APK：gomobile 编出的 libgojni.so 是四份最大的体积来源，
+        // 手机侧载只需下载自己架构的那一个包。
+        abi {
+            isEnable = true
+            reset()
+            include("armeabi-v7a", "arm64-v8a", "x86", "x86_64")
+            isUniversalApk = false
         }
     }
 
@@ -43,7 +80,6 @@ android {
     }
 
     packaging {
-        // gomobile 的四个 ABI 都会打进包；不裁剪，避免在未知机型上缺 so。
         jniLibs {
             useLegacyPackaging = false
         }

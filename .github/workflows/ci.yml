@@ -90,8 +90,8 @@ jobs:
 
       - name: Android cross build
         run: |
-          # Android 侧只验证 Go 代码能交叉编译到 android/arm64。
-          # 完整 AAR / APK 需要 NDK 与 Gradle，不进 CI（见 android/README.md）。
+          # 每次 PR 都跑的轻量检查：Go 代码能交叉编译到 android/arm64。
+          # 完整 AAR / APK（NDK + Gradle + gomobile）由 ci-android.yml 在 Android 路径变更时构建。
           GOOS=android GOARCH=arm64 go build ./internal/... ./cmd/kemaolife-mobile/
 
       # 个人隐私（学号 / 房间号 / Cookie / 会话值 / 凭据 / 指纹）不得入仓。

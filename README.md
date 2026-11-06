@@ -105,7 +105,7 @@ kemaolife --json electricity                  # 余额 + 每日用量
 
 学校代码内置默认值为 `3126`（学校事实，非个人隐私），可用 `kemaolife config set customercode <学校代码>` 或构建期 `-ldflags "-X main.defaultCustomerCode=<学校代码>"` 覆盖。agent skill 见 [`skills/kemaolife/SKILL.md`](./skills/kemaolife/SKILL.md)，复制到 agent 的 skill 目录即可使用（D2 待定稿）。
 
-正式发布在 [Releases](https://github.com/EchoPing07/kemaolife/releases) 提供 Linux `amd64` / `arm64` / `armv7` 静态二进制压缩包、Windows `amd64` / `arm64` 便携包、单独的 agent skill zip 与 `SHA256SUMS`；Linux 解压后用 `install -m 0755 kemaolife ~/.local/bin/kemaolife` 安装，Windows 解压后双击 `install.bat`，校验和用 `sha256sum -c SHA256SUMS --ignore-missing` 核对。打 `vX.Y.Z` tag 会触发 [`.github/workflows/release.yml`](./.github/workflows/release.yml) 自动构建发布，tag 必须与 `internal/version.Version` 一致。
+正式发布在 [Releases](https://github.com/EchoPing07/kemaolife/releases) 提供 Linux `amd64` / `arm64` / `armv7` 静态二进制压缩包、Windows `amd64` / `arm64` 便携包、Android 按 ABI 拆分的四个已签名 APK、单独的 agent skill zip 与 `SHA256SUMS`；Linux 解压后用 `install -m 0755 kemaolife ~/.local/bin/kemaolife` 安装，Windows 解压后双击 `install.bat`，Android 下载对应架构的 APK 直接安装，校验和用 `sha256sum -c SHA256SUMS --ignore-missing` 核对。打 `vX.Y.Z` tag 会触发 [`.github/workflows/release.yml`](./.github/workflows/release.yml) 自动构建发布，tag 必须与 `internal/version.Version` 一致；Android `versionCode` 由 tag 派生（`major*10000 + minor*100 + patch`）。
 
 ## 安装（Windows）
 
@@ -132,6 +132,12 @@ GOOS=windows GOARCH=amd64 go build -trimpath `
 ```
 
 `arm64` 把 `GOARCH` 换成 `arm64` 即可。便携包的安装 / 卸载脚本在 [`packaging/windows/`](./packaging/windows/)，由 release 工作流打进 zip。
+
+## 安装（Android）
+
+从 Release 下载**一个**对应架构的 APK：多数近几年手机用 `arm64-v8a`，旧 32 位机用 `armeabi-v7a`，`x86` / `x86_64` 主要给模拟器用。系统需 Android 7.0（API 24）及以上。直接在手机上打开 APK 安装，首次侧载需要在系统提示里允许该来源的「安装未知应用」；也可 `adb install -r <APK>`。
+
+四个包共用同一把发布私钥与同一 `applicationId`，**新版直接覆盖安装即可**，设置页 Keystore 里的凭据与应用私有目录里的课表快照都会保留；不要先卸载再装。发布签名证书的 SHA-256 指纹写在每版 Release 说明里，可用 `apksigner verify --print-certs <文件>` 核对；指纹不一致时不要安装、不要填任何凭据。本仓库只发侧载 APK，不上架应用商店，也没有自动更新。
 
 ## 交流
 
