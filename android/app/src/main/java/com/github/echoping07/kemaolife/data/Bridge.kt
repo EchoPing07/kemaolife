@@ -29,6 +29,9 @@ class Bridge(private val context: Context) {
      * 设置页保存后重新调用本方法即可热更新，门面不提供 `config.*` op。
      */
     fun init(credentials: Credentials): Envelope {
+        // 时区必须由 Kotlin 传入：Go 在 Android 上找不到系统的 zoneinfo 目录，
+        // time.Local 会退化成 UTC，导致所有时间戳差 8 小时（见 android/README.md）。
+        val zone = java.util.TimeZone.getDefault()
         val config = JSONObject()
             .put("cacheDir", cacheDir().absolutePath)
             .put("studentId", credentials.studentId)
@@ -37,6 +40,8 @@ class Bridge(private val context: Context) {
             .put("campusUser", credentials.campusUser)
             .put("campusPassword", credentials.campusPassword)
             .put("campusFingerprint", credentials.campusFingerprint)
+            .put("timeZone", zone.id)
+            .put("timeZoneOffsetSeconds", zone.getOffset(System.currentTimeMillis()) / 1000)
 
         val env = Envelope.parse(Kemaolife.init(config.toString()))
         initialized = env.ok

@@ -95,6 +95,7 @@ internal fun MoreScreen(
 private fun TodayOverview(state: AppState) {
     val day: DaySchedule? = state.todayDay
     when {
+        state.timetableError != null -> EmptyHint(state.timetableError!!)
         day == null -> EmptyHint(stringResource(R.string.bridge_not_ready))
         !day.inSemester -> EmptyHint(stringResource(R.string.timetable_not_in_semester))
         day.entries.isEmpty() -> EmptyHint(stringResource(R.string.timetable_no_class))

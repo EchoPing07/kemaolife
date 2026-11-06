@@ -70,9 +70,42 @@ adb shell am start -n com.github.echoping07.kemaolife/.MainActivity
 | `java.io.IOException: 文件名、目录名或卷标语法不正确` | `local.properties` 里 `sdk.dir` 用了转义反斜杠 | 写成正斜杠：`sdk.dir=D:/android-sdk` |
 | `gomobile bind requires golang.org/x/mobile in the current module` | gomobile 要求模块内能解析 `bind` 包 | 见 §1 的 `go install` 与 `go.mod` 依赖 |
 | `javac` 报 `编码 GBK 的不可映射字符` | gobind 把 Go 导出函数的注释原样写进 `.java`，javac 按平台默认编码读 | **导出符号的注释只用 ASCII**（`bridge.go` 的 `Init` / `Call` 已注明） |
+| 启动即闪退 `ClassNotFoundException: ...MainActivity` | Kotlin 文件的 `package` 与所在目录不一致（`MainActivity.kt` 在根包目录却写了 `.ui` 包） | Kotlin 的 `package` 必须与目录一致：`MainActivity.kt` 在 `.../kemaolife/` 下就得是 `package com.github.echoping07.kemaolife` |
+| 所有时间戳都带 `Z`、比实际差 8 小时 | Go 在 Android 上找不到 zoneinfo，`time.Local` 退化为 UTC | 见 §5 |
 | 把工程放在中文路径下构建 | Windows + AGP 对非 ASCII 路径仍有零散问题 | 建一个 ASCII junction：`mklink /J C:\kmbuild D:\<中文路径>` |
 
-## 5. 明文与证书
+## 5. 时区必须由 Kotlin 传给 Go
+
+**这是一个真机才暴露的坑**：Android 的 tzdata 在 `/system/usr/share/zoneinfo`，
+不在 Go 的默认查找路径里。不处理时 `time.Local` 会退化成 **UTC**，
+所有时间戳都差 8 小时（「数据截至 22:48」显示成「14:48Z」），
+`DataUntil` 这类日期还可能整体倒退一天。
+
+三处配合解决：
+
+1. `cmd/kemaolife-mobile/bridge.go` 匿名导入 `time/tzdata`（内嵌约 450KB 时区库）；
+2. Kotlin 在 `Init` 时传 `timeZone`（`TimeZone.getDefault().id`）与
+   `timeZoneOffsetSeconds`（作为 `LoadLocation` 失败时的兜底）；
+3. Go 侧 `applyTimeZone` 把 `time.Local` 设成设备时区。
+
+> 为什么不改 `core`：`core` / `app` 一律通过 `Clock` 与 `time.Local` 取时间
+> （AGENTS §6），它们不该知道自己在哪个平台。校准只发生在门面初始化这一处。
+
+## 6. 应用图标
+
+图标资源在 `res/mipmap-*/`，由同一张正方形原图派生，**不做裁切、不做放大**：
+
+| 资源 | 做法 |
+|---|---|
+| `ic_launcher.png` | 整张原图（方形平台直接显示） |
+| `ic_launcher_round.png` | 整张原图 + **内切圆**遮罩（圆 = 正方形的内切圆，直径 = 边长） |
+| `ic_launcher_foreground.png` | 整张原图铺满 108dp 画布，由系统遮罩（`mipmap-anydpi-v26/`） |
+
+关键点：圆形图标是「正方形画布的内切圆」，不是「圆的外接正方形」——
+后者会把圆形缩到画布里，角色反而变小。原图本身就是正方形且构图已定，
+所以圆形遮罩切掉的四个角就是原图自带的背景，角色完整保留。
+
+## 7. 明文与证书
 
 `app/src/main/res/xml/network_security_config.xml` 只对两个地址做例外：
 

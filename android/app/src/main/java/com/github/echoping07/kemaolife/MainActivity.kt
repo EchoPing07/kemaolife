@@ -1,4 +1,4 @@
-package com.github.echoping07.kemaolife.ui
+package com.github.echoping07.kemaolife
 
 import android.os.Bundle
 import androidx.activity.ComponentActivity
@@ -26,6 +26,11 @@ import androidx.compose.ui.res.stringResource
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.github.echoping07.kemaolife.R
 import com.github.echoping07.kemaolife.data.CampusState
+import com.github.echoping07.kemaolife.ui.AppViewModel
+import com.github.echoping07.kemaolife.ui.MoreScreen
+import com.github.echoping07.kemaolife.ui.SettingsScreen
+import com.github.echoping07.kemaolife.ui.TabIcons
+import com.github.echoping07.kemaolife.ui.TimetableScreen
 import com.github.echoping07.kemaolife.ui.theme.KemaolifeTheme
 
 /**
@@ -109,10 +114,4 @@ private fun AppRoot(viewModel: AppViewModel) {
     }
 }
 
-/** 校园网三态 → 本地化文案。 */
-@Composable
-internal fun campusStateLabel(state: CampusState): String = when (state) {
-    CampusState.ONLINE -> stringResource(R.string.campusnet_online)
-    CampusState.UNAUTH -> stringResource(R.string.campusnet_unauth)
-    CampusState.OFFLINE -> stringResource(R.string.campusnet_offline)
-}
+

@@ -18,6 +18,11 @@ import (
 	"sync"
 	"time"
 
+	// Android 的 tzdata 在 /system/usr/share/zoneinfo，不在 Go 的默认查找路径里，
+	// 不内嵌这份数据的话 time.Local 会退化成 UTC，所有时间戳都会差 8 小时
+	// （「数据截至 22:48」显示成「14:48Z」）。内嵌约 450KB，换来时区确定可用。
+	_ "time/tzdata"
+
 	"github.com/EchoPing07/kemaolife/internal/app"
 	"github.com/EchoPing07/kemaolife/internal/core/model"
 	"github.com/EchoPing07/kemaolife/internal/platform"
@@ -50,6 +55,14 @@ type initConfig struct {
 	CampusUser        string `json:"campusUser"`
 	CampusPassword    string `json:"campusPassword"`
 	CampusFingerprint string `json:"campusFingerprint"`
+
+	// TimeZone 是设备时区（Kotlin 的 TimeZone.getDefault().id，如 Asia/Shanghai）。
+	// TimeZoneOffsetSeconds 是同一时刻的偏移秒数，作为 LoadLocation 失败时的兜底。
+	//
+	// 为什么必须由 Kotlin 传：Go 在 Android 上找不到 zoneinfo 目录，
+	// time.Local 会退化成 UTC；而 core / app 的时间口径全部基于 time.Local（AGENTS §6）。
+	TimeZone              string `json:"timeZone"`
+	TimeZoneOffsetSeconds int    `json:"timeZoneOffsetSeconds"`
 }
 
 // session 是一次 Init 组装好的依赖；配置随 Init 更新，避免每次调用重复解析。
@@ -84,6 +97,9 @@ func Init(configJSON string) string {
 	if cacheDir == "" {
 		return failure(model.NewError(model.CodeInvalidArgument, "初始化缺少可写目录"))
 	}
+
+	// 先校准时区再创建任何 DTO：之后所有时间格式化都依赖它。
+	applyTimeZone(cfg.TimeZone, cfg.TimeZoneOffsetSeconds)
 
 	store, err := platform.NewFileStore(cacheDir)
 	if err != nil {
@@ -295,6 +311,30 @@ func formatRFC3339(t time.Time) string {
 		return ""
 	}
 	return t.In(time.Local).Format(time.RFC3339)
+}
+
+// applyTimeZone 把进程的本地时区设定为设备时区。
+//
+// 只在本进程内生效（Android 一个 App 一个进程），且只做一次，符合「平台差异留在最外层」：
+// core / app 仍只通过 Clock 与 time.Local 取时间，不知道自己跑在哪个平台。
+//
+// 优先级：按名字加载成功 > 按偏移构造固定时区。前者能自动处理夏令时，
+// 后者退化为固定偏移（中国大陆无夏令时，实际等价）。
+func applyTimeZone(name string, offsetSeconds int) {
+	name = strings.TrimSpace(name)
+	if name != "" {
+		if loc, err := time.LoadLocation(name); err == nil {
+			time.Local = loc
+			return
+		}
+	}
+	if offsetSeconds != 0 {
+		zone := name
+		if zone == "" {
+			zone = "Local"
+		}
+		time.Local = time.FixedZone(zone, offsetSeconds)
+	}
 }
 
 // ctx 是各用例的上下文：门面不接收 Kotlin 的取消信号（gobind 边界只有字符串），

@@ -54,26 +54,39 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     private fun loadTodayAndSync() {
         viewModelScope.launch {
             _state.update { it.copy(timetableLoading = true) }
-            // ① 先本地渲染：today 内部会刷新，但失败时回落旧快照（stale:true）。
+
+            // ① 先出课表：today 内部会先刷新，失败时回落旧快照（stale:true）。
+            // 只有「刷新失败 + 连旧快照都没有」才会走到 onFailure，此时必须告知用户，
+            // 不能静默留白（否则界面会永远停在空白，用户不知道是没课还是没配置）。
             val today = withContext(Dispatchers.IO) { repo.today() }
             today.onSuccess { applyToday(it) }
-            today.onFailure {
-                if (it is AppException && it.needsCredentials) {
-                    _state.update { s -> s.copy(needsSetup = true, timetableLoading = false) }
-                } else {
-                    _state.update { s -> s.copy(timetableLoading = false) }
+            if (today.isFailure) {
+                val ex = today.exceptionOrNull()
+                _state.update { s ->
+                    s.copy(
+                        timetableLoading = false,
+                        needsSetup = s.needsSetup || (ex as? AppException)?.needsCredentials == true,
+                        timetableError = (ex as? AppException)?.displayMessage ?: "课表加载失败",
+                    )
                 }
             }
-            // ② 独立再同步一次：不阻塞 ①，失败也只是让 stale 标记生效。
-            withContext(Dispatchers.IO) { repo.sync() }
-                .onSuccess { result ->
+
+            // ② 独立再同步一次（docs/002 §5.3「每次打开」）：与 ① 是两个动作。
+            // 成功就顺手把 stale 清掉；若 ① 压根没拿到数据，同步成功后重试一次查询。
+            val synced = withContext(Dispatchers.IO) { repo.sync() }
+            synced.onSuccess { result ->
+                if (_state.value.today != null) {
                     _state.update { s ->
                         s.copy(
                             today = s.today?.copy(stale = false, syncedAt = result.syncedAt),
-                            timetableLoading = false,
+                            timetableError = null,
                         )
                     }
+                } else {
+                    // ① 失败但 ② 刷新成功：快照已经有了，再查一次就能出数据。
+                    withContext(Dispatchers.IO) { repo.today() }.onSuccess { applyToday(it) }
                 }
+            }
         }
     }
 
@@ -201,7 +214,9 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
             it.copy(
                 today = view,
                 timetableLoading = false,
+                // 查到数据就说明凭据可用，顺手清掉「需要配置」与上一次的错误。
                 needsSetup = false,
+                timetableError = null,
             )
         }
     }
@@ -237,6 +252,8 @@ data class AppState(
     val today: ScheduleView? = null,
     val timetableLoading: Boolean = false,
     val refreshing: Boolean = false,
+    /** 课表「连旧快照都没有」时的原因；有数据时为 null。 */
+    val timetableError: String? = null,
 
     val week: WeekSchedule? = null,
     val weekStale: Boolean = false,

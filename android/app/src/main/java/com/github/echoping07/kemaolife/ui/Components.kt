@@ -16,7 +16,10 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
+import com.github.echoping07.kemaolife.R
+import com.github.echoping07.kemaolife.data.CampusState
 import com.github.echoping07.kemaolife.data.Entry
 
 /**
@@ -98,4 +101,12 @@ internal fun SectionTitle(text: String) {
         fontWeight = FontWeight.SemiBold,
         modifier = Modifier.padding(top = 4.dp, bottom = 8.dp),
     )
+}
+
+/** 校园网三态 → 本地化文案（Windows 托盘与 Android 用同一套术语，见 docs/002 §3.3）。 */
+@Composable
+internal fun campusStateLabel(state: CampusState): String = when (state) {
+    CampusState.ONLINE -> stringResource(R.string.campusnet_online)
+    CampusState.UNAUTH -> stringResource(R.string.campusnet_unauth)
+    CampusState.OFFLINE -> stringResource(R.string.campusnet_offline)
 }

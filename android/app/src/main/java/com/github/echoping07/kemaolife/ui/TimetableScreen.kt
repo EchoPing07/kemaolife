@@ -126,6 +126,8 @@ private fun TodaySection(state: AppState, viewModel: AppViewModel) {
         Spacer(Modifier.height(8.dp))
         when {
             state.timetableLoading && day == null -> LoadingBlock()
+            // 失败有具体原因就显示原因；只有拿到过数据但当天没课才显示「当天没课」。
+            state.timetableError != null -> EmptyHint(state.timetableError!!)
             day == null -> EmptyHint(stringResource(R.string.bridge_not_ready))
             !day.inSemester -> EmptyHint(stringResource(R.string.timetable_not_in_semester))
             day.entries.isEmpty() -> EmptyHint(stringResource(R.string.timetable_no_class))
@@ -260,6 +262,7 @@ private fun DateSection(state: AppState, viewModel: AppViewModel) {
         Spacer(Modifier.height(12.dp))
         when {
             state.timetableLoading -> LoadingBlock()
+            state.timetableError != null -> EmptyHint(state.timetableError!!)
             picked == null -> EmptyHint(stringResource(R.string.bridge_not_ready))
             !picked.inSemester -> EmptyHint(stringResource(R.string.timetable_not_in_semester))
             picked.entries.isEmpty() -> EmptyHint(stringResource(R.string.timetable_no_class))
