@@ -150,6 +150,49 @@ jobs:
           build_one arm64 arm64
           build_one armv7 arm 7
 
+          # Windows 便携包：amd64 / arm64。GUI 子系统是形态要求（docs/002 §5.2），
+          # 漏掉 -H=windowsgui 会挂控制台窗口，不符合托盘常驻形态。
+          build_win() {
+            arch="$1"
+            goarch="$2"
+            stage="dist/win-stage/${arch}"
+            mkdir -p "$stage"
+            env CGO_ENABLED=0 GOOS=windows "GOARCH=${goarch}" go build -trimpath \
+              -ldflags "-s -w -H=windowsgui -X main.commit=${COMMIT}" \
+              -o "$stage/kemaolife-agent.exe" ./cmd/kemaolife-agent
+            cp LICENSE "$stage/LICENSE"
+            cp packaging/windows/INSTALL.txt "$stage/INSTALL.txt"
+            cp packaging/windows/install.ps1 "$stage/install.ps1"
+            cp packaging/windows/uninstall.ps1 "$stage/uninstall.ps1"
+            # 行尾 / BOM 由 .gitattributes 保证（packaging/windows/* eol=crlf）；
+            # 这里只做断言，避免 checkout 被改配置后在包里静默产出 LF 版脚本。
+            for f in install.bat uninstall.bat install.ps1 uninstall.ps1; do
+              if grep -qU $'\r' "$stage/$f"; then :; else
+                echo "::error::$f 缺少 CRLF 行尾（检查 .gitattributes）"; exit 1
+              fi
+            done
+            if ! head -c 3 "$stage/install.ps1" | od -An -tx1 | grep -q 'ef bb bf'; then
+              echo "::error::install.ps1 缺少 UTF-8 BOM（PowerShell 5.1 会按 ANSI 解码中文）"; exit 1
+            fi
+          }
+
+          build_win amd64 amd64
+          build_win arm64 arm64
+
+          "$PY" - <<'PY'
+          import os, zipfile
+
+          version = os.environ["VERSION"]
+          entries = ("kemaolife-agent.exe", "install.bat", "install.ps1",
+                     "uninstall.bat", "uninstall.ps1", "LICENSE", "INSTALL.txt")
+          for arch in ("amd64", "arm64"):
+              out = f"dist/kemaolife-agent_{version}_windows_{arch}.zip"
+              with zipfile.ZipFile(out, "w", zipfile.ZIP_DEFLATED) as z:
+                  for name in entries:
+                      z.write(f"dist/win-stage/{arch}/{name}", name)
+              print(out)
+          PY
+
           mkdir -p dist/skill/kemaolife
           cp skills/kemaolife/SKILL.md dist/skill/kemaolife/SKILL.md
           cat > dist/skill/kemaolife/README.txt <<'EOF'
@@ -183,6 +226,8 @@ jobs:
             "kemaolife_${VERSION}_linux_amd64.tar.gz" \
             "kemaolife_${VERSION}_linux_arm64.tar.gz" \
             "kemaolife_${VERSION}_linux_armv7.tar.gz" \
+            "kemaolife-agent_${VERSION}_windows_amd64.zip" \
+            "kemaolife-agent_${VERSION}_windows_arm64.zip" \
             "kemaolife-skill_${VERSION}.zip" > SHA256SUMS)
           cat dist/SHA256SUMS
 
@@ -219,6 +264,44 @@ jobs:
                   names = sorted(m.name for m in t.getmembers())
               assert names == ["INSTALL.txt", "LICENSE", "kemaolife"], (arch, names)
 
+          # Windows 包读 PE 头判架构，避免依赖 file 的输出文案。
+          win_expected = {"amd64": 0x8664, "arm64": 0xAA64}
+          win_entries = sorted(["INSTALL.txt", "LICENSE", "install.bat", "install.ps1",
+                                "kemaolife-agent.exe", "uninstall.bat", "uninstall.ps1"])
+          for arch, machine in win_expected.items():
+              path = f"dist/win-stage/{arch}/kemaolife-agent.exe"
+              with open(path, "rb") as f:
+                  head = f.read(0x400)
+              assert head[:2] == b"MZ", (path, "not PE")
+              pe = struct.unpack_from("<I", head, 0x3c)[0]
+              assert head[pe:pe+4] == b"PE\x00\x00", (path, "no PE signature")
+              found = struct.unpack_from("<H", head, pe + 4)[0]
+              assert found == machine, (path, hex(found))
+              # GUI 子系统 = 2；写成 console(3) 会多挂一个黑框。
+              # Subsystem 在 PE32 与 PE32+ 里都是 optional header +0x44：
+              # PE32+ 把 ImageBase 撑到 8 字节，但后面的字段又对齐回来了。
+              opt = pe + 24
+              magic = struct.unpack_from("<H", head, opt)[0]
+              assert magic in (0x10b, 0x20b), (path, hex(magic))
+              subsystem = struct.unpack_from("<H", head, opt + 0x44)[0]
+              assert subsystem == 2, (path, f"subsystem={subsystem}, want GUI(2)")
+              print(f"windows {arch}: PE machine={hex(found)} subsystem={subsystem} OK")
+
+              with __import__("zipfile").ZipFile(
+                      f"dist/kemaolife-agent_{version}_windows_{arch}.zip") as z:
+                  names = sorted(z.namelist())
+                  assert names == win_entries, (arch, names)
+                  # .bat 必须是 CRLF，否则 cmd.exe 解析会吃掉行尾。
+                  for bat in ("install.bat", "uninstall.bat"):
+                      data = z.read(bat)
+                      assert data.count(b"\n") == data.count(b"\r\n"), (bat, "bare LF")
+                  # .ps1 必须带 UTF-8 BOM：PowerShell 5.1 读无 BOM 的 UTF-8 会按
+                  # 系统 ANSI 解码，中文变乱码并触发语法错误。
+                  for ps in ("install.ps1", "uninstall.ps1"):
+                      data = z.read(ps)
+                      assert data.startswith(b"\xef\xbb\xbf"), (ps, "no BOM")
+                      assert data.count(b"\n") == data.count(b"\r\n"), (ps, "bare LF")
+
           with __import__("zipfile").ZipFile(f"dist/kemaolife-skill_{version}.zip") as z:
               names = sorted(z.namelist())
           assert names == ["kemaolife/README.txt", "kemaolife/SKILL.md"], names
@@ -254,21 +337,23 @@ jobs:
           cat > dist/RELEASE_NOTES.md <<'EOF'
           ## kemaolife __TAG__
 
-          首个 Linux CLI 发行版。源码版本 `internal/version.Version` = `__VERSION__`；构建提交 `__SHORT_SHA__`（完整提交号见 `kemaolife --version --json`）。本版只发布 Linux；Windows 托盘端已实现但需按 README 自行构建，Android 尚未启动。
+          三个原生端共用一份 Go `core` 的校园工具：课表查询、电费余额与每日用量、校园网认证。本版提供 Linux CLI 静态二进制、Windows 托盘便携包与 agent skill；Android 尚未启动。源码版本 `internal/version.Version` = `__VERSION__`；构建提交 `__SHORT_SHA__`（完整提交号见 `kemaolife --version --json`）。
 
           ### 产物
 
-          | 文件 | 适用 |
-          |---|---|
-          | `__ASSET_AMD64__` | x86_64 Linux |
-          | `__ASSET_ARM64__` | aarch64 / arm64 Linux |
-          | `__ASSET_ARMV7__` | 32 位 ARMv7 Linux（`GOARCH=arm GOARM=7`） |
-          | `__ASSET_SKILL__` | agent skill，单独安装 |
-          | `SHA256SUMS` | 以上四个包的校验和 |
+          | 文件 | 端 | 适用 |
+          |---|---|---|
+          | `__ASSET_AMD64__` | Linux | x86_64 |
+          | `__ASSET_ARM64__` | Linux | aarch64 / arm64 |
+          | `__ASSET_ARMV7__` | Linux | 32 位 ARMv7（`GOARCH=arm GOARM=7`） |
+          | `__ASSET_WIN_AMD64__` | Windows | 64 位 x86（x64）托盘程序 |
+          | `__ASSET_WIN_ARM64__` | Windows | Windows on ARM（arm64）托盘程序 |
+          | `__ASSET_SKILL__` | agent skill | 单独安装，依赖同机 `kemaolife` 二进制 |
+          | `SHA256SUMS` | — | 以上六个包的校验和 |
 
-          三个二进制包内含 `kemaolife`（`CGO_ENABLED=0` 静态二进制）、`LICENSE` 与 `INSTALL.txt`；skill 包内含 `kemaolife/SKILL.md` 与 `kemaolife/README.txt`。
+          Linux 三个包内含 `kemaolife`（`CGO_ENABLED=0` 静态二进制）、`LICENSE` 与 `INSTALL.txt`；Windows 两个包内含 `kemaolife-agent.exe`（GUI 子系统，无控制台窗口）、`install.bat` / `install.ps1` / `uninstall.bat` / `uninstall.ps1`、`LICENSE` 与 `INSTALL.txt`；skill 包内含 `kemaolife/SKILL.md` 与 `kemaolife/README.txt`。
 
-          ### 安装（amd64 示例）
+          ### 安装（Linux，amd64 示例）
 
           ```bash
           sha256sum -c SHA256SUMS --ignore-missing
@@ -280,6 +365,21 @@ jobs:
           ```
 
           arm64 / armv7 换成对应压缩包即可。`config init` 交互录入学号与教务密码，配置文件权限 `0600`；学校代码内置默认值可用 `config set customercode <学校代码>` 覆盖。
+
+          ### 安装（Windows）
+
+          下载 `__ASSET_WIN_AMD64__`（或 arm64 包），解压到任意目录后双击 `install.bat`。脚本把程序复制到 `%LOCALAPPDATA%\Programs\Kemaolife\`、建开始菜单快捷方式并启动一次，不需要管理员权限。
+
+          卸载双击 `uninstall.bat`：结束进程、删自启项、删快捷方式与安装目录，**保留** `%LOCALAPPDATA%\Kemaolife\` 配置目录（含 DPAPI 加密的学号与凭据）。
+
+          > [!NOTE]
+          > 本版**没有代码签名**。Windows 可能提示「Windows 已保护你的电脑」（点「更多信息 → 仍要运行」），
+          > 或在开启了 Smart App Control 的 Windows 11 设备上直接拦截（关闭 SAC 后无法重新开启）。
+          > 申请免费开源签名的跟进项见 [#4](https://github.com/EchoPing07/kemaolife/issues/4)。
+
+          > [!IMPORTANT]
+          > **arm64 版本尚未在 ARM 真机上验证**。可以正常构建，但托盘图标、右键菜单、设置窗口与凭据加解密
+          > 都依赖手写的 Win32 结构体布局，未经实机确认。遇到问题请带 Windows 版本与现象提 Issue。
 
           ### skill
 
@@ -308,6 +408,8 @@ jobs:
               "__ASSET_AMD64__": f"kemaolife_{version}_linux_amd64.tar.gz",
               "__ASSET_ARM64__": f"kemaolife_{version}_linux_arm64.tar.gz",
               "__ASSET_ARMV7__": f"kemaolife_{version}_linux_armv7.tar.gz",
+              "__ASSET_WIN_AMD64__": f"kemaolife-agent_{version}_windows_amd64.zip",
+              "__ASSET_WIN_ARM64__": f"kemaolife-agent_{version}_windows_arm64.zip",
               "__ASSET_SKILL__": f"kemaolife-skill_{version}.zip",
           }
           path = "dist/RELEASE_NOTES.md"
@@ -332,6 +434,8 @@ jobs:
             "dist/kemaolife_${VERSION}_linux_amd64.tar.gz"
             "dist/kemaolife_${VERSION}_linux_arm64.tar.gz"
             "dist/kemaolife_${VERSION}_linux_armv7.tar.gz"
+            "dist/kemaolife-agent_${VERSION}_windows_amd64.zip"
+            "dist/kemaolife-agent_${VERSION}_windows_arm64.zip"
             "dist/kemaolife-skill_${VERSION}.zip"
             "dist/SHA256SUMS"
           )

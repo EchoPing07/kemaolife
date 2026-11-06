@@ -105,9 +105,23 @@ kemaolife --json electricity                  # 余额 + 每日用量
 
 学校代码内置默认值为 `3126`（学校事实，非个人隐私），可用 `kemaolife config set customercode <学校代码>` 或构建期 `-ldflags "-X main.defaultCustomerCode=<学校代码>"` 覆盖。agent skill 见 [`skills/kemaolife/SKILL.md`](./skills/kemaolife/SKILL.md)，复制到 agent 的 skill 目录即可使用（D2 待定稿）。
 
-正式发布在 [Releases](https://github.com/EchoPing07/kemaolife/releases) 提供 Linux `amd64` / `arm64` / `armv7` 静态二进制压缩包、单独的 agent skill zip 与 `SHA256SUMS`；解压后用 `install -m 0755 kemaolife ~/.local/bin/kemaolife` 安装，校验和用 `sha256sum -c SHA256SUMS --ignore-missing` 核对。打 `vX.Y.Z` tag 会触发 [`.github/workflows/release.yml`](./.github/workflows/release.yml) 自动构建发布，tag 必须与 `internal/version.Version` 一致。
+正式发布在 [Releases](https://github.com/EchoPing07/kemaolife/releases) 提供 Linux `amd64` / `arm64` / `armv7` 静态二进制压缩包、Windows `amd64` / `arm64` 便携包、单独的 agent skill zip 与 `SHA256SUMS`；Linux 解压后用 `install -m 0755 kemaolife ~/.local/bin/kemaolife` 安装，Windows 解压后双击 `install.bat`，校验和用 `sha256sum -c SHA256SUMS --ignore-missing` 核对。打 `vX.Y.Z` tag 会触发 [`.github/workflows/release.yml`](./.github/workflows/release.yml) 自动构建发布，tag 必须与 `internal/version.Version` 一致。
 
-## 安装与构建（Windows）
+## 安装（Windows）
+
+下载 `kemaolife-agent_<版本>_windows_<架构>.zip`（`amd64` 或 `arm64`），**解压到任意目录后双击 `install.bat`**。脚本会结束旧实例、复制程序到 `%LOCALAPPDATA%\Programs\Kemaolife\`、建开始菜单快捷方式并启动一次，不需要管理员权限。也可直接双击 `kemaolife-agent.exe` 绿色运行，只是此时建议不要开启开机自启（自启项记录的是 exe 绝对路径，程序一挪位置就失效）。
+
+卸载双击 `uninstall.bat`：结束进程、删自启项、删快捷方式与安装目录，**保留** `%LOCALAPPDATA%\Kemaolife\` 配置目录（含 DPAPI 加密的学号与凭据，重装可沿用）。
+
+> [!NOTE]
+> **本版没有代码签名**。Windows 会提示「Windows 已保护你的电脑」（点「更多信息 → 仍要运行」）；开启了 Smart App Control 的 Windows 11 设备会直接拦截且不提供放行按钮，只能到「Windows 安全中心」关闭 SAC（**关闭后无法重新开启**）。免费开源签名的跟进项见 [#4](https://github.com/EchoPing07/kemaolife/issues/4)。
+
+> [!IMPORTANT]
+> **`arm64` 版本尚未在 ARM 真机上验证**。构建可以通过，但托盘图标、右键菜单、设置窗口与凭据加解密都依赖手写的 Win32 结构体布局，未经实机确认；遇到问题请带 Windows 版本与现象提 Issue。不出 32 位 `386`（Windows 11 没有 32 位版）。
+
+首次运行没有学号时会直接弹出设置窗口；之后只在托盘出现图标，左键单击开设置、右键出菜单。关掉设置窗口只是隐藏它，程序启动即查一次电费并判一次校园网状态，之后分别按默认 4 小时与 120 秒轮询；托盘菜单「退出」才是结束进程。「开机自启」默认勾选，但只在设置窗口里点「保存」后才写入注册表，首次安装不会自动生效。电费低于阈值时由托盘 `NIF_INFO` 弹出 Windows 通知，进程启动时设置 `Kemaolife.Agent` AUMID 用于归类，不实现 WinRT Toast / 操作中心归档。
+
+## 构建（Windows）
 
 Windows 端是托盘常驻程序，**正式构建必须按 GUI 子系统构建**：不带上 `-H=windowsgui` 会多挂一个控制台窗口（程序启动时会自己 `FreeConsole` 摘掉，但仍不符合 [002 §5.2](./docs/002-功能规格.md#52-windows-托盘常驻主动说) 的 GUI 子系统形态）：
 
@@ -117,7 +131,7 @@ GOOS=windows GOARCH=amd64 go build -trimpath `
   -o kemaolife-agent.exe ./cmd/kemaolife-agent
 ```
 
-首次运行没有学号时会直接弹出设置窗口；之后只在托盘出现图标，左键单击开设置、右键出菜单。关掉设置窗口只是隐藏它，程序启动即查一次电费并判一次校园网状态，之后分别按默认 4 小时与 120 秒轮询；托盘菜单「退出」才是结束进程。「开机自启」默认勾选，但只在设置窗口里点「保存」后才写入注册表，首次安装不会自动生效。电费低于阈值时由托盘 `NIF_INFO` 弹出 Windows 通知，进程启动时设置 `Kemaolife.Agent` AUMID 用于归类，不实现 WinRT Toast / 操作中心归档。
+`arm64` 把 `GOARCH` 换成 `arm64` 即可。便携包的安装 / 卸载脚本在 [`packaging/windows/`](./packaging/windows/)，由 release 工作流打进 zip。
 
 ## 交流
 

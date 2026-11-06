@@ -37,9 +37,56 @@ jobs:
         run: |
           GOOS=linux   GOARCH=amd64 go build ./internal/... ./cmd/kemaolife/...
           GOOS=windows GOARCH=amd64 go build ./internal/...
+          GOOS=windows GOARCH=arm64 go build ./internal/...
           # 托盘端必须按 GUI 子系统构建（docs/001 §7）：console 子系统会挂控制台窗口，
           # 不符合 docs/002 §5.2 的 GUI 子系统形态。这里用与文档一致的参数做交叉编译。
           GOOS=windows GOARCH=amd64 go build -ldflags "-H=windowsgui" -o /tmp/kemaolife-agent.exe ./cmd/kemaolife-agent/
+          GOOS=windows GOARCH=arm64 go build -ldflags "-H=windowsgui" -o /tmp/kemaolife-agent-arm64.exe ./cmd/kemaolife-agent/
+
+          # 发布产物必须是 GUI 子系统：从 PE 头读 Subsystem（值 3 = console）。
+          python3 - <<'PY'
+          import struct
+
+          for path in ("/tmp/kemaolife-agent.exe", "/tmp/kemaolife-agent-arm64.exe"):
+              with open(path, "rb") as f:
+                  head = f.read(0x400)
+              assert head[:2] == b"MZ", path
+              pe = struct.unpack_from("<I", head, 0x3C)[0]
+              assert head[pe:pe+4] == b"PE\x00\x00", path
+              opt = pe + 24
+              magic = struct.unpack_from("<H", head, opt)[0]
+              assert magic in (0x10B, 0x20B), (path, hex(magic))
+              subsystem = struct.unpack_from("<H", head, opt + 0x44)[0]
+              assert subsystem == 2, (path, f"subsystem={subsystem}, want GUI(2)")
+              print(f"{path}: subsystem GUI(2) OK")
+          PY
+
+      - name: Windows packaging scripts
+        run: |
+          # PowerShell 5.1 读无 BOM 的 UTF-8 会按系统 ANSI 解码，中文变乱码并触发
+          # 语法错误；cmd.exe 解析 LF 批处理会吃掉行尾。两者都在 Windows 上才暴露，
+          # 因此在 Linux CI 里静态检查，避免打出来的包到了用户机上直接跑不起来。
+          # 注：不能用 grep 查换行（按行处理匹配不到 \n），直接数字节。
+          crlf_ok() {
+            local f="$1"
+            local cr lf
+            cr=$(tr -cd '\r' < "$f" | wc -c)
+            lf=$(tr -cd '\n' < "$f" | wc -c)
+            if [[ "$cr" -eq 0 || "$cr" -ne "$lf" ]]; then
+              echo "FAIL: $f 必须是 CRLF（CR=$cr LF=$lf）"
+              return 1
+            fi
+          }
+          for f in packaging/windows/install.ps1 packaging/windows/uninstall.ps1; do
+            if [[ -z "$(head -c 3 "$f" | od -An -tx1 | tr -d ' \n' | grep -x 'efbbbf')" ]]; then
+              echo "FAIL: $f 缺少 UTF-8 BOM"; exit 1
+            fi
+            crlf_ok "$f"
+          done
+          for f in packaging/windows/install.bat packaging/windows/uninstall.bat; do
+            crlf_ok "$f"
+          done
+          echo 'Windows packaging scripts OK'
       - name: No personal credentials in repo
         run: |
           # 个人隐私（学号 / 房间号 / Cookie 值）不得入仓；按已知值逐个检查
