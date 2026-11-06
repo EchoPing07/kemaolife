@@ -164,6 +164,8 @@ jobs:
             cp packaging/windows/INSTALL.txt "$stage/INSTALL.txt"
             cp packaging/windows/install.ps1 "$stage/install.ps1"
             cp packaging/windows/uninstall.ps1 "$stage/uninstall.ps1"
+            cp packaging/windows/install.bat "$stage/install.bat"
+            cp packaging/windows/uninstall.bat "$stage/uninstall.bat"
             # 行尾 / BOM 由 .gitattributes 保证（packaging/windows/* eol=crlf）；
             # 这里只做断言，避免 checkout 被改配置后在包里静默产出 LF 版脚本。
             for f in install.bat uninstall.bat install.ps1 uninstall.ps1; do
