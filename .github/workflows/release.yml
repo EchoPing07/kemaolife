@@ -254,7 +254,7 @@ jobs:
           cat > dist/RELEASE_NOTES.md <<'EOF'
           ## kemaolife __TAG__
 
-          首个 Linux CLI 发行版。源码版本 `internal/version.Version` = `__VERSION__`；构建提交 `__SHORT_SHA__`（完整提交号见 `kemaolife --version --json`）。本版只发布 Linux，Windows 与 Android 尚未启动。
+          首个 Linux CLI 发行版。源码版本 `internal/version.Version` = `__VERSION__`；构建提交 `__SHORT_SHA__`（完整提交号见 `kemaolife --version --json`）。本版只发布 Linux；Windows 托盘端已实现但需按 README 自行构建，Android 尚未启动。
 
           ### 产物
 

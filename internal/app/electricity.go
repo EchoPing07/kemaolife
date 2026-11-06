@@ -31,7 +31,7 @@ func CheckElectricity(ctx context.Context, d Deps, cfg model.Config, yearMonth s
 
 	if cfg.StudentID == "" {
 		return model.ElectricityReport{}, model.NewError(model.CodeCredentialMissing,
-			"未配置学号，请先执行 kemaolife config init")
+			"未配置学号，请先填写学号")
 	}
 	schoolCode := cfg.CustomerCode
 	if schoolCode == "" {
@@ -39,7 +39,7 @@ func CheckElectricity(ctx context.Context, d Deps, cfg model.Config, yearMonth s
 	}
 	if schoolCode == "" {
 		return model.ElectricityReport{}, model.NewError(model.CodeCredentialMissing,
-			"缺少学校代码，请执行 kemaolife config set customercode <学校代码>")
+			"缺少学校代码，请填写学校代码")
 	}
 
 	client := electricity.NewClient(d.HTTP, d.ElectricityEndpoint)

@@ -23,7 +23,7 @@ func SyncTimetable(ctx context.Context, d Deps, cfg model.Config) (SyncResult, e
 	// 先判凭据，再检查端口：缺凭据是用户能自己修的问题，不该报成内部配置错误。
 	if cfg.StudentID == "" || cfg.EduPassword == "" {
 		return SyncResult{}, model.NewError(model.CodeCredentialMissing,
-			"未配置教务账号，请先执行 kemaolife config init")
+			"未配置教务账号，请先填写学号与教务密码")
 	}
 	if err := ensureDeps(d, true, true); err != nil {
 		return SyncResult{}, err
