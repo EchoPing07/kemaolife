@@ -11,7 +11,7 @@ import (
 // 托盘右键菜单的菜单项 ID。数值与 cmd 层的命令分派一一对应。
 const (
 	IDStatusCampus = 1001 // 只读：校园网状态
-	IDStatusPower  = 1002 // 只读：剩余电费（含数据截至）
+	IDStatusPower  = 1002 // 只读：剩余电费（仅余额与单位）
 	IDSep1         = 1003
 
 	IDLogin   = 1101 // 手动模式：登录

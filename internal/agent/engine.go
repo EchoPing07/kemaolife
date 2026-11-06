@@ -117,11 +117,24 @@ func (e *Engine) DoCampus(ctx context.Context, action CampusAction) error {
 }
 
 // RefreshCampusStatus 只刷新判态（不登录），用于托盘打开与按钮动作之后。
+//
+// 应用层已经把「网络探测失败」归为 offline；这里再对 4001 做一次兜底，
+// 让 Windows 的判态轮询在临时网络故障时只显示「不在校园网」，不把失败原因
+// 当异常塞进悬浮提示（docs/002 §5.2：探测失败归 offline，不退避）。
 func (e *Engine) RefreshCampusStatus(ctx context.Context) {
 	status, err := app.GetCampusNetworkStatus(ctx, e.campus)
+	if model.CodeOf(err) == model.CodeNetworkDown {
+		e.updateStatus(func(s *Status) {
+			s.Campus = model.CampusOffline
+			s.CampusMsg = ""
+			s.CampusCheckedAt = e.deps.Clock.Now()
+			s.LastError = ""
+		})
+		return
+	}
 	e.updateStatus(func(s *Status) {
 		if err != nil {
-			// 判态本身失败不覆盖上一次已知状态，只记错误。
+			// 内部故障仍保留提示，但不覆盖上一次已知状态。
 			s.LastError = model.MessageOf(err)
 			return
 		}
@@ -137,6 +150,15 @@ func (e *Engine) RefreshCampusStatus(ctx context.Context) {
 // 调用方（托盘要反馈本次动作），而 RefreshCampusStatus 是内部串联调用。
 func (e *Engine) ProbeCampus(ctx context.Context) (model.CampusState, error) {
 	status, err := app.GetCampusNetworkStatus(ctx, e.campus)
+	if model.CodeOf(err) == model.CodeNetworkDown {
+		e.updateStatus(func(s *Status) {
+			s.Campus = model.CampusOffline
+			s.CampusMsg = ""
+			s.CampusCheckedAt = e.deps.Clock.Now()
+			s.LastError = ""
+		})
+		return model.CampusOffline, nil
+	}
 	if err != nil {
 		e.updateStatus(func(s *Status) { s.LastError = model.MessageOf(err) })
 		return model.CampusOffline, err
@@ -243,9 +265,10 @@ func (e *Engine) Run(ctx context.Context, stop <-chan struct{}, onErr func(error
 
 // runCampusProbe 按设置的探测间隔反复判态（默认 120s）。
 //
-// 只调 Status（1 个探测请求）：不发登录、不改状态，也不因失败退避 ——
-// 探测失败在本端已被归为 offline，它是正常结果而不是故障（docs/002 §3.3）。
-// 间隔每轮重读设置，设置窗口保存后立即生效。
+// 只调 Status（1 个探测请求）：不发登录、不改凭据，也不因失败退避 ——
+// 网络探测失败（4001）由 ProbeCampus 归一为 offline，是正常结果而不是故障；
+// 内部故障仍会进 LastError 供悬浮提示显示，但不改变探测周期
+// （docs/002 §5.2 / §3.3）。间隔每轮重读设置，设置窗口保存后立即生效。
 func (e *Engine) runCampusProbe(ctx context.Context, stop <-chan struct{}) {
 	// 首轮立即探：否则托盘上的校园网状态要等一个完整周期才有值。
 	for {

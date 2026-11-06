@@ -2,10 +2,13 @@
 
 // Package ui 是 kemaolife-agent 的原生 Win32 薄封装。
 //
-// 只用 Go 标准库 syscall 直调 user32 / gdi32 / comctl32，不引入 golang.org/x/sys，
+// 只用 Go 标准库 syscall 直调 user32 / gdi32 / shell32，不引入 golang.org/x/sys，
 // 也不使用任何浏览器内核（AGENTS §2.2 A1、§2 A5）。
 //
-// 这一层只做「窗口、控件、菜单、图标」，不含任何业务判断：
+// TODO(D10): 待定 —— Windows 原生 UI 技术栈仍为待确认项；当前按
+// docs/001 §6.4 的描述性基线用标准库 syscall 实现，不代表 D10 定稿。
+//
+// 这一层只做「窗口、控件、菜单、图标、系统通知」，不含任何业务判断：
 // 业务状态由 cmd/kemaolife-agent 传入，UI 只负责显示与回调。
 package ui
 

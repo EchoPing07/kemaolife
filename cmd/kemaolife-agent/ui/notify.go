@@ -4,19 +4,53 @@ package ui
 
 import (
 	"fmt"
+	"runtime"
 	"syscall"
 	"unsafe"
 )
 
-// 托盘图标与气泡通知。
+// 托盘图标与系统通知。
 //
 // 为什么把通知放在 UI 包而不是 internal/platform：
-// Shell_NotifyIcon 的「加图标 / 改提示 / 弹气泡 / 删图标」共用同一份
-// NOTIFYICONDATAW 结构，拆到两个包里必然重复定义 168 字节的 Win32 结构，
-// 一旦字段错位就是「图标不显示 / 气泡不弹出」这类难查的问题。
+// Shell_NotifyIcon 的「加图标 / 改提示 / 发通知 / 删图标」共用同一份
+// NOTIFYICONDATAW 结构，拆到两个包里必然重复定义 Win32 结构，
+// 一旦字段错位就是「图标不显示 / 通知不弹出」这类难查的问题。
 // 通知属于呈现，本就是 cmd 层的职责（AGENTS §3：cmd/** 允许原生 UI）。
 
-var procShellNotifyIcon = syscall.NewLazyDLL("shell32.dll").NewProc("Shell_NotifyIconW")
+var (
+	shell32               = syscall.NewLazyDLL("shell32.dll")
+	procShellNotifyIcon   = shell32.NewProc("Shell_NotifyIconW")
+	procSetAppUserModelID = shell32.NewProc("SetCurrentProcessExplicitAppUserModelID")
+)
+
+// AppUserModelID 是 Windows 系统通知的进程显式标识（docs/002 §0；D4 已定稿）。
+const AppUserModelID = "Kemaolife.Agent"
+
+// SetAppUserModelID 给进程设置显式 AppUserModelID。
+//
+// D4 已定稿为「系统通知为主」：进程级标识让 Shell 把 NIF_INFO 识别为
+// Kemaolife.Agent 发出的系统通知；具体样式由 Windows 版本决定，不承诺
+// WinRT Toast 或操作中心归档（那需要 COM 激活器与快捷方式，另行决策）。
+// 必须在创建窗口 / 托盘图标之前调用，进程生命周期内只能设置一次。
+// 失败不在这里阻断启动，由调用方决定降级策略。
+func SetAppUserModelID() error {
+	p, err := syscall.UTF16PtrFromString(AppUserModelID)
+	if err != nil {
+		return fmt.Errorf("系统通知标识编码失败: %w", err)
+	}
+	if err := procSetAppUserModelID.Find(); err != nil {
+		return fmt.Errorf("当前系统不支持系统通知标识: %w", err)
+	}
+	r, _, callErr := procSetAppUserModelID.Call(uintptr(unsafe.Pointer(p)))
+	runtime.KeepAlive(p)
+	if r != 0 {
+		if callErr != nil {
+			return fmt.Errorf("设置系统通知标识失败 (HRESULT=0x%08X): %w", uint32(r), callErr)
+		}
+		return fmt.Errorf("设置系统通知标识失败 (HRESULT=0x%08X)", uint32(r))
+	}
+	return nil
+}
 
 const (
 	nimAdd    = 0
@@ -113,11 +147,12 @@ func (t *Tray) SetTip(tip string) error {
 	return nil
 }
 
-// Notify 弹一条气泡通知（满足 core.Notifier）。
+// Notify 弹一条系统通知（满足 core.Notifier）。
 //
-// 用气泡而不是 WinRT Toast：Toast 需要注册 AUMID 与开始菜单快捷方式，
-// 否则在部分系统上静默不显示；气泡零注册，托盘程序本来就有图标。
-// TODO(D4): 若最终定为系统 Toast，只换本方法的实现，调用点不变。
+// D4 已定稿为「系统通知为主」：进程启动时设置显式 AppUserModelID
+// （见 SetAppUserModelID），Shell_NotifyIcon 的 NIF_INFO 由 Windows 以
+// 系统通知形式呈现；托盘状态与菜单仍作为辅助展示。具体样式随 Windows
+// 版本变化，不承诺 WinRT Toast 或操作中心归档；也不引入 COM / 快捷方式。
 func (t *Tray) Notify(title, body string) error {
 	if !t.registered {
 		return fmt.Errorf("托盘图标未注册，无法通知")
@@ -151,7 +186,7 @@ func (t *Tray) Remove() {
 	t.registered = false
 }
 
-// copyUTF16 写入定长 UTF-16 数组并保证 NUL 结尾，超长按 rune 截断。
+// copyUTF16 写入定长 UTF-16 数组并保证 NUL 结尾，超长按 UTF-16 码元截断。
 func copyUTF16(dst []uint16, s string) {
 	if len(dst) == 0 {
 		return
@@ -189,23 +224,15 @@ type TipSetter struct {
 // NewTipSetter 绑定托盘对象。
 func NewTipSetter(t *Tray) *TipSetter { return &TipSetter{tray: t} }
 
-// Set 更新托盘提示。
+// Set 更新托盘悬浮提示。
 //
-// 只保留很短的一句话：Win11 的托盘悬停提示是大气泡，内容一长就会盖住
-// 刚弹出的右键菜单（实测会挡住「登录校园网 / 下线 / 重登」）。详细信息
-// 已经在菜单前两行里，提示只需要「这是哪个程序」。
+// docs/002 §5.2 要求错误原因在悬浮提示里分行显示，因此保留 FormatStatus
+// 生成的多行文本，不再压成一句话。NOTIFYICONDATAW.szTip 的 128 个 UTF-16
+// 码元上限由 copyUTF16 兜底（按码元截断并保证 NUL 结尾），既不会把中文
+// 截成半个字，也不会把错误行整体吞掉。
 func (t *TipSetter) Set(text string) {
 	if t == nil || t.tray == nil {
 		return
 	}
-	_ = t.tray.SetTip(clipRunes(text, 60))
-}
-
-// clipRunes 按 rune 截断，避免把多字节字符切成乱码。
-func clipRunes(s string, max int) string {
-	r := []rune(s)
-	if len(r) <= max {
-		return s
-	}
-	return string(r[:max])
+	_ = t.tray.SetTip(text)
 }

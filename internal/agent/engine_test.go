@@ -32,7 +32,8 @@ type fakeCampus struct {
 	reloginCalls int
 	ensureCalls  int
 
-	loginErr error
+	loginErr  error
+	statusErr error
 }
 
 func newFakeCampus(state model.CampusState) *fakeCampus {
@@ -42,6 +43,9 @@ func newFakeCampus(state model.CampusState) *fakeCampus {
 func (f *fakeCampus) Status(context.Context) (model.CampusStatus, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
+	if f.statusErr != nil {
+		return model.CampusStatus{}, f.statusErr
+	}
 	return model.CampusStatus{State: f.state}, nil
 }
 
@@ -339,6 +343,13 @@ func TestParseSettingsResultClampsPollInterval(t *testing.T) {
 		t.Errorf("CampusProbeSecs = %d, want %d（钳制到下限）",
 			next.CampusProbeSecs, agent.CampusProbeFloorSeconds)
 	}
+	if !agent.SettingsWereClamped(res, next) {
+		t.Error("低于下限应可生成设置窗口提示")
+	}
+	hint := agent.ClampedSettingsHint(next)
+	if !strings.Contains(hint, "600") || !strings.Contains(hint, "30") {
+		t.Errorf("钳制提示应含生效值: %q", hint)
+	}
 }
 
 // 探测间隔：默认 120s，钳制下限 30s，自定义值原样保留。
@@ -500,6 +511,12 @@ func TestSettingsStoreRoundTrip(t *testing.T) {
 	if back.CampusPassword != "<密码>" {
 		t.Error("校园网密码未正确保存")
 	}
+	if agent.SettingsWereClamped(agent.SettingsResult{
+		PollSeconds:     "14400",
+		CampusProbeSecs: "120",
+	}, back) {
+		t.Error("合法间隔不应被误判为钳制")
+	}
 }
 
 // 手动动作会同步刷新判态，用户点完按钮立刻看到结果。
@@ -535,6 +552,48 @@ func TestDoCampusRecordsError(t *testing.T) {
 	}
 	if st := eng.Status(); st.LastError == "" {
 		t.Error("错误应记录到状态")
+	}
+}
+
+// 网络探测失败归 offline：不写 LastError、不触发认证动作（docs/002 §5.2）。
+func TestProbeCampusNetworkFailureIsOffline(t *testing.T) {
+	campus := newFakeCampus(model.CampusOnline)
+	campus.statusErr = model.NewError(model.CodeNetworkDown, "探测超时")
+	srv := electricityServer(t, 50, 1)
+	eng, _, _ := buildEngine(t, campus, defaultSettings(), srv)
+
+	state, err := eng.ProbeCampus(context.Background())
+	if err != nil {
+		t.Fatalf("网络探测失败应归一为 offline: %v", err)
+	}
+	if state != model.CampusOffline {
+		t.Errorf("state = %q, want offline", state)
+	}
+	st := eng.Status()
+	if st.Campus != model.CampusOffline || st.LastError != "" {
+		t.Errorf("offline 不应写错误提示: state=%q LastError=%q", st.Campus, st.LastError)
+	}
+	login, logout, relogin, ensure := campus.counts()
+	if login != 0 || logout != 0 || relogin != 0 || ensure != 0 {
+		t.Errorf("offline 不得触发认证动作: login=%d logout=%d relogin=%d ensure=%d",
+			login, logout, relogin, ensure)
+	}
+}
+
+// 内部故障仍保留提示，供托盘悬浮提示显示。
+func TestProbeCampusInternalFailureKeepsError(t *testing.T) {
+	campus := newFakeCampus(model.CampusOnline)
+	// 用非 4001 的领域错误模拟内部故障：CodeOf 会把普通 error 统一归 4001，
+	// 那样就会被 ProbeCampus 按「网络探测失败」正常归一为 offline。
+	campus.statusErr = model.NewError(model.CodeInvalidArgument, "内部判态故障")
+	srv := electricityServer(t, 50, 1)
+	eng, _, _ := buildEngine(t, campus, defaultSettings(), srv)
+
+	if _, err := eng.ProbeCampus(context.Background()); err == nil {
+		t.Fatal("内部故障应返回错误")
+	}
+	if st := eng.Status(); st.LastError == "" {
+		t.Error("内部故障应记录 LastError")
 	}
 }
 

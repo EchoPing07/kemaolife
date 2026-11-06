@@ -2,7 +2,10 @@ package agent
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
+	"strconv"
+	"strings"
 	"time"
 
 	"github.com/EchoPing07/kemaolife/internal/core"
@@ -12,6 +15,10 @@ import (
 
 // ConfigStoreKey 是 Windows 侧配置在 KVStore 中的键。
 const ConfigStoreKey = "agent/config"
+
+// ErrSettingsClamped 表示设置已保存并生效，但有间隔被下限钳制。
+// 它不是失败：UI 要显示提示，不能按「保存失败」把窗口留在错误态。
+var ErrSettingsClamped = errors.New("设置间隔已钳制")
 
 // Settings 是 Windows 端的全部可配置项（docs/002 §5.2）。
 //
@@ -166,6 +173,27 @@ func (s *SettingsStore) Load() (Settings, error) {
 	}
 	cfg.normalize()
 	return cfg, nil
+}
+
+// SettingsWereClamped 判断用户填的间隔是否被硬下限改写。
+//
+// ParseSettingsResult 已把 next 钳成合法值，SettingsStore.Save 再 normalize
+// 时已看不到越界输入，所以钳制提示必须拿「表单原文 vs 生效值」比较；
+// 否则低于下限会被静默改写（AGENTS §5.5 要求「钳制并提示」）。
+func SettingsWereClamped(res SettingsResult, next Settings) bool {
+	poll, err := strconv.Atoi(strings.TrimSpace(res.PollSeconds))
+	if err == nil && poll > 0 && poll < int(next.PollInterval()/time.Second) {
+		return true
+	}
+	probe, err := strconv.Atoi(strings.TrimSpace(res.CampusProbeSecs))
+	return err == nil && probe > 0 && probe < int(next.CampusProbeInterval()/time.Second)
+}
+
+// ClampedSettingsHint 是成功保存后在设置窗口底部展示的钳制说明。
+func ClampedSettingsHint(s Settings) string {
+	return fmt.Sprintf("低于下限，已按电费 %d 秒 / 探测 %d 秒执行",
+		int(s.PollInterval()/time.Second),
+		int(s.CampusProbeInterval()/time.Second))
 }
 
 // Save 规范化后写盘；返回是否因下限被钳制。

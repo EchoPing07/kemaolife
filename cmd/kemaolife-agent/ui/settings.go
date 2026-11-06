@@ -2,6 +2,7 @@ package ui
 
 import (
 	"strconv"
+	"strings"
 	"sync"
 
 	"github.com/EchoPing07/kemaolife/internal/agent"
@@ -49,10 +50,14 @@ var (
 	settingsWnd  uintptr
 	settingsCtl  map[int]uintptr
 	settingsSave func(agent.SettingsResult) error
+	// settingsHint 把保存结果映射为「提示文案 / 是否留在窗口」。
+	// nil 时保持原行为（成功即关闭窗口）。
+	settingsHint func(error) (string, bool)
 )
 
 // OpenSettings 显示设置窗口（单实例：再次打开只把已有窗口提到前台）。
-func OpenSettings(owner, icon uintptr, form agent.SettingsForm, onSave func(agent.SettingsResult) error) {
+func OpenSettings(owner, icon uintptr, form agent.SettingsForm,
+	onSave func(agent.SettingsResult) error, onResult func(error) (string, bool)) {
 	// 锁只在读写共享状态时持有，绝不跨越 Win32 调用。
 	//
 	// 为什么：创建控件会同步派发 WM_COMMAND 到窗口过程，那里会再调
@@ -61,6 +66,7 @@ func OpenSettings(owner, icon uintptr, form agent.SettingsForm, onSave func(agen
 	settingsMu.Lock()
 	existing := settingsWnd
 	settingsSave = onSave
+	settingsHint = onResult
 	if existing != 0 {
 		ctl := settingsCtl
 		settingsMu.Unlock()
@@ -299,6 +305,7 @@ func handleSettingsCommand(id int) bool {
 	settingsMu.Lock()
 	hint := settingsCtl[IDHint]
 	saveFn := settingsSave
+	result := settingsHint
 	ctl := settingsCtl
 	win := settingsWnd
 	settingsMu.Unlock()
@@ -311,14 +318,27 @@ func handleSettingsCommand(id int) bool {
 			}
 			return true
 		}
+		var text string
+		var stay bool
 		if err := saveFn(collectSettings(ctl)); err != nil {
-			// 校验失败留在窗口里，让用户改，不要关窗丢掉已填内容。
-			if hint != 0 {
-				SetText(hint, "保存失败："+err.Error())
+			if result != nil {
+				text, stay = result(err)
+				if text == "" {
+					text = "保存失败：" + err.Error()
+				}
+			} else {
+				text, stay = "保存失败："+err.Error(), true
 			}
-			return true
+		} else if result != nil {
+			text, stay = result(nil)
 		}
-		if win != 0 {
+
+		if hint != 0 {
+			SetText(hint, strings.TrimSpace(text))
+		}
+		// 校验失败 / 钳制提示都留在窗口：前者让用户改，后者让用户看到
+		// 实际生效值；只有完全成功且没有提示才关闭。
+		if !stay && win != 0 {
 			Show(win, false)
 		}
 		return true

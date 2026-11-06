@@ -12,6 +12,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"runtime"
@@ -62,13 +63,20 @@ func main() {
 	defer runtime.UnlockOSThread()
 
 	ui.EnablePerMonitorDPI()
-
 	release, ok := ui.AcquireSingleInstance()
 	if !ok {
 		ui.MessageBox(agent.AppName, "科贸生活已在运行，请查看系统托盘。", ui.MB_OK|ui.MB_ICONINFO)
 		return
 	}
 	defer release()
+
+	// D4 已定稿为系统通知：进程级 AUMID 必须在托盘图标创建前设置一次，
+	// 否则系统通知不会归到 Kemaolife.Agent。具体呈现样式随 Windows 版本变化，
+	// 不承诺 WinRT Toast 或操作中心归档；失败只降级提示，不阻断轮询。
+	if err := ui.SetAppUserModelID(); err != nil {
+		ui.MessageBox(agent.AppName, "系统通知初始化失败，将使用降级提示："+err.Error(),
+			ui.MB_OK|ui.MB_ICONWARNING)
+	}
 
 	if err := run(); err != nil {
 		ui.MessageBox(agent.AppName, "启动失败："+err.Error(), ui.MB_OK|ui.MB_ICONERROR)
@@ -207,8 +215,7 @@ func (a *agentApp) applySettings(res agent.SettingsResult) error {
 		return err
 	}
 
-	clamped, err := a.store.Save(next)
-	if err != nil {
+	if _, err := a.store.Save(next); err != nil {
 		return err
 	}
 
@@ -225,9 +232,8 @@ func (a *agentApp) applySettings(res agent.SettingsResult) error {
 	// 模式切换会改变按钮组，立即重建一次菜单状态。
 	ui.PostTrigger(a.wnd, ui.WM_QUERY_DONE)
 
-	if clamped {
-		return fmt.Errorf("轮询间隔低于 600 秒下限，已按 %d 秒执行",
-			int(next.PollInterval()/time.Second))
+	if agent.SettingsWereClamped(res, next) {
+		return agent.ErrSettingsClamped
 	}
 	return nil
 }
@@ -235,7 +241,19 @@ func (a *agentApp) applySettings(res agent.SettingsResult) error {
 // openSettings 打开设置窗口（托盘左键或菜单项）。
 func (a *agentApp) openSettings() {
 	icon, _ := ui.AppIcon()
-	ui.OpenSettings(a.wnd, icon, agent.ToSettingsForm(a.currentSettings()), a.applySettings)
+	ui.OpenSettings(a.wnd, icon, agent.ToSettingsForm(a.currentSettings()), a.applySettings, a.settingsHint)
+}
+
+// settingsHint 把「钳制提示」与「保存失败」分开：前者是成功后的说明，
+// 后者才要留在窗口让用户改。
+func (a *agentApp) settingsHint(err error) (string, bool) {
+	if err == nil {
+		return "", false
+	}
+	if errors.Is(err, agent.ErrSettingsClamped) {
+		return agent.ClampedSettingsHint(a.currentSettings()), true
+	}
+	return "", true
 }
 
 // buildMenu 按当前状态与模式生成托盘右键菜单。

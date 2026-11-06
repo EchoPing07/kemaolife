@@ -18,6 +18,11 @@ import (
 	"github.com/EchoPing07/kemaolife/internal/core/model"
 )
 
+// TODO(D10): 待定 —— Windows 原生 UI 技术栈仍为待确认项；当前按
+// docs/001 §6.4 的描述性基线用标准库 syscall 直调 Win32，不代表 D10 定稿。
+// TODO(D11): 待定 —— 联网探测目标仍为待确认项；当前按 api-docs/003 的
+// 固定探测地址判 302，不按电费接口可达性触发自动登录。
+
 // Portal 端点（api-docs/003 §1）。属学校协议事实，允许入仓。
 const (
 	portalBase     = "https://10.0.128.3"
@@ -168,6 +173,7 @@ func (p *PortalNetwork) Relogin(ctx context.Context) error {
 
 // EnsureCampusNetwork 是自动模式的前置：已在线不动，未认证就登录，
 // 不在校园网就返回错误但不重试（由调用方的指数退避接管）。
+// TODO(D11): 待定 —— 当前只按固定探测地址判态，未以电费接口可达性为准。
 func (p *PortalNetwork) EnsureCampusNetwork(ctx context.Context) error {
 	probe, err := p.probeOnce(ctx)
 	if err != nil || probe.State == model.CampusOffline {
