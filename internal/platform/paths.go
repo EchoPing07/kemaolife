@@ -11,6 +11,7 @@ import (
 //	配置  ~/.config/kemaolife/config.json  （0600）
 //	缓存  ~/.cache/kemaolife/              （遵循 XDG_CACHE_HOME）
 //
+// CLI（linux / darwin）沿用上面的 ~/.config / ~/.cache 布局，不按 GOOS 分叉；
 // 只接受显式传入的 home / 环境变量值，不在本函数内判断 GOOS。
 
 // DefaultConfigDir 返回配置目录（XDG_CONFIG_HOME 优先）。

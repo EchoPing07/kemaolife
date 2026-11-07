@@ -22,7 +22,7 @@ var ErrSettingsClamped = errors.New("设置间隔已钳制")
 
 // Settings 是 Windows 端的全部可配置项（docs/002 §5.2）。
 //
-// 与 Linux 的 model.Config 分开：Windows 不需要教务凭据（不做课表），
+// 与 CLI 版的 model.Config 分开：Windows 不需要教务凭据（不做课表），
 // 但需要校园网凭据（独立字段，D9 已定稿）与轮询 / 告警参数。
 // 落盘前由 DPAPI 加密（P5）。
 type Settings struct {

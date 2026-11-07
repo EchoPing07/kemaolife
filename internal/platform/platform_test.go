@@ -1,12 +1,108 @@
 package platform
 
 import (
+	"bufio"
+	"bytes"
+	"errors"
 	"os"
 	"path/filepath"
 	"runtime"
 	"strings"
 	"testing"
 )
+
+// 注入桩而不是真实 tty：关闭回显失败时不能静默读口令，但也不能泄露口令内容。
+// 这些用例不调 ioctl、不碰终端（AGENTS §7）。
+func TestReadSecretEchoOffFailureWarnsAndReads(t *testing.T) {
+	oldFn, oldSink := disableEchoFn, echoWarningSink
+	t.Cleanup(func() { disableEchoFn, echoWarningSink = oldFn, oldSink })
+
+	var warned bytes.Buffer
+	echoWarningSink = &warned
+	disableEchoFn = func(uintptr) (func(), error) {
+		return nil, errors.New("ioctl 不可用")
+	}
+
+	got, err := ReadSecret(strings.NewReader("<密码>\n"), true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got != "<密码>" {
+		t.Errorf("ReadSecret = %q", got)
+	}
+	if !strings.Contains(warned.String(), "可能被看到") {
+		t.Errorf("缺少明确警告: %q", warned.String())
+	}
+	if strings.Contains(warned.String(), "<密码>") || strings.Contains(warned.String(), "ioctl 不可用") {
+		t.Errorf("警告不得含口令或上游细节: %q", warned.String())
+	}
+}
+
+func TestReadSecretEchoOffSuccessRestores(t *testing.T) {
+	oldFn, oldSink := disableEchoFn, echoWarningSink
+	t.Cleanup(func() { disableEchoFn, echoWarningSink = oldFn, oldSink })
+
+	var warned bytes.Buffer
+	restored := false
+	echoWarningSink = &warned
+	disableEchoFn = func(uintptr) (func(), error) {
+		return func() { restored = true }, nil
+	}
+
+	got, err := ReadSecret(strings.NewReader("<密码>\n"), true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got != "<密码>" || !restored {
+		t.Errorf("secret = %q, restored = %v", got, restored)
+	}
+	if warned.Len() != 0 {
+		t.Errorf("成功时不应警告: %q", warned.String())
+	}
+}
+
+// agent 的管道输入路径：echoOff=false 时完全不碰 disableEcho，也不写警告。
+func TestReadSecretPipeInputNeverCallsDisableEcho(t *testing.T) {
+	oldFn, oldSink := disableEchoFn, echoWarningSink
+	t.Cleanup(func() { disableEchoFn, echoWarningSink = oldFn, oldSink })
+
+	var warned bytes.Buffer
+	echoWarningSink = &warned
+	disableEchoFn = func(uintptr) (func(), error) {
+		t.Fatal("echoOff=false 不应调用 disableEcho")
+		return nil, nil
+	}
+
+	got, err := ReadSecret(strings.NewReader("<密码>\r\n"), false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got != "<密码>" || warned.Len() != 0 {
+		t.Errorf("secret = %q, warn = %q", got, warned.String())
+	}
+}
+
+// 共用 bufio.Reader 的既有约束不能被注入改动破坏。
+func TestReadSecretSharedReader(t *testing.T) {
+	oldFn, oldSink := disableEchoFn, echoWarningSink
+	t.Cleanup(func() { disableEchoFn, echoWarningSink = oldFn, oldSink })
+
+	echoWarningSink = &bytes.Buffer{}
+	disableEchoFn = func(uintptr) (func(), error) { return func() {}, nil }
+
+	br := bufio.NewReader(strings.NewReader("<学号>\n<密码>\n"))
+	first, err := br.ReadString('\n')
+	if err != nil {
+		t.Fatal(err)
+	}
+	second, err := ReadSecret(br, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.TrimRight(first, "\r\n") != "<学号>" || second != "<密码>" {
+		t.Errorf("first = %q, second = %q", first, second)
+	}
+}
 
 func TestFileStoreRoundTrip(t *testing.T) {
 	dir := t.TempDir()

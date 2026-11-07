@@ -67,7 +67,7 @@ jobs:
             exit 1
           fi
 
-          # Android versionCode 由 tag 派生：major*10000 + minor*100 + patch（v0.3.0 → 300）。
+          # Android versionCode 由 tag 派生：major*10000 + minor*100 + patch（v0.4.0 → 400）。
           # 必须跨版本严格递增，否则 Android 拒绝覆盖安装。
           IFS='.' read -r MAJOR MINOR PATCH <<< "$VERSION"
           VERSION_CODE=$(( 10#$MAJOR * 10000 + 10#$MINOR * 100 + 10#$PATCH ))
@@ -133,7 +133,10 @@ jobs:
           mkdir -p dist
 
           cat > dist/INSTALL.txt <<'EOF'
-          kemaolife —— Linux CLI 安装说明
+          kemaolife —— CLI 安装说明（Linux 预编译包）
+
+          本包是 Linux 预编译产物；CLI 另支持 macOS（darwin amd64 / arm64）源码自行构建，
+          本版 Release 不含 macOS 预编译包。桌面端仍仅 Windows 托盘，移动端仍仅 Android。
 
           包内文件：
             kemaolife     静态二进制（CGO_ENABLED=0），不依赖系统 libc 之外的运行时
@@ -152,11 +155,24 @@ jobs:
           kemaolife --json timetable sync 生成一次快照；日常查询每次自动刷新，失败时
           回落旧快照并标 stale:true。电费数据约 1 天延迟，输出中的「数据截至」不是实时值。
 
+          关于 macOS：本版 Release 不含 macOS 预编译包，macOS 用户需在本地用 Go 1.24+
+          源码构建：在 Mac 上执行 go build -o kemaolife ./cmd/kemaolife，或从源码交叉编译
+          GOOS=darwin GOARCH=amd64|arm64 go build -o kemaolife ./cmd/kemaolife。macOS CLI 未经
+          过实机测试：darwin amd64 / arm64 只完成交叉编译、静态审查与自动化单测，真实终端回显
+          控制、Gatekeeper、根证书链、本地时区与 arm64 首次执行均未实机确认，请按试验性支持使用。
+          凭据与缓存沿用 ~/.config/kemaolife/config.json（目录 0700 /
+          文件 0600 / 原子写，XDG 环境变量优先）与 ~/.cache/kemaolife/；config init 默认关闭
+          回显，用 BSD termios（TIOCGETA / TIOCSETA），不引 Keychain 或 golang.org/x/term；
+          终端不支持关闭回显时会先在 stderr 明确警告「输入可能被看到」再继续读取；命令与
+          输出、退出码与 Linux 完全一致。若从网上获取源码包后自构建产物带 com.apple.quarantine、被
+          Gatekeeper 拦截，可对自构建产物执行 xattr -d com.apple.quarantine <path> 清除；
+          该处理方式同样未经过实机验证。windows CLI 为后续计划，不在本期。
+
           agent skill 单独发布为 kemaolife-skill_<版本>.zip，解压后把 kemaolife/ 放进
           agent 的 skills 目录；skill 不含二进制，也不含凭据。skill 存放位置（D2）尚未
           定稿，由使用者决定。
 
-          本工具只查本人数据；Linux 端不提供校园网状态查询，也不存校园网凭据。请勿在
+          本工具只查本人数据；CLI 不提供校园网状态查询，也不存校园网凭据。请勿在
           Issue / 交流群提交学号、密码、Cookie 或课表快照。
           EOF
 
@@ -298,7 +314,8 @@ jobs:
 
           skill 存放位置（D2）仍是待确认项，由使用者自行决定，本包不指定安装路径。
           二进制与校验和见同版 Release 的 kemaolife_<版本>_linux_<架构>.tar.gz
-          与 SHA256SUMS。
+          与 SHA256SUMS；该包是 Linux 预编译产物，macOS 需源码自行构建（同版 Release
+          不提供 macOS 二进制）。
           EOF
 
           "$PY" - <<'PY'
@@ -462,15 +479,15 @@ jobs:
           cat > dist/RELEASE_NOTES.md <<'EOF'
           ## kemaolife __TAG__
 
-          三个原生端共用一份 Go `core` 的校园工具：课表查询、电费余额与每日用量、校园网认证。本版由 tag 自动构建四端产物：Linux CLI 静态二进制、Windows 托盘便携包、Android 按 ABI 拆分的已签名 APK，以及独立的 agent skill。源码版本 `internal/version.Version` = `__VERSION__`；Android `versionCode` = `__VERSION_CODE__`；构建提交 `__SHORT_SHA__`（完整提交号见 `kemaolife --version --json`）。
+          三端（CLI / Windows 托盘 / Android App）共用一份 Go `core` 的校园工具：课表查询、电费余额与每日用量、校园网认证。本版产物仍是四类：Linux CLI 静态二进制（三架构）、Windows 托盘便携包（两架构）、Android 四 ABI 已签名 APK、独立的 agent skill，另附 `SHA256SUMS`。CLI 另支持 macOS（darwin amd64 / arm64）源码自行构建，本版不提供 macOS 预编译包；windows CLI 为后续计划；桌面端仅 Windows、移动端仅 Android。源码版本 `internal/version.Version` = `__VERSION__`；Android `versionCode` = `__VERSION_CODE__`；构建提交 `__SHORT_SHA__`（完整提交号见 `kemaolife --version --json`）。
 
           ### 产物
 
           | 端 | 文件 | 适用 |
           |---|---|---|
-          | Linux | `__ASSET_AMD64__` | x86_64 |
-          | Linux | `__ASSET_ARM64__` | aarch64 / arm64 |
-          | Linux | `__ASSET_ARMV7__` | 32 位 ARMv7（`GOARCH=arm GOARM=7`） |
+          | CLI（Linux） | `__ASSET_AMD64__` | x86_64 |
+          | CLI（Linux） | `__ASSET_ARM64__` | aarch64 / arm64 |
+          | CLI（Linux） | `__ASSET_ARMV7__` | 32 位 ARMv7（`GOARCH=arm GOARM=7`） |
           | Windows | `__ASSET_WIN_AMD64__` | 64 位 x86（x64）托盘程序 |
           | Windows | `__ASSET_WIN_ARM64__` | Windows on ARM（arm64）托盘程序 |
           | Android | `__ASSET_ANDROID_ARMV7A__` | 32 位 ARM（`armeabi-v7a`） |
@@ -480,11 +497,13 @@ jobs:
           | agent skill | `__ASSET_SKILL__` | 单独安装，依赖同机 `kemaolife` 二进制 |
           | — | `SHA256SUMS` | 以上十个包的校验和 |
 
-          Linux 三个包内含 `kemaolife`（`CGO_ENABLED=0` 静态二进制）、`LICENSE` 与 `INSTALL.txt`；Windows 两个包内含 `kemaolife-agent.exe`（GUI 子系统，无控制台窗口）、`install.bat` / `install.ps1` / `uninstall.bat` / `uninstall.ps1`、`LICENSE` 与 `INSTALL.txt`；Android 四个包是按 ABI 拆分的已签名 release APK，使用 v2 + v3 签名；skill 包内含 `kemaolife/SKILL.md` 与 `kemaolife/README.txt`。
+          以上十个包不含 macOS 产物；macOS 只能用 Go 1.24+ 源码自行构建。**macOS CLI 未经过实机测试**：darwin amd64 / arm64 仅交叉编译与静态审查通过，未在真实 Mac 上运行，按试验性支持使用。
+
+          Linux 三个 CLI 预编译包内含 `kemaolife`（`CGO_ENABLED=0` 静态二进制）、`LICENSE` 与 `INSTALL.txt`；Windows 两个包内含 `kemaolife-agent.exe`（GUI 子系统，无控制台窗口）、`install.bat` / `install.ps1` / `uninstall.bat` / `uninstall.ps1`、`LICENSE` 与 `INSTALL.txt`；Android 四个包是按 ABI 拆分的已签名 release APK，使用 v2 + v3 签名；skill 包内含 `kemaolife/SKILL.md` 与 `kemaolife/README.txt`。
 
           下载后先核对完整性：`sha256sum -c SHA256SUMS --ignore-missing`（Windows 可用 `certutil -hashfile <文件> SHA256` 比对）。
 
-          ### 安装（Linux，amd64 示例）
+          ### 安装（CLI · Linux 预编译包，amd64 示例）
 
           ```bash
           sha256sum -c SHA256SUMS --ignore-missing
@@ -496,6 +515,16 @@ jobs:
           ```
 
           arm64 / armv7 换成对应压缩包即可。`config init` 交互录入学号与教务密码，配置文件权限 `0600`；学校代码内置默认值可用 `config set customercode <学校代码>` 覆盖。
+
+          ### 安装（CLI · macOS 源码构建）
+
+          本版不提供 macOS 预编译包，需用 Go 1.24+ 源码自行构建：
+
+          ```bash
+          go build -o kemaolife ./cmd/kemaolife
+          ```
+
+          **macOS CLI 未经过实机测试**：darwin amd64 / arm64 只完成交叉编译与静态审查，未在真实 Mac 上运行；真实终端回显控制、Gatekeeper 拦截与 `xattr -d` 处理、根证书链、本地时区、arm64 首次执行均未实机确认，请按试验性支持使用。配置路径与权限沿用 `~/.config/kemaolife/config.json`（目录 `0700` / 文件 `0600`、原子写，XDG 环境变量优先）与 `~/.cache/kemaolife/`；命令、输出与退出码和 Linux 一致。若从网上获取源码包后自构建产物因 `com.apple.quarantine` 被 Gatekeeper 拦截，可对自构建产物执行 `xattr -d com.apple.quarantine <path>`；该处理方式同样未经过实机验证。
 
           ### 安装（Windows）
 
@@ -542,7 +571,7 @@ jobs:
 
           - 电费数据约 1 天延迟，输出中的「数据截至」是采集时刻，不是实时值。
           - 课表查询每次先联网刷新，失败回落旧快照并标 `stale:true` + `syncedAt`。
-          - Linux 端不提供校园网状态查询，也不存校园网凭据；Android 校园网动作全手动、无后台。
+          - CLI 不提供校园网状态查询，也不存校园网凭据；Android 校园网动作全手动、无后台。
           - 只查本人数据；请勿在 Issue / 交流群提交学号、密码、Cookie 或课表快照。
 
           ### 变更清单

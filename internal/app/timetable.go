@@ -18,7 +18,7 @@ type SyncResult struct {
 // SyncTimetable 登录并刷新快照（1 登录 + 2 请求）。
 //
 // 会话失效时内部自动重登一次（docs/002 §1.3「同步时会话失效」）；
-// 仍失败返回 3002。这是 Linux 唯一会联网的课表路径。
+// 仍失败返回 3002。这是 CLI 版唯一会联网的课表路径。
 func SyncTimetable(ctx context.Context, d Deps, cfg model.Config) (SyncResult, error) {
 	// 先判凭据，再检查端口：缺凭据是用户能自己修的问题，不该报成内部配置错误。
 	if cfg.StudentID == "" || cfg.EduPassword == "" {

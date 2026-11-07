@@ -1,6 +1,6 @@
 # 贡献指南
 
-谢谢参与。M0（契约 + core）、M0.5（Android 复用 spike）、M1（Linux CLI + skill）、M2（Windows 托盘常驻）与 M3（Android App）已实现；M4 仅剩 D8 / D11 结论复核。贡献以三端改进、文档契约审阅、D 项讨论与 Issue 为主，按本文规范提交代码。
+谢谢参与。M0（契约 + core）、M0.5（Android 复用 spike）、M1（CLI + skill，linux / darwin）、M2（Windows 托盘常驻）与 M3（Android App）已实现；M4 仅剩 D8 / D11 结论复核。贡献以三端改进、文档契约审阅、D 项讨论与 Issue 为主，按本文规范提交代码。
 
 参与前请先阅读 [README.md](README.md) 与 [docs/000-需求与产品定位.md](docs/000-需求与产品定位.md)。需求与契约以 `docs/` 为准，协议事实只以 `api-docs/` 为准；两者冲突时**不要自行纠偏**，开 Issue 说明具体条目。
 
@@ -48,7 +48,7 @@
 
 ### 2.4 标签
 
-维护者按端与类型打标签：`linux` / `windows` / `android`、`core` / `app` / `platform`、`docs` / `api-docs` / `protocol`、`bug` / `enhancement` / `question`、`contract`、`D<n>`、`good first issue`。Issue 表单会自动带上 `bug` / `docs` / `enhancement` / `question` 四个默认标签，维护者需在仓库 **Issues → Labels** 中确认它们存在（新建仓库通常已自带）；其余标签由维护者按需创建。贡献者可建议标签，不必自行设置。
+维护者按端与类型打标签：`linux` / `darwin` / `windows` / `android`（CLI 平台标签为 `linux` / `darwin`）、`core` / `app` / `platform`、`docs` / `api-docs` / `protocol`、`bug` / `enhancement` / `question`、`contract`、`D<n>`、`good first issue`。Issue 表单会自动带上 `bug` / `docs` / `enhancement` / `question` 四个默认标签，维护者需在仓库 **Issues → Labels** 中确认它们存在（新建仓库通常已自带）；其余标签由维护者按需创建。贡献者可建议标签，不必自行设置。
 
 ### 2.5 不在本项目范围内
 
@@ -164,8 +164,12 @@ printf '%s\n' "$SENSITIVE_VALUES" | while IFS= read -r value; do
   fi
 done
 
-# 桌面两端可交叉编译
+# CLI 三平台（linux / darwin / windows 后续）与桌面/移动端交叉编译
 GOOS=linux   GOARCH=amd64 go build ./internal/... ./cmd/kemaolife/...
+GOOS=darwin  GOARCH=amd64 go build ./internal/... ./cmd/kemaolife/...
+GOOS=darwin  GOARCH=arm64 go build ./internal/... ./cmd/kemaolife/...
+GOOS=darwin  GOARCH=amd64 go vet ./cmd/kemaolife/... ./internal/platform/...
+GOOS=darwin  GOARCH=arm64 go vet ./cmd/kemaolife/... ./internal/platform/...
 GOOS=windows GOARCH=amd64 go build ./internal/...
 GOOS=windows GOARCH=arm64 go build ./internal/...
 # 托盘端必须是 GUI 子系统：console 子系统会挂一个控制台窗口（启动会 FreeConsole 摘掉，但不符合 docs/002 §5.2 形态）
@@ -173,7 +177,7 @@ GOOS=windows GOARCH=amd64 go build -ldflags "-H=windowsgui" -o kemaolife-agent.e
 GOOS=android GOARCH=arm64 go build ./internal/... ./cmd/kemaolife-mobile/
 ```
 
-CI 还校验托盘 PE 的 GUI 子系统（Subsystem=2）与 `packaging/windows/*.ps1` / `*.bat` 的 UTF-8 BOM、CRLF；完整 Android AAR / APK（NDK + Gradle + gomobile）由 `.github/workflows/ci-android.yml` 在 Android 路径变更时构建并跑单元测试；权威清单见 `.github/workflows/ci.yml` 与 `.github/workflows/ci-android.yml`。
+CI 还校验 CLI 的 darwin 两架构（amd64 / arm64）build + vet、托盘 PE 的 GUI 子系统（Subsystem=2）与 `packaging/windows/*.ps1` / `*.bat` 的 UTF-8 BOM、CRLF；完整 Android AAR / APK（NDK + Gradle + gomobile）由 `.github/workflows/ci-android.yml` 在 Android 路径变更时构建并跑单元测试；权威清单见 `.github/workflows/ci.yml` 与 `.github/workflows/ci-android.yml`。
 
 任一项失败先修完再提交，不要用 `//nolint`、注释掉检查或 `--no-verify` 绕过。设计阶段（无 Go 代码）只需执行隐私与占位符相关检查。
 

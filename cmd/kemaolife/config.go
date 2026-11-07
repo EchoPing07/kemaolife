@@ -46,7 +46,7 @@ type configInitSchema struct {
 // configInit 录入学号与教务密码。
 //
 // 密码不经命令行参数（会进 shell history / ps），只从 stdin 读；
-// stdin 是终端时关闭回显。两者都不写日志。
+// stdin 是终端时关闭回显（关不掉时会警告）；两者都不写日志。
 func configInit(opts options, rt *session) error {
 	// 交互提示只在人类使用时打印；管道喂入时不污染 stdout（agent 固定带 --json）。
 	// 判据要同时满足「stdin 是终端」与「stdin 没被替换」，否则测试 / 自动化会看到提示语。
@@ -69,7 +69,8 @@ func configInit(opts options, rt *session) error {
 	}
 
 	if interactive {
-		writePrompt("教务密码（输入不回显）: ")
+		// 不承诺「不回显」：platform.ReadSecret 在关闭回显失败时会明确警告并继续读。
+		writePrompt("教务密码: ")
 	}
 	password, err := platform.ReadSecret(reader, interactive)
 	if interactive {

@@ -9,8 +9,8 @@ import (
 
 // CampusDeps 是校园网用例需要的端口。
 //
-// 单独一组而不是塞进 Deps：Linux 端没有校园网能力（000 §3.1），
-// 让 Deps 常带一个必填的校园网端口，只会逼 Linux 端塞一个只会报错的桩。
+// 单独一组而不是塞进 Deps：CLI 版没有校园网能力（000 §3.1），
+// 让 Deps 常带一个必填的校园网端口，只会逼 CLI 版塞一个只会报错的桩。
 type CampusDeps struct {
 	Clock core.Clock
 	Net   core.CampusNetwork

@@ -243,8 +243,8 @@ func TestConfigInitFromStdin(t *testing.T) {
 	}
 
 	// 配置文件权限必须是 0600（P5）。
-	// Windows 不遵守 POSIX 权限位（OpenFile 的 perm 会被忽略），该断言只在 Linux 上有效；
-	// 真正的交底目标是 Linux，那里由 platform 层的 chmod 强制。
+	// Windows 不遵守 POSIX 权限位（OpenFile 的 perm 会被忽略），该断言只在
+	// 非 Windows 的 POSIX 平台（linux / darwin）有效，那里由 platform 层的 chmod 强制。
 	info, err := os.Stat(env.Data.ConfigPath)
 	if err != nil {
 		t.Fatalf("配置文件不存在: %v", err)

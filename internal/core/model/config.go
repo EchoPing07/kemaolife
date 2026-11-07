@@ -1,9 +1,9 @@
 package model
 
-// Config 是 Linux 端本地配置（docs/002 §1.1「配置分域」）。
+// Config 是 CLI 版本地配置（docs/002 §1.1「配置分域」）。
 //
 // 敏感字段（学号 / 教务密码）落盘必须是 0600 文件（P5）；展示时恒脱敏。
-// 校园网凭据不在此结构里：Linux 不做校园网（R3）。
+// 校园网凭据不在此结构里：CLI 版不做校园网（R3）。
 type Config struct {
 	StudentID   string `json:"studentId"`
 	EduPassword string `json:"eduPassword"`

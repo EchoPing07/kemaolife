@@ -1,5 +1,6 @@
-// Package platform 提供端口适配器。本文件是 Linux（及除 Windows/Android 外）的 KVStore：
-// 目录权限 0700、文件权限 0600、原子写（P5：凭据只能进平台加密存储）。
+// Package platform 提供端口适配器。本文件是非 Windows/Android 的 CLI 平台（linux / darwin）的 KVStore：
+// 目录权限 0700、文件权限 0600、原子写（P5：凭据只能进平台加密存储）；
+// macOS 沿用同一套 POSIX 路径与权限口径，不引 Keychain（AGENTS A5）。
 package platform
 
 import (
