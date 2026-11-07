@@ -159,8 +159,9 @@ jobs:
           源码构建：在 Mac 上执行 go build -o kemaolife ./cmd/kemaolife，或从源码交叉编译
           GOOS=darwin GOARCH=amd64|arm64 go build -o kemaolife ./cmd/kemaolife。darwin amd64 /
           arm64 交叉编译通过，真机行为待验证。凭据与缓存沿用 ~/.config/kemaolife/config.json（目录 0700 /
-          文件 0600 / 原子写，XDG 环境变量优先）与 ~/.cache/kemaolife/；config init 密码不回显
-          用 BSD termios（TIOCGETA / TIOCSETA），不引 Keychain 或 golang.org/x/term；命令与
+          文件 0600 / 原子写，XDG 环境变量优先）与 ~/.cache/kemaolife/；config init 默认关闭
+          回显，用 BSD termios（TIOCGETA / TIOCSETA），不引 Keychain 或 golang.org/x/term；
+          终端不支持关闭回显时会先在 stderr 明确警告「输入可能被看到」再继续读取；命令与
           输出、退出码与 Linux 完全一致。若从网上获取源码包后自构建产物带 com.apple.quarantine、被
           Gatekeeper 拦截，可对自构建产物执行 xattr -d com.apple.quarantine <path> 清除；
           该行为待 macOS 真机验证。windows CLI 为后续计划，不在本期。

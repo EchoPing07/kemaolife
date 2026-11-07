@@ -67,7 +67,7 @@ var commandHelp = map[string]string{
 
   kemaolife config init
       交互录入学号与教务密码，写入 <配置文件>（权限 0600）。
-      密码默认不回显（无法关闭回显时会提示）、不进命令行参数、不写日志。
+      默认关闭回显（无法关闭时 stderr 明确警告「输入可能被看到」后继续读取）、不进命令行参数、不写日志。
 
   kemaolife config set customercode <学校代码>
       覆盖学校代码内置默认值。学校代码是电费接口的必填项。

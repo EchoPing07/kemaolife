@@ -47,7 +47,7 @@
 - [ ] `grep -rn 'runtime.GOOS' internal/core internal/app internal/agent` 无匹配
 - [ ] 已知真实敏感值逐个检索无匹配（检查命令需排除模板自身所在的 `AGENTS.md` / `CONTRIBUTING.md` / `ci.yml`）
 - [ ] `GOOS=linux GOARCH=amd64 go build ./internal/... ./cmd/kemaolife/...`
-- [ ] `GOOS=darwin GOARCH=amd64 go build ./internal/... ./cmd/kemaolife/...`；`GOOS=darwin GOARCH=arm64 go build ./internal/... ./cmd/kemaolife/...`
+- [ ] `GOOS=darwin GOARCH=amd64 go build ./internal/... ./cmd/kemaolife/...`；`GOOS=darwin GOARCH=arm64 go build ./internal/... ./cmd/kemaolife/...`；两架构 `go vet ./cmd/kemaolife/... ./internal/platform/...`（CI 覆盖）
 - [ ] `GOOS=windows GOARCH=amd64 go build ./internal/...`；`GOOS=windows GOARCH=arm64 go build ./internal/...`
 - [ ] `GOOS=windows GOARCH=amd64 go build -ldflags "-H=windowsgui" -o kemaolife-agent.exe ./cmd/kemaolife-agent/`（托盘端必须是 GUI 子系统；console 子系统会挂控制台窗口，启动虽会 `FreeConsole` 摘掉，但不符合 docs/002 §5.2 形态）
 - [ ] `GOOS=android GOARCH=arm64 go build ./internal/... ./cmd/kemaolife-mobile/`
