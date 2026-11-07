@@ -27,7 +27,7 @@ import (
 	buildversion "github.com/EchoPing07/kemaolife/internal/version"
 )
 
-// 版本号取自仓库唯一来源 internal/version.Version，与 Linux 端同源（docs/002 §1.1）。
+// 版本号取自仓库唯一来源 internal/version.Version，与 CLI 版同源（docs/002 §1.1）。
 const version = buildversion.Version
 
 var commit = "unknown"

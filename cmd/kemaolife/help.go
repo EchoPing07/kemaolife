@@ -9,7 +9,7 @@ import (
 
 // 帮助文本是纯文本，不进 JSON 信封（docs/002 §1.1）。
 
-const rootHelp = `kemaolife —— 课表与电费查询（Linux CLI，供 agent 使用）
+const rootHelp = `kemaolife —— 课表与电费查询（CLI，供 agent 使用；支持 linux / darwin）
 
 用法:
   kemaolife <命令> [参数] [全局参数]
@@ -28,7 +28,7 @@ const rootHelp = `kemaolife —— 课表与电费查询（Linux CLI，供 agent
 
 全局参数:
   --json             stdout 只输出 JSON 信封，诊断信息走 stderr
-  --config <path>    指定配置文件（默认 ~/.config/kemaolife/config.json）
+  --config <path>    指定配置文件（linux / darwin 默认 ~/.config/kemaolife/config.json）
   --timeout <dur>    单次网络超时上限（默认 30s，示例 30s / 1m；可放命令后）
   --verbose          诊断信息输出到 stderr（仅错误类别 / 耗时 / 状态码）
   --version          输出版本号（不联网、不读配置）
@@ -67,7 +67,7 @@ var commandHelp = map[string]string{
 
   kemaolife config init
       交互录入学号与教务密码，写入 <配置文件>（权限 0600）。
-      密码不回显、不进命令行参数、不写日志。
+      密码默认不回显（无法关闭回显时会提示）、不进命令行参数、不写日志。
 
   kemaolife config set customercode <学校代码>
       覆盖学校代码内置默认值。学校代码是电费接口的必填项。

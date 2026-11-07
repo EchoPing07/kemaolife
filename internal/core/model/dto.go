@@ -64,7 +64,7 @@ const (
 	CampusOffline CampusState = "offline" // 不在校园网 / 探测失败
 )
 
-// CampusStatus 是校园网状态 DTO（Windows / Android 使用，Linux 不暴露）。
+// CampusStatus 是校园网状态 DTO（Windows / Android 使用，CLI 版不暴露）。
 type CampusStatus struct {
 	State     CampusState `json:"state"`
 	ErrorMsg  string      `json:"errorMsg"`

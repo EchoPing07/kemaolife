@@ -140,7 +140,7 @@ type session struct {
 	cacheDir   string
 }
 
-// newRuntime 是唯一知道「Linux 用哪个适配器」的地方。
+// newRuntime 是唯一知道「CLI（linux / darwin）用哪些适配器」的地方。
 func newRuntime(opts options) (*session, error) {
 	home, err := os.UserHomeDir()
 	if err != nil {
