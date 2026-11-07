@@ -32,7 +32,7 @@
 
 - 电费接口无鉴权，仅限查询本人数据；不实现多账号、批量遍历或代查。
 - 不把电费 / 教务 / Portal 接口包装成 HTTP API、公开脚本或 SaaS。
-- 凭据只进平台加密存储：Linux `0600`、Windows DPAPI、Android Keystore。
+- 凭据只进平台加密存储：CLI（linux / darwin）0700 目录 / 0600 文件、Windows 托盘 DPAPI、Android Keystore。
 - 课表快照含 Cookie，等同凭据；日志只记录错误类别、耗时、状态码；上游错误文案必须先脱敏再输出。
 
 更完整的约束见 [README.md](README.md#安全与隐私) 与 [CONTRIBUTING.md](CONTRIBUTING.md#1-适用范围与隐私前置条件)。

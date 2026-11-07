@@ -3,10 +3,10 @@ name: kemaolife
 description: 用 kemaolife CLI 查询广东科贸职业学院的课表与宿舍电费。当用户问「今天/某天有什么课」「第几周课表」「本周课表」「电费还剩多少」「宿舍电量」时使用。固定带 --json 只解析 stdout。
 ---
 
-# kemaolife（Linux CLI）
+# kemaolife（CLI：linux / darwin）
 
-供 agent 调用的单二进制命令。三个能力中的两个在 Linux 端可用：**课表查询**、**电费查询**。
-**没有校园网能力** —— 不要回答「能不能上网」「校园网掉线了怎么办」，本端不判态、不认证、不存凭据。
+供 agent 调用的单二进制命令。三个能力中的两个在 CLI 可用：**课表查询**、**电费查询**。
+**没有校园网能力** —— 不要回答「能不能上网」「校园网掉线了怎么办」，CLI 不判态、不认证、不存凭据。
 
 ## 1. 何时用
 
@@ -23,6 +23,8 @@ description: 用 kemaolife CLI 查询广东科贸职业学院的课表与宿舍�
 | 配置状态 | `kemaolife --json config show` |
 
 不适用：校园网状态、成绩、选课、考试安排、充值、替别人查。
+
+CLI 支持 linux / darwin（windows 后续计划）；macOS 上 `config init` 密码同样不回显，命令、输出与退出码和 Linux 一致，§2「所有命令带 `--json`」的固定用法不变。
 
 ## 2. 固定用法
 
