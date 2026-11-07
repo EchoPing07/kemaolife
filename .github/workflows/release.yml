@@ -67,7 +67,7 @@ jobs:
             exit 1
           fi
 
-          # Android versionCode 由 tag 派生：major*10000 + minor*100 + patch（v0.4.0 → 400）。
+          # Android versionCode 由 tag 派生：major*10000 + minor*100 + patch（v0.4.1 → 401）。
           # 必须跨版本严格递增，否则 Android 拒绝覆盖安装。
           IFS='.' read -r MAJOR MINOR PATCH <<< "$VERSION"
           VERSION_CODE=$(( 10#$MAJOR * 10000 + 10#$MINOR * 100 + 10#$PATCH ))
@@ -133,18 +133,20 @@ jobs:
           mkdir -p dist
 
           cat > dist/INSTALL.txt <<'EOF'
-          kemaolife —— CLI 安装说明（Linux 预编译包）
+          kemaolife —— CLI 安装说明（Linux / macOS 预编译包）
 
-          本包是 Linux 预编译产物；CLI 另支持 macOS（darwin amd64 / arm64）源码自行构建，
-          本版 Release 不含 macOS 预编译包。桌面端仍仅 Windows 托盘，移动端仍仅 Android。
+          本包是 Linux 或 macOS（darwin amd64 / arm64）预编译产物；桌面端仍仅 Windows 托盘，
+          移动端仍仅 Android。macOS 包由 Linux CI 交叉编译，未经 Apple Developer ID 签名与公证，
+          且 macOS CLI 未经过实机测试，按试验性支持使用（见下「关于 macOS」）。
 
           包内文件：
-            kemaolife     静态二进制（CGO_ENABLED=0），不依赖系统 libc 之外的运行时
+            kemaolife     纯 Go 二进制（CGO_ENABLED=0），不依赖第三方运行时
             LICENSE       MIT 许可证
             INSTALL.txt   本文件
 
           安装（在下载目录执行，把压缩包名换成自己下载的架构）：
-            sha256sum -c SHA256SUMS --ignore-missing
+            Linux：sha256sum -c SHA256SUMS --ignore-missing
+            macOS：shasum -a 256 <压缩包名>，把结果与 SHA256SUMS 中对应行比对
             tar -xzf kemaolife_<版本>_linux_<架构>.tar.gz
             mkdir -p ~/.local/bin
             install -m 0755 kemaolife ~/.local/bin/kemaolife
@@ -155,18 +157,27 @@ jobs:
           kemaolife --json timetable sync 生成一次快照；日常查询每次自动刷新，失败时
           回落旧快照并标 stale:true。电费数据约 1 天延迟，输出中的「数据截至」不是实时值。
 
-          关于 macOS：本版 Release 不含 macOS 预编译包，macOS 用户需在本地用 Go 1.24+
-          源码构建：在 Mac 上执行 go build -o kemaolife ./cmd/kemaolife，或从源码交叉编译
-          GOOS=darwin GOARCH=amd64|arm64 go build -o kemaolife ./cmd/kemaolife。macOS CLI 未经
-          过实机测试：darwin amd64 / arm64 只完成交叉编译、静态审查与自动化单测，真实终端回显
-          控制、Gatekeeper、根证书链、本地时区与 arm64 首次执行均未实机确认，请按试验性支持使用。
+          关于 macOS：下载 kemaolife_<版本>_darwin_arm64.tar.gz（Apple Silicon / M1 及以后）
+          或 kemaolife_<版本>_darwin_amd64.tar.gz（Intel Mac），解压后与 Linux 同样安装到
+          ~/.local/bin。包内文件与 Linux 包一致：kemaolife / LICENSE / INSTALL.txt。
+          macOS 没有 sha256sum，用 shasum 计算后与 SHA256SUMS 中对应行比对，再执行：
+            shasum -a 256 kemaolife_<版本>_darwin_<架构>.tar.gz
+            tar -xzf kemaolife_<版本>_darwin_<架构>.tar.gz
+            xattr -d com.apple.quarantine kemaolife
+            mkdir -p ~/.local/bin && install -m 0755 kemaolife ~/.local/bin/kemaolife
+          xattr 仅用于清除浏览器下载的隔离属性；若系统未提示 Gatekeeper 拦截可跳过，
+          不要对来历不明的二进制执行此操作。也可按需用 Go 1.24+ 源码自行构建：
+          go build -o kemaolife ./cmd/kemaolife。
+          macOS 二进制由 Linux CI 交叉编译，未经 Apple Developer ID 签名、未经 Apple 公证；
+          arm64 包带 Go 链接器自动生成的 ad-hoc 代码签名（Apple Silicon 要求），不等于 Apple 签名。
+          macOS CLI 未经过实机测试：darwin amd64 / arm64 只完成交叉编译、静态审查与自动化单测，
+          未在真实 Mac 上运行；真实终端回显控制、Gatekeeper quarantine、根证书链、本地时区
+          与 arm64 首次执行均未实机确认，请按试验性支持使用。
           凭据与缓存沿用 ~/.config/kemaolife/config.json（目录 0700 /
           文件 0600 / 原子写，XDG 环境变量优先）与 ~/.cache/kemaolife/；config init 默认关闭
           回显，用 BSD termios（TIOCGETA / TIOCSETA），不引 Keychain 或 golang.org/x/term；
           终端不支持关闭回显时会先在 stderr 明确警告「输入可能被看到」再继续读取；命令与
-          输出、退出码与 Linux 完全一致。若从网上获取源码包后自构建产物带 com.apple.quarantine、被
-          Gatekeeper 拦截，可对自构建产物执行 xattr -d com.apple.quarantine <path> 清除；
-          该处理方式同样未经过实机验证。windows CLI 为后续计划，不在本期。
+          输出、退出码与 Linux 完全一致。windows CLI 为后续计划，不在本期。
 
           agent skill 单独发布为 kemaolife-skill_<版本>.zip，解压后把 kemaolife/ 放进
           agent 的 skills 目录；skill 不含二进制，也不含凭据。skill 存放位置（D2）尚未
@@ -201,6 +212,28 @@ jobs:
           build_one amd64 amd64
           build_one arm64 arm64
           build_one armv7 arm 7
+
+          # macOS 预编译包：darwin amd64 / arm64，与 Linux 包同构（三文件 tar.gz）。
+          # 二进制由 Linux runner 交叉编译，无 Apple Developer ID 签名与公证；arm64 带
+          # Go 链接器自动生成的 ad-hoc 代码签名（Apple Silicon 要求），校验见 Verify assets。
+          build_darwin() {
+            arch="$1"
+            goarch="$2"
+            stage="dist/darwin-stage/${arch}"
+            mkdir -p "$stage"
+            cp LICENSE "$stage/LICENSE"
+            cp dist/INSTALL.txt "$stage/INSTALL.txt"
+
+            env CGO_ENABLED=0 GOOS=darwin "GOARCH=${goarch}" go build -trimpath \
+              -ldflags "-s -w -X main.commit=${COMMIT}" \
+              -o "$stage/kemaolife" ./cmd/kemaolife
+            chmod 0755 "$stage/kemaolife"
+            tar -czf "dist/kemaolife_${VERSION}_darwin_${arch}.tar.gz" \
+              -C "$stage" kemaolife LICENSE INSTALL.txt
+          }
+
+          build_darwin amd64 amd64
+          build_darwin arm64 arm64
 
           # Windows 便携包：amd64 / arm64。GUI 子系统是形态要求（docs/002 §5.2），
           # 漏掉 -H=windowsgui 会挂控制台窗口，不符合托盘常驻形态。
@@ -314,8 +347,9 @@ jobs:
 
           skill 存放位置（D2）仍是待确认项，由使用者自行决定，本包不指定安装路径。
           二进制与校验和见同版 Release 的 kemaolife_<版本>_linux_<架构>.tar.gz
-          与 SHA256SUMS；该包是 Linux 预编译产物，macOS 需源码自行构建（同版 Release
-          不提供 macOS 二进制）。
+          （Linux）、kemaolife_<版本>_darwin_<架构>.tar.gz（macOS，darwin amd64 / arm64）
+          与 SHA256SUMS；skill 本身不含二进制。macOS 包未经 Apple Developer ID 签名与公证，
+          且 macOS CLI 未经过实机测试，按试验性支持使用。
           EOF
 
           "$PY" - <<'PY'
@@ -333,6 +367,8 @@ jobs:
             "kemaolife_${VERSION}_linux_amd64.tar.gz" \
             "kemaolife_${VERSION}_linux_arm64.tar.gz" \
             "kemaolife_${VERSION}_linux_armv7.tar.gz" \
+            "kemaolife_${VERSION}_darwin_amd64.tar.gz" \
+            "kemaolife_${VERSION}_darwin_arm64.tar.gz" \
             "kemaolife-agent_${VERSION}_windows_amd64.zip" \
             "kemaolife-agent_${VERSION}_windows_arm64.zip" \
             "kemaolife_${VERSION}_android_armeabi-v7a.apk" \
@@ -389,6 +425,38 @@ jobs:
 
           for arch in expected:
               with __import__("tarfile").open(f"dist/kemaolife_{version}_linux_{arch}.tar.gz") as t:
+                  names = sorted(m.name for m in t.getmembers())
+              assert names == ["INSTALL.txt", "LICENSE", "kemaolife"], (arch, names)
+
+          # macOS 包读 Mach-O 头判 CPU 类型与代码签名。纯 Go 二进制不依赖系统动态库；
+          # arm64 必须带 Go 链接器自动生成的 LC_CODE_SIGNATURE（ad-hoc），否则 Apple Silicon
+          # 首次执行会被系统拒绝；amd64 无该 load command 是正常现象。
+          # 这里只校验结构与 ad-hoc 段，不代表经过 Apple Developer ID 签名或公证。
+          darwin_expected = {
+              "amd64": (0x01000007, False),
+              "arm64": (0x0100000C, True),
+          }
+          for arch, (cpu_type, want_signature) in darwin_expected.items():
+              path = f"dist/darwin-stage/{arch}/kemaolife"
+              with open(path, "rb") as f:
+                  head = f.read(32)
+              assert struct.unpack_from("<I", head, 0)[0] == 0xFEEDFACF, (path, "not Mach-O 64-bit")
+              found = struct.unpack_from("<I", head, 4)[0]
+              assert found == cpu_type, (path, hex(found))
+              ncmds, sizeofcmds = struct.unpack_from("<II", head, 16)
+              with open(path, "rb") as f:
+                  body = f.read(32 + sizeofcmds)
+              off, cmds = 32, []
+              for _ in range(ncmds):
+                  cmd, size = struct.unpack_from("<II", body, off)
+                  cmds.append(cmd)
+                  off += size
+              has_signature = 0x1D in cmds  # LC_CODE_SIGNATURE
+              assert has_signature == want_signature, (path, cmds)
+              print(f"darwin {arch}: Mach-O cpu={hex(found)} ad-hoc-signature={has_signature} OK")
+
+              with __import__("tarfile").open(
+                      f"dist/kemaolife_{version}_darwin_{arch}.tar.gz") as t:
                   names = sorted(m.name for m in t.getmembers())
               assert names == ["INSTALL.txt", "LICENSE", "kemaolife"], (arch, names)
 
@@ -479,7 +547,7 @@ jobs:
           cat > dist/RELEASE_NOTES.md <<'EOF'
           ## kemaolife __TAG__
 
-          三端（CLI / Windows 托盘 / Android App）共用一份 Go `core` 的校园工具：课表查询、电费余额与每日用量、校园网认证。本版产物仍是四类：Linux CLI 静态二进制（三架构）、Windows 托盘便携包（两架构）、Android 四 ABI 已签名 APK、独立的 agent skill，另附 `SHA256SUMS`。CLI 另支持 macOS（darwin amd64 / arm64）源码自行构建，本版不提供 macOS 预编译包；windows CLI 为后续计划；桌面端仅 Windows、移动端仅 Android。源码版本 `internal/version.Version` = `__VERSION__`；Android `versionCode` = `__VERSION_CODE__`；构建提交 `__SHORT_SHA__`（完整提交号见 `kemaolife --version --json`）。
+          三端（CLI / Windows 托盘 / Android App）共用一份 Go `core` 的校园工具：课表查询、电费余额与每日用量、校园网认证。本版产物为五类：Linux CLI 纯 Go 二进制（三架构，`CGO_ENABLED=0`）、**macOS CLI 预编译包（darwin amd64 / arm64，`CGO_ENABLED=0`）**、Windows 托盘便携包（两架构）、Android 四 ABI 已签名 APK、独立的 agent skill，另附 `SHA256SUMS`。windows CLI 为后续计划；桌面端仅 Windows、移动端仅 Android。macOS 二进制由 Linux CI 交叉编译，**未经 Apple Developer ID 签名、未经 Apple 公证**，且 **macOS CLI 未经过实机测试**（详见下方安装小节）。源码版本 `internal/version.Version` = `__VERSION__`；Android `versionCode` = `__VERSION_CODE__`；构建提交 `__SHORT_SHA__`（完整提交号见 `kemaolife --version --json`）。
 
           ### 产物
 
@@ -488,6 +556,8 @@ jobs:
           | CLI（Linux） | `__ASSET_AMD64__` | x86_64 |
           | CLI（Linux） | `__ASSET_ARM64__` | aarch64 / arm64 |
           | CLI（Linux） | `__ASSET_ARMV7__` | 32 位 ARMv7（`GOARCH=arm GOARM=7`） |
+          | CLI（macOS） | `__ASSET_DARWIN_AMD64__` | Intel Mac（x86_64） |
+          | CLI（macOS） | `__ASSET_DARWIN_ARM64__` | Apple Silicon（M1 及以后，arm64） |
           | Windows | `__ASSET_WIN_AMD64__` | 64 位 x86（x64）托盘程序 |
           | Windows | `__ASSET_WIN_ARM64__` | Windows on ARM（arm64）托盘程序 |
           | Android | `__ASSET_ANDROID_ARMV7A__` | 32 位 ARM（`armeabi-v7a`） |
@@ -495,13 +565,13 @@ jobs:
           | Android | `__ASSET_ANDROID_X86__` | 32 位 x86 模拟器 / 少量设备 |
           | Android | `__ASSET_ANDROID_X86_64__` | 64 位 x86 模拟器 / 少量设备 |
           | agent skill | `__ASSET_SKILL__` | 单独安装，依赖同机 `kemaolife` 二进制 |
-          | — | `SHA256SUMS` | 以上十个包的校验和 |
+          | — | `SHA256SUMS` | 以上十二个包的校验和 |
 
-          以上十个包不含 macOS 产物；macOS 只能用 Go 1.24+ 源码自行构建。**macOS CLI 未经过实机测试**：darwin amd64 / arm64 仅交叉编译与静态审查通过，未在真实 Mac 上运行，按试验性支持使用。
+          以上十二个包含 macOS 预编译产物。**macOS CLI 未经过实机测试**：darwin amd64 / arm64 仅交叉编译、静态审查与自动化单测通过，未在真实 Mac 上运行；macOS 二进制由 Linux CI 交叉编译，**未经 Apple Developer ID 签名与公证**（arm64 包带 Go 链接器自动生成的 ad-hoc 代码签名，不等于 Apple 签名），请按试验性支持使用。
 
-          Linux 三个 CLI 预编译包内含 `kemaolife`（`CGO_ENABLED=0` 静态二进制）、`LICENSE` 与 `INSTALL.txt`；Windows 两个包内含 `kemaolife-agent.exe`（GUI 子系统，无控制台窗口）、`install.bat` / `install.ps1` / `uninstall.bat` / `uninstall.ps1`、`LICENSE` 与 `INSTALL.txt`；Android 四个包是按 ABI 拆分的已签名 release APK，使用 v2 + v3 签名；skill 包内含 `kemaolife/SKILL.md` 与 `kemaolife/README.txt`。
+          Linux 三个 / macOS 两个 CLI 预编译包内含 `kemaolife`、`LICENSE` 与 `INSTALL.txt`；Windows 两个包内含 `kemaolife-agent.exe`（GUI 子系统，无控制台窗口）、`install.bat` / `install.ps1` / `uninstall.bat` / `uninstall.ps1`、`LICENSE` 与 `INSTALL.txt`；Android 四个包是按 ABI 拆分的已签名 release APK，使用 v2 + v3 签名；skill 包内含 `kemaolife/SKILL.md` 与 `kemaolife/README.txt`。
 
-          下载后先核对完整性：`sha256sum -c SHA256SUMS --ignore-missing`（Windows 可用 `certutil -hashfile <文件> SHA256` 比对）。
+          下载后先核对完整性：Linux 用 `sha256sum -c SHA256SUMS --ignore-missing`；macOS 无 `sha256sum`，用 `shasum -a 256 <文件>` 计算后与 `SHA256SUMS` 中对应行比对；Windows 可用 `certutil -hashfile <文件> SHA256` 比对。
 
           ### 安装（CLI · Linux 预编译包，amd64 示例）
 
@@ -516,15 +586,26 @@ jobs:
 
           arm64 / armv7 换成对应压缩包即可。`config init` 交互录入学号与教务密码，配置文件权限 `0600`；学校代码内置默认值可用 `config set customercode <学校代码>` 覆盖。
 
-          ### 安装（CLI · macOS 源码构建）
+          ### 安装（CLI · macOS 预编译包）
 
-          本版不提供 macOS 预编译包，需用 Go 1.24+ 源码自行构建：
+          按芯片下载一个包：Apple Silicon（M1 及以后）选 `__ASSET_DARWIN_ARM64__`，Intel Mac 选 `__ASSET_DARWIN_AMD64__`。先核对 `SHA256SUMS` 再解压（macOS 无 `sha256sum`，用 `shasum -a 256` 计算后与对应行比对）：
 
           ```bash
-          go build -o kemaolife ./cmd/kemaolife
+          shasum -a 256 __ASSET_DARWIN_ARM64__
+          tar -xzf __ASSET_DARWIN_ARM64__
+          xattr -d com.apple.quarantine kemaolife
+          mkdir -p ~/.local/bin
+          install -m 0755 kemaolife ~/.local/bin/kemaolife
+          kemaolife --version
+          kemaolife config init
           ```
 
-          **macOS CLI 未经过实机测试**：darwin amd64 / arm64 只完成交叉编译与静态审查，未在真实 Mac 上运行；真实终端回显控制、Gatekeeper 拦截与 `xattr -d` 处理、根证书链、本地时区、arm64 首次执行均未实机确认，请按试验性支持使用。配置路径与权限沿用 `~/.config/kemaolife/config.json`（目录 `0700` / 文件 `0600`、原子写，XDG 环境变量优先）与 `~/.cache/kemaolife/`；命令、输出与退出码和 Linux 一致。若从网上获取源码包后自构建产物因 `com.apple.quarantine` 被 Gatekeeper 拦截，可对自构建产物执行 `xattr -d com.apple.quarantine <path>`；该处理方式同样未经过实机验证。
+          `xattr -d com.apple.quarantine kemaolife` 用于清除浏览器下载附带的隔离属性；若系统未提示 Gatekeeper 拦截可跳过，**不要对来历不明的二进制执行此操作**。二进制未经 Apple Developer ID 签名与公证，arm64 包带 Go 链接器自动生成的 ad-hoc 代码签名（Apple Silicon 要求），这不等于 Apple 签名。也可按需用 Go 1.24+ 源码自行构建（`go build -o kemaolife ./cmd/kemaolife`）。
+
+          > [!WARNING]
+          > **macOS CLI 未经过实机测试**：darwin amd64 / arm64 只完成交叉编译、静态审查与自动化单测，未在真实 Mac 上运行；真实终端回显控制与恢复（`TIOCGETA` / `TIOCSETA`）、Gatekeeper 拦截与 `xattr -d` 处理、系统根证书链下的 HTTPS、`time.Local` 本地时区、Apple Silicon arm64 首次执行均未经实机确认，请按试验性支持使用，遇到问题带 macOS 版本与现象提 Issue。
+
+          配置路径与权限沿用 `~/.config/kemaolife/config.json`（目录 `0700` / 文件 `0600`、原子写，XDG 环境变量优先）与 `~/.cache/kemaolife/`；命令、输出与退出码和 Linux 一致，不引 Keychain 与第三方依赖。
 
           ### 安装（Windows）
 
@@ -592,6 +673,8 @@ jobs:
               "__ASSET_AMD64__": f"kemaolife_{version}_linux_amd64.tar.gz",
               "__ASSET_ARM64__": f"kemaolife_{version}_linux_arm64.tar.gz",
               "__ASSET_ARMV7__": f"kemaolife_{version}_linux_armv7.tar.gz",
+              "__ASSET_DARWIN_AMD64__": f"kemaolife_{version}_darwin_amd64.tar.gz",
+              "__ASSET_DARWIN_ARM64__": f"kemaolife_{version}_darwin_arm64.tar.gz",
               "__ASSET_WIN_AMD64__": f"kemaolife-agent_{version}_windows_amd64.zip",
               "__ASSET_WIN_ARM64__": f"kemaolife-agent_{version}_windows_arm64.zip",
               "__ASSET_ANDROID_ARMV7A__": f"kemaolife_{version}_android_armeabi-v7a.apk",
@@ -622,6 +705,8 @@ jobs:
             "dist/kemaolife_${VERSION}_linux_amd64.tar.gz"
             "dist/kemaolife_${VERSION}_linux_arm64.tar.gz"
             "dist/kemaolife_${VERSION}_linux_armv7.tar.gz"
+            "dist/kemaolife_${VERSION}_darwin_amd64.tar.gz"
+            "dist/kemaolife_${VERSION}_darwin_arm64.tar.gz"
             "dist/kemaolife-agent_${VERSION}_windows_amd64.zip"
             "dist/kemaolife-agent_${VERSION}_windows_arm64.zip"
             "dist/kemaolife_${VERSION}_android_armeabi-v7a.apk"
