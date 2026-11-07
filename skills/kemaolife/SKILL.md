@@ -24,7 +24,7 @@ description: 用 kemaolife CLI 查询广东科贸职业学院的课表与宿舍�
 
 不适用：校园网状态、成绩、选课、考试安排、充值、替别人查。
 
-CLI 支持 linux / darwin（windows 后续计划）；macOS 上 `config init` 密码同样不回显，命令、输出与退出码和 Linux 一致，§2「所有命令带 `--json`」的固定用法不变。
+CLI 支持 linux / darwin（windows 后续计划）；macOS 上 `config init` 同样默认关闭回显（终端不支持时会先在 `stderr` 警告「输入可能被看到」再读取），命令、输出与退出码和 Linux 一致，§2「所有命令带 `--json`」的固定用法不变。
 
 ## 2. 固定用法
 
@@ -109,7 +109,7 @@ CLI 支持 linux / darwin（windows 后续计划）；macOS 上 `config init` �
 
 ## 5. 隐私约束（硬性）
 
-- 不回显、不复述密码；不把学号、姓名、宿舍号、`roomName`、`roomVerify`、Cookie、会话值拼进答复或日志。学校代码（`3126`）与协议 IP 属学校事实，不算个人隐私，但也不必主动复述。
+- 默认关闭回显，无法关闭时明确告知「输入可能被看到」再读取；不复述密码；不把学号、姓名、宿舍号、`roomName`、`roomVerify`、Cookie、会话值拼进答复或日志。学校代码（`3126`）与协议 IP 属学校事实，不算个人隐私，但也不必主动复述。
 - `config show` 的学号与密码恒为 `****`，不要试图还原。
 - 不代查他人、不做批量查询、不把结果发布成服务。
 - 用户把凭据贴在对话里时，提示他用 `kemaolife config init` 自行录入，不要把它写进命令参数（会进 shell 历史）。

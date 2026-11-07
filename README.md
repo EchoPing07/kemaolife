@@ -114,7 +114,7 @@ GOOS=darwin GOARCH=amd64 go build -o kemaolife ./cmd/kemaolife
 GOOS=darwin GOARCH=arm64 go build -o kemaolife ./cmd/kemaolife
 ```
 
-macOS 上也可直接执行 `go build -o kemaolife ./cmd/kemaolife`；darwin amd64 / arm64 交叉编译通过，macOS 真机行为待验证。凭据与缓存沿用 Linux 口径：`~/.config/kemaolife/config.json`（目录 0700 / 文件 0600、原子写）与 `~/.cache/kemaolife/`（XDG 环境变量优先），不引 Keychain 与第三方依赖；`config init` 密码同样不回显，在 macOS 用 BSD termios（`TIOCGETA` / `TIOCSETA`）实现。浏览器下载的源码包解压后，若源码包或本地自构建产物因 `com.apple.quarantine` 被 Gatekeeper 拦截，可用 `xattr -d com.apple.quarantine <path>` 清除；该行为待 macOS 真机验证。
+macOS 上也可直接执行 `go build -o kemaolife ./cmd/kemaolife`；darwin amd64 / arm64 交叉编译通过，macOS 真机行为待验证。凭据与缓存沿用 Linux 口径：`~/.config/kemaolife/config.json`（目录 0700 / 文件 0600、原子写）与 `~/.cache/kemaolife/`（XDG 环境变量优先），不引 Keychain 与第三方依赖；`config init` 默认关闭回显，在 macOS 用 BSD termios（`TIOCGETA` / `TIOCSETA`）实现；若终端不支持关闭回显，会先在 `stderr` 明确警告「输入可能被看到」再继续读取，不静默降级。浏览器下载的源码包解压后，若源码包或本地自构建产物因 `com.apple.quarantine` 被 Gatekeeper 拦截，可用 `xattr -d com.apple.quarantine <path>` 清除；该行为待 macOS 真机验证。
 
 学校代码内置默认值为 `3126`（学校事实，非个人隐私），可用 `kemaolife config set customercode <学校代码>` 或构建期 `-ldflags "-X main.defaultCustomerCode=<学校代码>"` 覆盖。agent skill 见 [`skills/kemaolife/SKILL.md`](./skills/kemaolife/SKILL.md)，复制到 agent 的 skill 目录即可使用（D2 待定稿）。
 
