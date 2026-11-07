@@ -17,10 +17,15 @@
     <string name="timetable_not_in_semester">不在本学期范围</string>
     <string name="timetable_prev_week">上一周</string>
     <string name="timetable_next_week">下一周</string>
+    <string name="week_current">回到本周</string>
+    <string name="week_only">第 %1$d 周</string>
+    <string name="weekday_cn">周%1$s</string>
+    <string name="section_selected_day">当天课程</string>
 
     <!-- 数据时间提示：所有课表 / 电费输出都必须能说明数据来自何时。 -->
     <string name="data_synced_at">同步于 %1$s</string>
     <string name="data_stale">离线数据（同步于 %1$s）</string>
+    <string name="data_stale_short">离线 · %1$s</string>
     <string name="data_collected_at">数据截至 %1$s</string>
 
     <!-- 更多页。 -->
@@ -31,6 +36,18 @@
     <string name="estimated_days">约可用 %1$d 天</string>
     <string name="estimated_days_unknown">可用天数无法估算</string>
     <string name="month_usage">本月已用 %1$s %2$s</string>
+    <string name="electricity_not_queried">尚未查询</string>
+    <string name="metric_estimated_days">可用天数</string>
+    <string name="metric_month_usage">本月已用</string>
+    <string name="days_value">%1$d 天</string>
+    <string name="usage_value">%1$s %2$s</string>
+    <string name="value_unknown">无法估算</string>
+    <string name="daily_avg">近 7 日均量 %1$s %2$s</string>
+    <string name="usage_until">用量统计至 %1$s</string>
+    <string name="campus_probed_at">探测于 %1$s</string>
+    <string name="setup_missing_title">还没有配置账号</string>
+    <string name="setup_missing_body">填写学号与密码后才能查询课表与电费。</string>
+    <string name="setup_missing_action">去填写</string>
 
     <string name="campusnet_online">已在线</string>
     <string name="campusnet_unauth">未认证</string>
@@ -50,11 +67,13 @@
     <string name="field_customer_code">学校代码</string>
     <string name="field_campus_user">校园网账号</string>
     <string name="field_campus_password">校园网密码</string>
-    <string name="field_campus_fingerprint">浏览器指纹（选填）</string>
+    <string name="field_campus_fingerprint">浏览器指纹</string>
+    <string name="field_optional">选填</string>
     <string name="action_save">保存</string>
     <string name="save_done">已保存</string>
-    <string name="password_kept_hint">密码已加密保存，留空表示不修改</string>
-    <string name="power_no_password_hint">电费接口无密码，学号与教务共用。</string>
+    <string name="password_kept_hint">留空表示不修改</string>
+    <string name="edu_note">用于登录教务系统拉取课表，密码加密保存在本机。</string>
+    <string name="power_no_password_hint">电费接口只需学号与学校代码，无独立密码。</string>
     <string name="campus_independent_hint">校园网凭据独立保存，不复用教务密码。</string>
     <string name="credentials_keystore_hint">凭据经 Android Keystore 加密后保存在本机，不上传、不进日志。</string>
 
