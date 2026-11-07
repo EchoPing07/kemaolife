@@ -1,7 +1,7 @@
 # Android 构建说明
 
 > 状态：M3 已落地并在 Android 15 真机跑通课表、电费与校园网手动动作；
-> `v0.3.0` 起 `release.yml` 自动产出四个已签名 APK。
+> `v0.3.0` 起 `release.yml` 自动产出四个已签名 APK；当前源码版本为 `v0.4.0`（见 `../internal/version/version.go`）。
 > 契约以 `docs/002` 为准，本文件只说「怎么把 APK 造出来」。
 
 ## 1. 前置工具

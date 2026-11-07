@@ -67,7 +67,7 @@ jobs:
             exit 1
           fi
 
-          # Android versionCode 由 tag 派生：major*10000 + minor*100 + patch（v0.3.0 → 300）。
+          # Android versionCode 由 tag 派生：major*10000 + minor*100 + patch（v0.4.0 → 400）。
           # 必须跨版本严格递增，否则 Android 拒绝覆盖安装。
           IFS='.' read -r MAJOR MINOR PATCH <<< "$VERSION"
           VERSION_CODE=$(( 10#$MAJOR * 10000 + 10#$MINOR * 100 + 10#$PATCH ))
@@ -157,14 +157,16 @@ jobs:
 
           关于 macOS：本版 Release 不含 macOS 预编译包，macOS 用户需在本地用 Go 1.24+
           源码构建：在 Mac 上执行 go build -o kemaolife ./cmd/kemaolife，或从源码交叉编译
-          GOOS=darwin GOARCH=amd64|arm64 go build -o kemaolife ./cmd/kemaolife。darwin amd64 /
-          arm64 交叉编译通过，真机行为待验证。凭据与缓存沿用 ~/.config/kemaolife/config.json（目录 0700 /
+          GOOS=darwin GOARCH=amd64|arm64 go build -o kemaolife ./cmd/kemaolife。macOS CLI 未经
+          过实机测试：darwin amd64 / arm64 只完成交叉编译、静态审查与自动化单测，真实终端回显
+          控制、Gatekeeper、根证书链、本地时区与 arm64 首次执行均未实机确认，请按试验性支持使用。
+          凭据与缓存沿用 ~/.config/kemaolife/config.json（目录 0700 /
           文件 0600 / 原子写，XDG 环境变量优先）与 ~/.cache/kemaolife/；config init 默认关闭
           回显，用 BSD termios（TIOCGETA / TIOCSETA），不引 Keychain 或 golang.org/x/term；
           终端不支持关闭回显时会先在 stderr 明确警告「输入可能被看到」再继续读取；命令与
           输出、退出码与 Linux 完全一致。若从网上获取源码包后自构建产物带 com.apple.quarantine、被
           Gatekeeper 拦截，可对自构建产物执行 xattr -d com.apple.quarantine <path> 清除；
-          该行为待 macOS 真机验证。windows CLI 为后续计划，不在本期。
+          该处理方式同样未经过实机验证。windows CLI 为后续计划，不在本期。
 
           agent skill 单独发布为 kemaolife-skill_<版本>.zip，解压后把 kemaolife/ 放进
           agent 的 skills 目录；skill 不含二进制，也不含凭据。skill 存放位置（D2）尚未
@@ -495,7 +497,7 @@ jobs:
           | agent skill | `__ASSET_SKILL__` | 单独安装，依赖同机 `kemaolife` 二进制 |
           | — | `SHA256SUMS` | 以上十个包的校验和 |
 
-          以上十个包不含 macOS 产物；macOS 只能用 Go 1.24+ 源码自行构建（darwin amd64 / arm64 交叉编译通过，真机行为待验证）。
+          以上十个包不含 macOS 产物；macOS 只能用 Go 1.24+ 源码自行构建。**macOS CLI 未经过实机测试**：darwin amd64 / arm64 仅交叉编译与静态审查通过，未在真实 Mac 上运行，按试验性支持使用。
 
           Linux 三个 CLI 预编译包内含 `kemaolife`（`CGO_ENABLED=0` 静态二进制）、`LICENSE` 与 `INSTALL.txt`；Windows 两个包内含 `kemaolife-agent.exe`（GUI 子系统，无控制台窗口）、`install.bat` / `install.ps1` / `uninstall.bat` / `uninstall.ps1`、`LICENSE` 与 `INSTALL.txt`；Android 四个包是按 ABI 拆分的已签名 release APK，使用 v2 + v3 签名；skill 包内含 `kemaolife/SKILL.md` 与 `kemaolife/README.txt`。
 
@@ -522,7 +524,7 @@ jobs:
           go build -o kemaolife ./cmd/kemaolife
           ```
 
-          darwin amd64 / arm64 交叉编译通过，macOS 真机行为待验证。配置路径与权限沿用 `~/.config/kemaolife/config.json`（目录 `0700` / 文件 `0600`、原子写，XDG 环境变量优先）与 `~/.cache/kemaolife/`；命令、输出与退出码和 Linux 一致。若从网上获取源码包后自构建产物因 `com.apple.quarantine` 被 Gatekeeper 拦截，可对自构建产物执行 `xattr -d com.apple.quarantine <path>`；该行为待 macOS 真机验证。
+          **macOS CLI 未经过实机测试**：darwin amd64 / arm64 只完成交叉编译与静态审查，未在真实 Mac 上运行；真实终端回显控制、Gatekeeper 拦截与 `xattr -d` 处理、根证书链、本地时区、arm64 首次执行均未实机确认，请按试验性支持使用。配置路径与权限沿用 `~/.config/kemaolife/config.json`（目录 `0700` / 文件 `0600`、原子写，XDG 环境变量优先）与 `~/.cache/kemaolife/`；命令、输出与退出码和 Linux 一致。若从网上获取源码包后自构建产物因 `com.apple.quarantine` 被 Gatekeeper 拦截，可对自构建产物执行 `xattr -d com.apple.quarantine <path>`；该处理方式同样未经过实机验证。
 
           ### 安装（Windows）
 

@@ -7,7 +7,7 @@ body:
     attributes:
       value: |
         提交前请先阅读 [docs/000-需求与产品定位.md](https://github.com/EchoPing07/kemaolife/blob/main/docs/000-需求与产品定位.md) 与 [docs/002-功能规格.md](https://github.com/EchoPing07/kemaolife/blob/main/docs/002-功能规格.md)。
-        本项目只有三个功能域（课表、电费、校园网认证）与三个端；CLI 目前支持 linux / darwin，windows 为后续计划；桌面端仅 Windows，移动端仅 Android。不做多账号、代查、公开服务化、充值 / 绑房间、浏览器内核、Android 后台服务、Windows 课表主界面。
+        本项目只有三个功能域（课表、电费、校园网认证）与三个端；CLI 目前支持 linux / darwin（macOS 仅源码构建、未经过实机测试），windows 为后续计划；桌面端仅 Windows，移动端仅 Android。不做多账号、代查、公开服务化、充值 / 绑房间、浏览器内核、Android 后台服务、Windows 课表主界面。
         按「背景 / 要求 / 验收」写，不记录对话过程；不要粘贴真实数据。
 
   - type: dropdown

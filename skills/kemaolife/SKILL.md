@@ -24,7 +24,7 @@ description: 用 kemaolife CLI 查询广东科贸职业学院的课表与宿舍�
 
 不适用：校园网状态、成绩、选课、考试安排、充值、替别人查。
 
-CLI 支持 linux / darwin（windows 后续计划）；macOS 上 `config init` 同样默认关闭回显（终端不支持时会先在 `stderr` 警告「输入可能被看到」再读取），命令、输出与退出码和 Linux 一致，§2「所有命令带 `--json`」的固定用法不变。
+CLI 支持 linux / darwin（windows 后续计划）；**macOS CLI 未经过实机测试**，仅完成交叉编译与静态审查，请按试验性支持使用。macOS 上 `config init` 同样默认关闭回显（终端不支持时会先在 `stderr` 警告「输入可能被看到」再读取），命令、输出与退出码和 Linux 一致，§2「所有命令带 `--json`」的固定用法不变。
 
 ## 2. 固定用法
 
