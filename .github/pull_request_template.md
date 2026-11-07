@@ -51,6 +51,7 @@
 - [ ] `GOOS=windows GOARCH=amd64 go build ./internal/...`；`GOOS=windows GOARCH=arm64 go build ./internal/...`
 - [ ] `GOOS=windows GOARCH=amd64 go build -ldflags "-H=windowsgui" -o kemaolife-agent.exe ./cmd/kemaolife-agent/`（托盘端必须是 GUI 子系统；console 子系统会挂控制台窗口，启动虽会 `FreeConsole` 摘掉，但不符合 docs/002 §5.2 形态）
 - [ ] `GOOS=android GOARCH=arm64 go build ./internal/... ./cmd/kemaolife-mobile/`
+- [ ] macOS 预编译包（darwin amd64 / arm64）打包与 `SHA256SUMS` 行数（12 行，覆盖十二个包）自检：包内含 `kemaolife` / `LICENSE` / `INSTALL.txt`
 - [ ] CI（`.github/workflows/ci.yml`）通过：另含 PE GUI 子系统校验、Windows 安装脚本 BOM / CRLF 校验；列表输出显式排序；时间统一经 `Clock` 获取
 
 补充说明（可选）：

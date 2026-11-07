@@ -13,9 +13,10 @@ body:
     id: platform
     attributes:
       label: 涉及端
-      description: CLI 目前支持 linux / darwin（macOS 仅源码构建、未经过实机测试），windows 为后续计划；桌面端仅 Windows、移动端仅 Android。可多选时请在补充说明里列出
+      description: CLI 目前支持 linux / darwin（macOS 提供 darwin amd64 / arm64 预编译包，未经签名 / 公证、未经过实机测试），windows 为后续计划；桌面端仅 Windows、移动端仅 Android。可多选时请在补充说明里列出
       options:
         - CLI（linux / darwin；macOS 未实机测试）
+        - CLI（macOS 预编译包 / quarantine）
         - CLI（windows，后续计划）
         - Windows 托盘
         - Android App
