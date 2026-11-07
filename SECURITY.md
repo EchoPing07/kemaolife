@@ -34,5 +34,6 @@
 - 不把电费 / 教务 / Portal 接口包装成 HTTP API、公开脚本或 SaaS。
 - 凭据只进平台加密存储：CLI（linux / darwin）0700 目录 / 0600 文件、Windows 托盘 DPAPI、Android Keystore。
 - 课表快照含 Cookie，等同凭据；日志只记录错误类别、耗时、状态码；上游错误文案必须先脱敏再输出。
+- macOS 预编译包（darwin amd64 / arm64）未经 Apple Developer ID 签名、未经 Apple 公证（notarization），也未在真实 Mac 上运行；下载后先核对 `SHA256SUMS` 再运行，按 README 的说明处理 `com.apple.quarantine`，不要为来历不明的二进制绕过 Gatekeeper。
 
 更完整的约束见 [README.md](README.md#安全与隐私) 与 [CONTRIBUTING.md](CONTRIBUTING.md#1-适用范围与隐私前置条件)。

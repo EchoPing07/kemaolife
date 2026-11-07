@@ -1,6 +1,6 @@
 # 贡献指南
 
-谢谢参与。M0（契约 + core）、M0.5（Android 复用 spike）、M1（CLI + skill，linux / darwin）、M2（Windows 托盘常驻）与 M3（Android App）已实现；M4 仅剩 D8 / D11 结论复核。贡献以三端改进、文档契约审阅、D 项讨论与 Issue 为主，按本文规范提交代码。
+谢谢参与。M0（契约 + core）、M0.5（Android 复用 spike）、M1（CLI + skill，linux / darwin）、M2（Windows 托盘常驻）与 M3（Android App）已实现；M4 仅剩 D8 / D11 结论复核。CLI 在 linux / darwin 提供预编译包（macOS 为 darwin amd64 / arm64，未经 Apple 签名 / 公证、未经过实机测试），也可源码自行构建（可选）；windows CLI 仍为后续计划。贡献以三端改进、文档契约审阅、D 项讨论与 Issue 为主，按本文规范提交代码。
 
 参与前请先阅读 [README.md](README.md) 与 [docs/000-需求与产品定位.md](docs/000-需求与产品定位.md)。需求与契约以 `docs/` 为准，协议事实只以 `api-docs/` 为准；两者冲突时**不要自行纠偏**，开 Issue 说明具体条目。
 
@@ -164,7 +164,7 @@ printf '%s\n' "$SENSITIVE_VALUES" | while IFS= read -r value; do
   fi
 done
 
-# CLI 三平台（linux / darwin / windows 后续）与桌面/移动端交叉编译
+# CLI 源码自行构建 / 交叉编译（预编译包由 Release 提供：linux 三架构 + darwin amd64 / arm64）
 GOOS=linux   GOARCH=amd64 go build ./internal/... ./cmd/kemaolife/...
 GOOS=darwin  GOARCH=amd64 go build ./internal/... ./cmd/kemaolife/...
 GOOS=darwin  GOARCH=arm64 go build ./internal/... ./cmd/kemaolife/...
@@ -177,7 +177,7 @@ GOOS=windows GOARCH=amd64 go build -ldflags "-H=windowsgui" -o kemaolife-agent.e
 GOOS=android GOARCH=arm64 go build ./internal/... ./cmd/kemaolife-mobile/
 ```
 
-CI 还校验 CLI 的 darwin 两架构（amd64 / arm64）build + vet、托盘 PE 的 GUI 子系统（Subsystem=2）与 `packaging/windows/*.ps1` / `*.bat` 的 UTF-8 BOM、CRLF；完整 Android AAR / APK（NDK + Gradle + gomobile）由 `.github/workflows/ci-android.yml` 在 Android 路径变更时构建并跑单元测试；权威清单见 `.github/workflows/ci.yml` 与 `.github/workflows/ci-android.yml`。
+CI 还校验 CLI 的 darwin 两架构（amd64 / arm64）build + vet、托盘 PE 的 GUI 子系统（Subsystem=2）与 `packaging/windows/*.ps1` / `*.bat` 的 UTF-8 BOM、CRLF；发版时核对 macOS 预编译包（darwin amd64 / arm64）打包与 `SHA256SUMS` 的 12 行；完整 Android AAR / APK（NDK + Gradle + gomobile）由 `.github/workflows/ci-android.yml` 在 Android 路径变更时构建并跑单元测试；权威清单见 `.github/workflows/ci.yml` 与 `.github/workflows/ci-android.yml`。
 
 任一项失败先修完再提交，不要用 `//nolint`、注释掉检查或 `--no-verify` 绕过。设计阶段（无 Go 代码）只需执行隐私与占位符相关检查。
 

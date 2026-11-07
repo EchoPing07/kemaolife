@@ -19,10 +19,10 @@
 <br />
 
 > [!NOTE]
-> 仓库当前已实现 CLI（M0 / M1，含 macOS 源码构建支持）、Windows 托盘（M2）与 Android App（M0.5 / M3，已在 Android 15 真机跑通）；M4 仅剩 D8 / D11 结论复核。想先搞清楚「要做什么」，从[需求与产品定位](./docs/000-需求与产品定位.md)读起；想直接看命令、字段和退出码，去[功能规格](./docs/002-功能规格.md)。
+> 仓库当前已实现 CLI（M0 / M1，含 macOS 预编译包（darwin amd64 / arm64）与源码构建支持）、Windows 托盘（M2）与 Android App（M0.5 / M3，已在 Android 15 真机跑通）；M4 仅剩 D8 / D11 结论复核。想先搞清楚「要做什么」，从[需求与产品定位](./docs/000-需求与产品定位.md)读起；想直接看命令、字段和退出码，去[功能规格](./docs/002-功能规格.md)。
 
 > [!WARNING]
-> **macOS CLI 未经过实机测试。** 本期只做到「源码可交叉编译 + 静态审查通过」：darwin amd64 / arm64 的 build 与 `go vet` 在 CI 通过，但没有在真实 Mac 上运行过。以下行为**未经实机确认**：`config init` 在真实终端关闭并恢复回显（BSD termios `TIOCGETA` / `TIOCSETA`）、Gatekeeper `com.apple.quarantine` 拦截与 `xattr -d` 处理、系统根证书链下的 HTTPS 请求、`time.Local` 取到本地时区、Apple Silicon 上 arm64 二进制首次执行不被系统拦截。本期**不提供 macOS 预编译产物**，macOS 用户需自行从源码构建；请按试验性支持使用，遇到问题带 macOS 版本与现象提 Issue。Linux / Windows / Android 的既有产物行为未改动。
+> **本版提供 macOS 预编译包，但未经 Apple Developer ID 签名 / 公证（notarization），且 macOS CLI 未经过实机测试。** 仓库无 macOS 真机，`kemaolife_<版本>_darwin_amd64.tar.gz`（Intel Mac / x86_64）与 `kemaolife_<版本>_darwin_arm64.tar.gz`（Apple Silicon / M1 及以后）由 Linux CI 交叉编译，darwin amd64 / arm64 仅交叉编译 + 静态审查 + 自动化单测通过，**未在真实 Mac 上运行**。以下行为**未经实机确认**：真实终端 `TIOCGETA` / `TIOCSETA` 回显控制与恢复、Gatekeeper `com.apple.quarantine` 拦截与 `xattr -d` 处理、系统根证书链下的 HTTPS 请求、`time.Local` 取到本地时区、Apple Silicon 上 arm64 二进制首次执行不被系统拦截。二进制**未经 Apple Developer ID 签名、未经 Apple 公证（notarization）**：无 Apple 付费账号证书、不做公证；arm64 二进制带 Go 链接器自动生成的 ad-hoc 代码签名（Apple Silicon 要求），**不等于 Apple 签名**。浏览器下载解压后可能带 `com.apple.quarantine`，首次运行被 Gatekeeper 拦截，请在解压后、首次运行前手动执行 `xattr -d com.apple.quarantine kemaolife`（或 `xattr -r -d com.apple.quarantine <目录>`）后再运行。仍不做 Developer ID 签名 / 公证 / Keychain / 第三方依赖；凭据仍存 `~/.config/kemaolife/config.json`（目录 0700 / 文件 0600 / 原子写，XDG 优先）与 `~/.cache/kemaolife/`。请按试验性支持使用，遇到问题带 macOS 版本与现象提 Issue。Linux / Windows / Android 的既有产物行为未改动。
 
 ## KeMao Life 是什么
 
@@ -39,7 +39,7 @@
 
 | 端 | 长什么样 | 给谁用 | 能做什么 |
 |---|---|---|---|
-| **CLI** | 单二进制 `kemaolife` + 子命令 + Agent Skill，支持 linux / darwin（**macOS 仅源码构建、未经过实机测试**）；windows 后续计划 | agent | 配置、课表四维度查询（默认当日）、电费余额与每日用量一次查 |
+| **CLI** | 单二进制 `kemaolife` + 子命令 + Agent Skill，支持 linux / darwin（**macOS 预编译包（darwin amd64 / arm64，未签名未公证、未经过实机测试）**）；windows 后续计划 | agent | 配置、课表四维度查询（默认当日）、电费余额与每日用量一次查 |
 | **Windows** | `kemaolife-agent.exe` 原生托盘常驻（登录时自启一次，不保活） | 人 | 托盘看状态、电费轮询（默认 4 小时）、校园网判态轮询（默认 120 秒）、阈值提醒、托盘 `NIF_INFO` 通知、校园网默认手动 / 自动可选 |
 | **Android** | 原生 App（Kotlin / Compose），底栏三 tab | 人 | 课表、电费与校园网手动动作、设置；每次打开并行发起查询与独立同步 |
 
@@ -67,7 +67,7 @@ Portal   ──探测 302──► 判态 ──► 登录 / 下线 / 重登（W
 |---|---|---|
 | 设计基线 | R1–R5、三端定位、架构与端口、共享契约、三个接口协议文档 | 已入库 |
 | M0 · 契约 + core | DTO、错误码、`core` / `ports`、单测、`kemaolife` 跑通 | 已实现 |
-| M1 · CLI + skill（linux / darwin） | 单二进制 `kemaolife` + 子命令、`config`、快照缓存、SKILL.md、刷新降级、电费合并查询 | 已实现（aarch64 Linux 真机验证；darwin amd64/arm64 仅交叉编译 + 静态审查通过，**macOS CLI 未经过实机测试**） |
+| M1 · CLI + skill（linux / darwin） | 单二进制 `kemaolife` + 子命令、`config`、快照缓存、SKILL.md、刷新降级、电费合并查询 | 已实现（aarch64 Linux 真机验证；**本版起提供 macOS 预编译包**（darwin amd64 / arm64），darwin amd64/arm64 仅交叉编译 + 静态审查 + 自动化单测通过，**macOS CLI 未经过实机测试、未在真实 Mac 上运行**） |
 | M2 · Windows 托盘 | 托盘状态与按模式切换的按钮组、4 小时电费轮询（600s 硬下限）、120 秒判态轮询（30s 下限）、阈值去重与静默时段、失败退避、托盘通知、DPAPI 凭据、原生设置窗口、开机自启 | 已实现（本机 Win11 验证） |
 | M3 · Android App | `gomobile` 门面、三 tab、打开即查询 + 并行同步、电费页、校园网手动动作、Keystore 设置页 | 已实现（Android 15 真机验证） |
 | M4 · 校园网自动登录复核 | Windows 自动模式已随 M2 实现，Android 手动适配器与平台网络配置已随 M3 落地；M4 仅按 D8 / D11 结论复核 Windows 链路 | 待 D8 / D11 定稿 |
@@ -103,25 +103,49 @@ Portal   ──探测 302──► 判态 ──► 登录 / 下线 / 重登（W
 
 ## 安装与构建（CLI：linux / darwin）
 
-CLI 本期支持 linux / darwin 源码构建，windows 为后续计划；macOS 暂不发预编译产物，需源码自行构建。CLI 在 linux / darwin（以及后续 windows）一律不提供校园网能力：不判态、不认证、不存校园网凭据。
+推荐下载预编译包，也可源码自行构建（可选）。CLI 在 linux / darwin（以及后续 windows）一律不提供校园网能力：不判态、不认证、不存校园网凭据；windows CLI 仍为后续计划。
+
+### 下载预编译包（推荐）
+
+Linux CLI 三个 `tar.gz`：`kemaolife_0.4.1_linux_amd64.tar.gz` / `kemaolife_0.4.1_linux_arm64.tar.gz` / `kemaolife_0.4.1_linux_armv7.tar.gz`；macOS CLI 两个 `tar.gz`：`kemaolife_0.4.1_darwin_amd64.tar.gz`（Intel Mac / x86_64）与 `kemaolife_0.4.1_darwin_arm64.tar.gz`（Apple Silicon / M1 及以后）。macOS 包与 Linux 包同构，包内含 `kemaolife` / `LICENSE` / `INSTALL.txt`；文件名用 `darwin`（仓库 GOOS 口径），展示名用 macOS。
+
+```bash
+# Linux：解压后安装
+tar -xzf kemaolife_0.4.1_linux_amd64.tar.gz
+install -m 0755 kemaolife ~/.local/bin/kemaolife
+
+# macOS：Apple Silicon 用 arm64；Intel Mac 把 arm64 换成 amd64
+tar -xzf kemaolife_0.4.1_darwin_arm64.tar.gz
+xattr -d com.apple.quarantine kemaolife        # 解压后、首次运行前；或按 Gatekeeper 提示处理
+install -m 0755 kemaolife ~/.local/bin/kemaolife
+
+kemaolife config init                          # 交互录入学号与教务密码（0600）
+kemaolife --json timetable                     # 课表（每次查询先刷新）
+kemaolife --json electricity                   # 余额 + 每日用量
+```
+
+**macOS 预编译包的三条硬口径**（同样见 [`skills/kemaolife/SKILL.md`](./skills/kemaolife/SKILL.md) §1）：
+
+1. **macOS CLI 未经过实机测试**：仓库无 macOS 真机，darwin amd64 / arm64 仅交叉编译 + 静态审查 + 自动化单测通过，**未在真实 Mac 上运行**。未实机确认五项：真实终端 `TIOCGETA` / `TIOCSETA` 回显控制与恢复、Gatekeeper `com.apple.quarantine` 与 `xattr -d`、系统根证书链下 HTTPS、`time.Local` 本地时区、Apple Silicon arm64 首次执行不被拦截。请按试验性支持使用。
+2. **未经 Apple Developer ID 签名、未经 Apple 公证（notarization）**：macOS 二进制由 Linux CI 交叉编译，无 Apple 付费账号证书、不做公证；arm64 二进制带 Go 链接器自动生成的 ad-hoc 代码签名（Apple Silicon 要求），**不等于 Apple 签名**。浏览器下载解压后可能带 `com.apple.quarantine`，首次运行被 Gatekeeper 拦截，需手动执行 `xattr -d com.apple.quarantine kemaolife`（或 `xattr -r -d com.apple.quarantine <目录>`）后再运行；时机为解压后、首次运行前，或按 Gatekeeper 提示处理。
+3. **仍不做**：Developer ID 签名 / 公证 / Keychain / 第三方依赖；凭据仍存 `~/.config/kemaolife/config.json`（目录 0700 / 文件 0600 / 原子写，XDG 优先）与 `~/.cache/kemaolife/`。`config init` 默认关闭回显，在 macOS 用 BSD termios（`TIOCGETA` / `TIOCSETA`）实现；若终端不支持关闭回显，会先在 `stderr` 明确警告「输入可能被看到」再继续读取，不静默降级。
+
+未经实机确认的完整清单见本页顶部 WARNING。
+
+### 可选：源码自行构建
 
 ```bash
 # Linux 本机构建
 go build -o kemaolife ./cmd/kemaolife
-kemaolife config init                         # 交互录入学号与教务密码（0600）
-kemaolife --json timetable                    # 课表（每次查询先刷新）
-kemaolife --json electricity                  # 余额 + 每日用量
 
-# 交叉编译 macOS（源码构建，不发预编译产物）
+# macOS 交叉编译（Intel Mac 用 amd64，Apple Silicon 用 arm64）
 GOOS=darwin GOARCH=amd64 go build -o kemaolife ./cmd/kemaolife
 GOOS=darwin GOARCH=arm64 go build -o kemaolife ./cmd/kemaolife
 ```
 
-**macOS CLI 未经过实机测试**：darwin amd64 / arm64 仅交叉编译与静态审查通过，未在真实 Mac 上运行过；本版不提供 macOS 预编译包，请自行从源码构建并按试验性支持使用。凭据与缓存沿用 Linux 口径：`~/.config/kemaolife/config.json`（目录 0700 / 文件 0600、原子写）与 `~/.cache/kemaolife/`（XDG 环境变量优先），不引 Keychain 与第三方依赖；`config init` 默认关闭回显，在 macOS 用 BSD termios（`TIOCGETA` / `TIOCSETA`）实现；若终端不支持关闭回显，会先在 `stderr` 明确警告「输入可能被看到」再继续读取，不静默降级。浏览器下载的源码包解压后，若源码包或本地自构建产物因 `com.apple.quarantine` 被 Gatekeeper 拦截，可用 `xattr -d com.apple.quarantine <path>` 清除；**该处理方式同样未经过实机验证**。未经实机确认的完整清单见本页顶部 WARNING。
-
 学校代码内置默认值为 `3126`（学校事实，非个人隐私），可用 `kemaolife config set customercode <学校代码>` 或构建期 `-ldflags "-X main.defaultCustomerCode=<学校代码>"` 覆盖。agent skill 见 [`skills/kemaolife/SKILL.md`](./skills/kemaolife/SKILL.md)，复制到 agent 的 skill 目录即可使用（D2 待定稿）。
 
-正式发布在 [Releases](https://github.com/EchoPing07/kemaolife/releases) 提供 Linux `amd64` / `arm64` / `armv7` 静态二进制压缩包、Windows `amd64` / `arm64` 便携包、Android 按 ABI 拆分的四个已签名 APK、单独的 agent skill zip 与 `SHA256SUMS`；Linux 解压后用 `install -m 0755 kemaolife ~/.local/bin/kemaolife` 安装，Windows 解压后双击 `install.bat`，Android 下载对应架构的 APK 直接安装，校验和用 `sha256sum -c SHA256SUMS --ignore-missing` 核对。打 `vX.Y.Z` tag 会触发 [`.github/workflows/release.yml`](./.github/workflows/release.yml) 自动构建发布，tag 必须与 `internal/version.Version` 一致；Android `versionCode` 由 tag 派生（`major*10000 + minor*100 + patch`）。
+正式发布在 [Releases](https://github.com/EchoPing07/kemaolife/releases) 提供五类共 12 个包：Linux CLI 三个 `tar.gz`（`amd64` / `arm64` / `armv7`，`CGO_ENABLED=0` 纯 Go 二进制）、macOS CLI 两个 `tar.gz`（`darwin amd64` / `darwin arm64`）、Windows 托盘两个 zip（`amd64` / `arm64` 便携包）、Android 按 ABI 拆分的四个已签名 APK、单独的 agent skill zip；另附 `SHA256SUMS`（12 行，覆盖以上十二个包），合计 13 个资产。Linux / macOS 解压后先核对 `SHA256SUMS`（macOS 可用 `shasum -a 256 <压缩包>` 与 `SHA256SUMS` 对应行比对），再按包内 `INSTALL.txt` 用 `install -m 0755 kemaolife ~/.local/bin/kemaolife` 安装，Windows 解压后双击 `install.bat`，Android 下载对应架构的 APK 直接安装，Linux 校验和用 `sha256sum -c SHA256SUMS --ignore-missing` 核对。打 `vX.Y.Z` tag 会触发 [`.github/workflows/release.yml`](./.github/workflows/release.yml) 自动构建发布，tag 必须与 `internal/version.Version` 一致；Android `versionCode` 由 tag 派生（`major*10000 + minor*100 + patch`）。
 
 ## 安装（Windows）
 

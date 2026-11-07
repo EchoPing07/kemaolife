@@ -24,7 +24,13 @@ description: 用 kemaolife CLI 查询广东科贸职业学院的课表与宿舍�
 
 不适用：校园网状态、成绩、选课、考试安排、充值、替别人查。
 
-CLI 支持 linux / darwin（windows 后续计划）；**macOS CLI 未经过实机测试**，仅完成交叉编译与静态审查，请按试验性支持使用。macOS 上 `config init` 同样默认关闭回显（终端不支持时会先在 `stderr` 警告「输入可能被看到」再读取），命令、输出与退出码和 Linux 一致，§2「所有命令带 `--json`」的固定用法不变。
+CLI 支持 linux / darwin（windows 后续计划）；**本版起提供 macOS 预编译包**（`kemaolife_0.4.1_darwin_amd64.tar.gz` / `kemaolife_0.4.1_darwin_arm64.tar.gz`），但**未经 Apple 签名 / 公证、未经过实机测试**，请按试验性支持使用。macOS 上 `config init` 同样默认关闭回显（终端不支持时会先在 `stderr` 警告「输入可能被看到」再读取），命令、输出与退出码和 Linux 一致，§2「所有命令带 `--json`」的固定用法不变。
+
+macOS 预编译包的三条硬口径：
+
+1. **macOS CLI 未经过实机测试**：仓库无 macOS 真机，darwin amd64 / arm64 仅交叉编译 + 静态审查 + 自动化单测通过，**未在真实 Mac 上运行**。未实机确认五项：真实终端 `TIOCGETA` / `TIOCSETA` 回显控制与恢复、Gatekeeper `com.apple.quarantine` 与 `xattr -d`、系统根证书链下 HTTPS、`time.Local` 本地时区、Apple Silicon arm64 首次执行不被拦截。
+2. **未经 Apple Developer ID 签名、未经 Apple 公证（notarization）**：macOS 二进制由 Linux CI 交叉编译，无 Apple 付费账号证书、不做公证；arm64 二进制带 Go 链接器自动生成的 ad-hoc 代码签名（Apple Silicon 要求），**不等于 Apple 签名**。浏览器下载解压后可能带 `com.apple.quarantine`，首次运行被 Gatekeeper 拦截，需手动执行 `xattr -d com.apple.quarantine kemaolife`（或 `xattr -r -d com.apple.quarantine <目录>`）后再运行。
+3. **仍不做**：Developer ID 签名 / 公证 / Keychain / 第三方依赖；凭据仍存 `~/.config/kemaolife/config.json`（目录 0700 / 文件 0600 / 原子写，XDG 优先）与 `~/.cache/kemaolife/`。
 
 ## 2. 固定用法
 
