@@ -35,7 +35,8 @@ internal fun layoutCourseBlocks(entries: List<Entry>): List<CourseBlock> {
         val start = (nums.min() - 1).coerceIn(0, TIMETABLE_ROWS - 1)
         val end = (nums.max() - 1).coerceIn(start, TIMETABLE_ROWS - 1)
         Item(entry, start, end - start + 1)
-    }.sortedWith(compareBy({ it.start }, { it.span }))
+    // 同起点保留 DTO 顺序，不让同一组撞课因块高不同突然交换左右位置。
+    }.sortedBy { it.start }
 
     val out = ArrayList<CourseBlock>(items.size)
     var cluster = ArrayList<Item>()

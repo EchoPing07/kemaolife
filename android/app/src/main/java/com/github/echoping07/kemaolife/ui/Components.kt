@@ -13,7 +13,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
@@ -34,6 +33,7 @@ import com.github.echoping07.kemaolife.R
 import com.github.echoping07.kemaolife.data.CampusState
 import com.github.echoping07.kemaolife.data.Entry
 import com.github.echoping07.kemaolife.ui.theme.coursePalette
+import com.github.echoping07.kemaolife.ui.theme.smoothShape
 
 /**
  * 通用容器：MD3 filled card + 标题行。
@@ -51,7 +51,7 @@ internal fun SectionCard(
     Card(
         modifier = modifier.fillMaxWidth(),
         colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surfaceContainerLowest,
+            containerColor = MaterialTheme.colorScheme.surfaceContainerLow,
         ),
         shape = MaterialTheme.shapes.large,
     ) {
@@ -75,14 +75,14 @@ internal fun SectionCard(
     }
 }
 
-/** 页面标题：tab 内不需要 TopAppBar 的返回栈，一行大标题足够。 */
+/** 主 tab 标题与设置详情页共用同一字阶，不让标题抢占内容空间。 */
 @Composable
 internal fun ScreenTitle(text: String, modifier: Modifier = Modifier) {
     Text(
         text = text,
-        style = MaterialTheme.typography.headlineMedium,
-        fontWeight = FontWeight.Bold,
-        modifier = modifier.padding(start = 4.dp, top = 16.dp, bottom = 4.dp),
+        style = MaterialTheme.typography.headlineSmall,
+        fontWeight = FontWeight.SemiBold,
+        modifier = modifier.padding(start = 4.dp, top = 10.dp, bottom = 8.dp),
     )
 }
 
@@ -105,7 +105,7 @@ internal fun EntryRow(entry: Entry) {
             modifier = Modifier
                 .width(4.dp)
                 .height(34.dp)
-                .clip(RoundedCornerShape(2.dp))
+                .clip(smoothShape(2.dp))
                 .background(palette.container),
         )
         Spacer(Modifier.width(12.dp))
@@ -115,6 +115,7 @@ internal fun EntryRow(entry: Entry) {
                 style = MaterialTheme.typography.titleSmall,
                 fontWeight = FontWeight.SemiBold,
                 maxLines = 1,
+                overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
             )
             val second = listOf(entry.location, entry.teacher)
                 .filter { it.isNotBlank() }
@@ -125,6 +126,7 @@ internal fun EntryRow(entry: Entry) {
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     maxLines = 1,
+                    overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
                 )
             }
         }

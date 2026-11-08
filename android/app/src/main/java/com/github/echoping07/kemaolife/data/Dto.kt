@@ -142,12 +142,22 @@ data class CampusStatus(
     val state: CampusState,
     val errorMsg: String,
     val checkedAt: String,
+    val brasName: String = "",
+    val brasAddress: String = "",
+    val vlan: String = "",
+    val deviceIp: String = "",
+    val mac: String = "",
 ) {
     companion object {
         fun from(obj: JSONObject): CampusStatus = CampusStatus(
             state = CampusState.from(obj.optString("state")),
             errorMsg = obj.optString("errorMsg"),
             checkedAt = obj.optString("checkedAt"),
+            brasName = obj.optString("brasName"),
+            brasAddress = obj.optString("brasAddress"),
+            vlan = obj.optString("vlan"),
+            deviceIp = obj.optString("deviceIp"),
+            mac = obj.optString("mac"),
         )
     }
 }

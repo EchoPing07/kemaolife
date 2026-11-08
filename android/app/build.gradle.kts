@@ -21,6 +21,8 @@ android {
 
     buildFeatures {
         compose = true
+        // AGP 8 起 BuildConfig 生成默认关闭；关于页要读 VERSION_NAME / VERSION_CODE（AboutScreen.kt）。
+        buildConfig = true
     }
 
     signingConfigs {

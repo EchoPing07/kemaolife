@@ -1,6 +1,15 @@
 package com.github.echoping07.kemaolife.ui
 
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.Crossfade
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.togetherWith
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -13,7 +22,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.RoundedCornerShape
+import com.github.echoping07.kemaolife.ui.theme.smoothShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Refresh
@@ -27,6 +36,8 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -164,12 +175,18 @@ private fun ElectricityBody(report: ElectricityReport, unit: String) {
 
     // 余额是这一页唯一的大数字：先给数字，再给单位，单位刻意小一号。
     Row(verticalAlignment = Alignment.Bottom) {
-        Text(
-            text = formatNumber(status.balance),
-            style = MaterialTheme.typography.displaySmall,
-            fontWeight = FontWeight.Bold,
-            color = MaterialTheme.colorScheme.primary,
-        )
+        AnimatedContent(
+            targetState = formatNumber(status.balance),
+            transitionSpec = { fadeIn(tween(260)) togetherWith fadeOut(tween(140)) },
+            label = "balanceChange",
+        ) { balance ->
+            Text(
+                text = balance,
+                style = MaterialTheme.typography.displaySmall,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.primary,
+            )
+        }
         Spacer(Modifier.width(6.dp))
         Text(
             text = unit,
@@ -275,12 +292,16 @@ private fun UsageSparkline(values: List<Double>) {
         verticalAlignment = Alignment.Bottom,
     ) {
         values.forEach { v ->
-            val ratio = (v / max).toFloat().coerceIn(0.06f, 1f)
+            val ratio by animateFloatAsState(
+                targetValue = (v / max).toFloat().coerceIn(0.06f, 1f),
+                animationSpec = tween(420),
+                label = "usageBar",
+            )
             Box(
                 modifier = Modifier
                     .weight(1f)
                     .height((48 * ratio).dp)
-                    .clip(RoundedCornerShape(topStart = 3.dp, topEnd = 3.dp, bottomStart = 1.dp, bottomEnd = 1.dp))
+                    .clip(smoothShape(3.dp))
                     .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.35f)),
             )
         }
@@ -291,6 +312,7 @@ private fun UsageSparkline(values: List<Double>) {
 private fun CampusCard(state: AppState, viewModel: AppViewModel) {
     val campus = state.campus
     val busy = state.campusLoading || state.campusActing != null
+    var showDetails by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf(false) }
 
     SectionCard(
         title = stringResource(R.string.section_campusnet),
@@ -310,13 +332,15 @@ private fun CampusCard(state: AppState, viewModel: AppViewModel) {
             }
             StatusDot(color = tint)
             Spacer(Modifier.width(8.dp))
-            Text(
-                text = campus?.let { campusStateLabel(it.state) }
-                    ?: stringResource(R.string.loading),
-                style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.SemiBold,
-                color = tint,
-            )
+            Crossfade(targetState = campus?.state, animationSpec = tween(240), label = "campusState") {
+                Text(
+                    text = campus?.let { campusStateLabel(it.state) }
+                        ?: stringResource(R.string.loading),
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.SemiBold,
+                    color = tint,
+                )
+            }
             if (busy) {
                 Spacer(Modifier.width(10.dp))
                 CircularProgressIndicator(modifier = Modifier.size(14.dp), strokeWidth = 2.dp)
@@ -338,13 +362,49 @@ private fun CampusCard(state: AppState, viewModel: AppViewModel) {
             )
         }
 
-        if (campus?.errorMsg?.isNotBlank() == true && campus.state == CampusState.UNAUTH) {
+        if (campus?.errorMsg?.isNotBlank() == true) {
             Spacer(Modifier.height(6.dp))
             Text(
-                text = campus.errorMsg,
+                text = campus.errorMsg.lineSequence().first().substringBefore('；').substringBefore(';').trim(),
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.error,
             )
+        }
+
+        val details = listOf(
+            stringResource(R.string.campus_bras_name) to campus?.brasName.orEmpty(),
+            stringResource(R.string.campus_bras_address) to campus?.brasAddress.orEmpty(),
+            stringResource(R.string.campus_vlan) to campus?.vlan.orEmpty(),
+            stringResource(R.string.campus_device_ip) to campus?.deviceIp.orEmpty(),
+            stringResource(R.string.campus_mac) to campus?.mac.orEmpty(),
+        ).filter { it.second.isNotBlank() }
+        if (details.isNotEmpty()) {
+            Spacer(Modifier.height(12.dp))
+            Text(
+                text = stringResource(R.string.campus_access_details),
+                style = MaterialTheme.typography.labelLarge,
+                color = MaterialTheme.colorScheme.primary,
+                modifier = Modifier.clickable { showDetails = !showDetails }.padding(vertical = 4.dp),
+            )
+            AnimatedVisibility(visible = showDetails) {
+                Column(modifier = Modifier.fillMaxWidth().padding(top = 6.dp)) {
+                    details.forEach { (label, value) ->
+                        Row(modifier = Modifier.fillMaxWidth().padding(vertical = 5.dp)) {
+                            Text(
+                                text = label,
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.width(96.dp),
+                            )
+                            Text(
+                                text = value,
+                                style = MaterialTheme.typography.bodySmall,
+                                modifier = Modifier.weight(1f),
+                            )
+                        }
+                    }
+                }
+            }
         }
 
         Spacer(Modifier.height(14.dp))

@@ -5,6 +5,14 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.viewModels
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.scaleIn
+import androidx.compose.animation.scaleOut
+import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.fillMaxSize
@@ -36,21 +44,16 @@ import com.github.echoping07.kemaolife.ui.TabIcons
 import com.github.echoping07.kemaolife.ui.TimetableScreen
 import com.github.echoping07.kemaolife.ui.theme.KemaolifeTheme
 
-/**
- * 单 Activity + 三 tab（docs/002 §5.3）。
- *
- * 不用 Navigation 组件：三个 tab 之间没有返回栈语义，也没有深链需求，
- * 一个 `rememberSaveable` 枚举就够了，少一层依赖。
- */
+/** 单 Activity + 三 tab；设置页内部维护自己的返回栈。 */
 class MainActivity : ComponentActivity() {
-
     private val viewModel: AppViewModel by viewModels()
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
         setContent {
-            KemaolifeTheme {
+            val state by viewModel.state.collectAsStateWithLifecycle()
+            KemaolifeTheme(themeColor = state.themeColor) {
                 AppRoot(viewModel)
             }
         }
@@ -65,7 +68,6 @@ private fun AppRoot(viewModel: AppViewModel) {
     var tab by rememberSaveable { mutableStateOf(Tab.TIMETABLE) }
     val snackbar = remember { SnackbarHostState() }
 
-    // 错误统一在底部提示：三个 tab 都可能有失败，逐个位置弹会碎片化。
     LaunchedEffect(state.error) {
         state.error?.let {
             snackbar.showSnackbar(it)
@@ -90,7 +92,6 @@ private fun AppRoot(viewModel: AppViewModel) {
                     selected = tab == Tab.MORE,
                     onClick = {
                         tab = Tab.MORE
-                        // 进「更多」页先并行拿电费与校园网判态（打开即用，不后台）。
                         if (state.electricity == null) viewModel.refreshElectricity()
                         viewModel.refreshCampusStatus()
                     },
@@ -111,10 +112,20 @@ private fun AppRoot(viewModel: AppViewModel) {
                 .fillMaxSize()
                 .padding(padding),
         ) {
-            when (tab) {
-                Tab.TIMETABLE -> TimetableScreen(state, viewModel)
-                Tab.MORE -> MoreScreen(state, viewModel, onGoSettings = { tab = Tab.SETTINGS })
-                Tab.SETTINGS -> SettingsScreen(state, viewModel)
+            AnimatedContent(
+                targetState = tab,
+                transitionSpec = {
+                    (fadeIn(tween(240, delayMillis = 40)) +
+                        scaleIn(tween(280, easing = FastOutSlowInEasing), initialScale = 0.985f)) togetherWith
+                        (fadeOut(tween(140)) + scaleOut(tween(180), targetScale = 0.99f))
+                },
+                label = "tabTransition",
+            ) { currentTab ->
+                when (currentTab) {
+                    Tab.TIMETABLE -> TimetableScreen(state, viewModel)
+                    Tab.MORE -> MoreScreen(state, viewModel, onGoSettings = { tab = Tab.SETTINGS })
+                    Tab.SETTINGS -> SettingsScreen(state, viewModel)
+                }
             }
         }
     }

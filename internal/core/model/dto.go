@@ -66,7 +66,12 @@ const (
 
 // CampusStatus 是校园网状态 DTO（Windows / Android 使用，CLI 版不暴露）。
 type CampusStatus struct {
-	State     CampusState `json:"state"`
-	ErrorMsg  string      `json:"errorMsg"`
-	CheckedAt string      `json:"checkedAt"`
+	State       CampusState `json:"state"`
+	ErrorMsg    string      `json:"errorMsg"`
+	CheckedAt   string      `json:"checkedAt"`
+	BrasName    string      `json:"brasName,omitempty"`
+	BrasAddress string      `json:"brasAddress,omitempty"`
+	Vlan        string      `json:"vlan,omitempty"`
+	DeviceIP    string      `json:"deviceIp,omitempty"`
+	Mac         string      `json:"mac,omitempty"`
 }

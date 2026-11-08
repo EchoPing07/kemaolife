@@ -118,27 +118,25 @@ adb shell am start -n com.github.echoping07.kemaolife/.MainActivity
 
 ## 7. 应用图标
 
-图标资源在 `res/mipmap-*/`，由同一张正方形原图派生，**不做裁切、不做放大**。
-真正决定观感的是自适应图标的可见区规则，不是 PNG 本身。
+图标资源在 `res/mipmap-*/`，三份 PNG 都是**同一张正方形原图的等比缩放**：不裁切、
+不扩边、不加光晕、不画遮罩，背景与主体的比例保持原样。形状与安全区由 launcher 决定。
 
 | 资源 | 做法 | 谁在用 |
 |---|---|---|
 | `ic_launcher.xml`（`mipmap-anydpi-v26`） | 自适应图标：背景纯色 + 前景 | Android 8.0+ |
-| `ic_launcher_foreground.png` | 原图缩到 **72/108** 的可见区居中，**不画任何遮罩** | 同上 |
-| `ic_launcher.png` | 整张原图方形 | API 24/25、不支持自适应图标时 |
-| `ic_launcher_round.png` | 整张原图 + 内切圆 | 仅类原生 / 圆形屏 launcher |
+| `ic_launcher_foreground.png` | 整张原图缩放到 **108dp 画布** | 同上 |
+| `ic_launcher.png` | 整张原图缩放到 **48dp** | API 24/25、不支持自适应图标时 |
+| `ic_launcher_round.png` | 同 `ic_launcher.png`（不预裁圆） | 类原生 / 圆形屏 launcher |
 
-三条容易踩的规则：
+两条容易踩的规则：
 
-1. **前景不要自己画遮罩**。画了圆形，落到圆角方形桌面（MIUI / 多数国产 ROM）上就会变成
+1. **不要自己画遮罩**。画了圆形，落到圆角方形桌面（MIUI / 多数国产 ROM）上就会变成
    「圆图套方框」。形状一律交给系统：「圆角方形还是圆形」由 launcher 决定。
-2. **前景只占中间 72/108**。自适应图标的安全区就是中间 72dp（四边各留 18dp），
-   把整张图铺满 108dp 会让主体落到可见区之外，桌面上只剩一小团。
-3. **改图标后必须卸载重装**。多数 launcher（含 MIUI）会按包名缓存图标，
+2. **改图标后必须卸载重装**。多数 launcher（含 MIUI）会按包名缓存图标，
    `adb install -r` 不会刷新缓存，看着像「没生效」。
 
-> `ic_launcher_round.png` 只服务圆形屏 / 类原生桌面；方形桌面不会读它，
-> 所以它里面画内切圆是安全的，不会影响 MIUI 上的显示。
+> 自适应图标下 launcher 只显示画布中间 72/108 的可见区，这是平台行为；
+> 因此原图外圈会被 launcher 遮掉一部分，PNG 本身不做任何裁切。
 
 ## 8. 明文与证书
 

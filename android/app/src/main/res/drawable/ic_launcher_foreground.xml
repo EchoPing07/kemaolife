@@ -1,0 +1,19 @@
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <!-- 连续曲率方形：n=4 超椭圆，不叠加人物、插画或多余徽标。 -->
+    <path
+        android:fillColor="#35658D"
+        android:pathData="M54,2C78.63,2 106,29.37 106,54C106,78.63 78.63,106 54,106C29.37,106 2,78.63 2,54C2,29.37 29.37,2 54,2Z" />
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M34,32L34,39L40,39L40,32ZM68,32L68,39L74,39L74,32Z" />
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M34,41C30,41 27,44 27,48L27,76C27,80 30,83 34,83L74,83C78,83 81,80 81,76L81,48C81,44 78,41 74,41ZM32,52L76,52L76,74C76,76 75,77 73,77L35,77C33,77 32,76 32,74Z" />
+    <path
+        android:fillColor="#D5E7F5"
+        android:pathData="M36,57L46,57L46,65L36,65ZM51,57L57,57L57,65L51,65ZM62,57L72,57L72,65L62,65ZM36,69L46,69L46,72L36,72ZM51,69L57,69L57,72L51,72Z" />
+</vector>

@@ -13,6 +13,7 @@ import com.github.echoping07.kemaolife.data.DaySchedule
 import com.github.echoping07.kemaolife.data.ElectricityReport
 import com.github.echoping07.kemaolife.data.Entry
 import com.github.echoping07.kemaolife.data.Repository
+import com.github.echoping07.kemaolife.data.ThemePreferences
 import com.github.echoping07.kemaolife.data.WeekSchedule
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
@@ -38,6 +39,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     private val store = CredentialStore(app)
     private val bridge = Bridge(app)
     private val repo = Repository(bridge)
+    private val themePreferences = ThemePreferences(app)
 
     private val today: String = LocalDate.now().toString()
 
@@ -49,7 +51,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         // 这个顺序是 R1 验收项「每次打开先出本地课表」（docs/002 §5.3）：
         // 周查询内部先刷新，刷新失败则自动回落旧快照并标 stale。
         val credentials = store.load()
-        _state.update { it.copy(credentials = credentials) }
+        _state.update { it.copy(credentials = credentials, themeColor = themePreferences.load()) }
         viewModelScope.launch {
             withContext(Dispatchers.IO) { repo.init(credentials) }
             _state.update { it.copy(bridgeReady = repo.isReady(), bridgeError = repo.readyError()) }
@@ -221,6 +223,11 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
+    fun setThemeColor(value: String) {
+        themePreferences.save(value)
+        _state.update { it.copy(themeColor = value) }
+    }
+
     fun consumeSettingsSaved() = _state.update { it.copy(settingsSaved = false) }
 
     fun consumeError() = _state.update { it.copy(error = null) }
@@ -308,6 +315,7 @@ data class AppState(
     val campusLoading: Boolean = false,
     val campusActing: CampusAction? = null,
 
+    val themeColor: String = "BLUE",
     val settingsSaved: Boolean = false,
     val error: String? = null,
 ) {

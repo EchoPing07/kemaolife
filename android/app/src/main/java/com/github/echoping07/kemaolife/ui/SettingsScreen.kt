@@ -1,7 +1,18 @@
 package com.github.echoping07.kemaolife.ui
 
-import androidx.compose.foundation.layout.Arrangement
+import androidx.activity.compose.BackHandler
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideOutHorizontally
+import androidx.compose.animation.togetherWith
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -9,275 +20,480 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
+import com.github.echoping07.kemaolife.ui.theme.smoothShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.Button
-import androidx.compose.material3.Icon
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.TextField
-import androidx.compose.material3.TextFieldDefaults
-import androidx.compose.material3.Text
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.rounded.ArrowBack
+import androidx.compose.material.icons.automirrored.rounded.KeyboardArrowRight
 import androidx.compose.material.icons.rounded.CheckCircle
+import androidx.compose.material.icons.rounded.DateRange
+import androidx.compose.material.icons.rounded.Lock
+import androidx.compose.material.icons.rounded.Settings
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Surface
+import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import com.github.echoping07.kemaolife.R
 import com.github.echoping07.kemaolife.data.Credentials
 
-/**
- * tab3 · 设置：分功能域录入账号密码（docs/002 §5.3）。
- *
- * 两条硬约束：
- *  1. 密码不回显：输入框恒用 PasswordVisualTransformation；
- *  2. 密码留空表示「不修改」：保存时由 CredentialStore 把旧值补回去。
- *
- * 凭据的加密与持久化全在 Kotlin（Keystore），Go 只拿解密后的内存值。
- *
- * 排版：每个功能域一张 filled card，说明文字放在卡片头部而不是塞进
- * `supportingText` —— 输入框下方每多一行小字，表单就显得越碎。
- */
+private enum class SettingsPage { ROOT, EDUCATION, CAMPUS, APPEARANCE, ABOUT }
+
+/** 设置总览只承担导航；凭据表单放进各自页面，避免三个功能域一次全部铺开。 */
 @Composable
 internal fun SettingsScreen(state: AppState, viewModel: AppViewModel) {
-    // 用当前凭据做输入框初值；密码框始终留空，避免把已存密码回填到 UI。
-    var studentId by remember(state.credentials.studentId) {
-        mutableStateOf(state.credentials.studentId)
-    }
-    var eduPassword by remember { mutableStateOf("") }
-    var customerCode by remember(state.credentials.customerCode) {
-        mutableStateOf(state.credentials.customerCode)
-    }
-    var campusUser by remember(state.credentials.campusUser) {
-        mutableStateOf(state.credentials.campusUser)
-    }
-    var campusPassword by remember { mutableStateOf("") }
-    var campusFingerprint by remember(state.credentials.campusFingerprint) {
-        mutableStateOf(state.credentials.campusFingerprint)
-    }
+    var pageName by rememberSaveable { mutableStateOf(SettingsPage.ROOT.name) }
+    val page = SettingsPage.valueOf(pageName)
+    BackHandler(enabled = page != SettingsPage.ROOT) { pageName = SettingsPage.ROOT.name }
 
-    LaunchedEffect(state.settingsSaved) {
-        if (state.settingsSaved) {
-            // 保存成功后清空密码框：明文不该在输入框里长期驻留。
-            eduPassword = ""
-            campusPassword = ""
-            viewModel.consumeSettingsSaved()
+    Column(modifier = Modifier.fillMaxSize()) {
+        Row(
+            modifier = Modifier.padding(start = 8.dp, end = 16.dp, top = 2.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            if (page != SettingsPage.ROOT) {
+                IconButton(onClick = { pageName = SettingsPage.ROOT.name }) {
+                    Icon(
+                        imageVector = Icons.AutoMirrored.Rounded.ArrowBack,
+                        contentDescription = stringResource(R.string.action_back),
+                    )
+                }
+            } else {
+                Spacer(Modifier.width(8.dp))
+            }
+            Text(
+                text = stringResource(
+                    when (page) {
+                        SettingsPage.ROOT -> R.string.tab_settings
+                        SettingsPage.EDUCATION -> R.string.section_edu
+                        SettingsPage.CAMPUS -> R.string.section_portal
+                        SettingsPage.APPEARANCE -> R.string.settings_appearance
+                        SettingsPage.ABOUT -> R.string.settings_about
+                    },
+                ),
+                style = MaterialTheme.typography.headlineSmall,
+                fontWeight = FontWeight.SemiBold,
+                modifier = Modifier.padding(horizontal = 8.dp, vertical = 12.dp),
+            )
+        }
+
+        AnimatedContent(
+            targetState = page,
+            transitionSpec = {
+                if (targetState != SettingsPage.ROOT) {
+                    slideInHorizontally(tween(280, easing = FastOutSlowInEasing)) { it / 3 } +
+                        fadeIn(tween(220)) togetherWith
+                        slideOutHorizontally(tween(280, easing = FastOutSlowInEasing)) { -it / 5 } +
+                        fadeOut(tween(160))
+                } else {
+                    slideInHorizontally(tween(280, easing = FastOutSlowInEasing)) { -it / 3 } +
+                        fadeIn(tween(220)) togetherWith
+                        slideOutHorizontally(tween(280, easing = FastOutSlowInEasing)) { it / 5 } +
+                        fadeOut(tween(160))
+                }
+            },
+            label = "settingsNavigation",
+            modifier = Modifier.weight(1f),
+        ) { currentPage ->
+            when (currentPage) {
+                SettingsPage.ROOT -> SettingsOverview(
+                    state = state,
+                    onEducation = { pageName = SettingsPage.EDUCATION.name },
+                    onCampus = { pageName = SettingsPage.CAMPUS.name },
+                    onAppearance = { pageName = SettingsPage.APPEARANCE.name },
+                    onAbout = { pageName = SettingsPage.ABOUT.name },
+                )
+                SettingsPage.EDUCATION -> EducationSettings(state, viewModel)
+                SettingsPage.CAMPUS -> CampusSettings(state, viewModel)
+                SettingsPage.APPEARANCE -> AppearanceScreen(state, viewModel)
+                SettingsPage.ABOUT -> AboutScreen()
+            }
         }
     }
+}
 
+@Composable
+private fun SettingsOverview(
+    state: AppState,
+    onEducation: () -> Unit,
+    onCampus: () -> Unit,
+    onAppearance: () -> Unit,
+    onAbout: () -> Unit,
+) {
     Column(
         modifier = Modifier
             .fillMaxSize()
             .verticalScroll(rememberScrollState())
             .padding(horizontal = 16.dp),
     ) {
-        ScreenTitle(stringResource(R.string.tab_settings))
-
-        // Keystore 说明放在最上面一行，作为整页的前提，而不是塞在某张卡片里。
-        Text(
-            text = stringResource(R.string.credentials_keystore_hint),
-            style = MaterialTheme.typography.bodySmall,
-            fontSize = 12.sp,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier.padding(start = 4.dp, bottom = 12.dp),
-        )
-
-        if (state.settingsSaved) {
-            SavedBadge()
-            Spacer(Modifier.height(12.dp))
+        Surface(
+            color = MaterialTheme.colorScheme.primaryContainer,
+            shape = MaterialTheme.shapes.large,
+        ) {
+            Row(
+                modifier = Modifier.padding(20.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Icon(
+                    imageVector = Icons.Rounded.Lock,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.onPrimaryContainer,
+                )
+                Spacer(Modifier.width(14.dp))
+                Text(
+                    text = stringResource(R.string.credentials_keystore_hint),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onPrimaryContainer,
+                )
+            }
         }
 
-        // ---- 教务 ----
-        SectionCard(title = stringResource(R.string.section_edu)) {
-            FieldNote(stringResource(R.string.edu_note))
-            Spacer(Modifier.height(10.dp))
-            AppTextField(
-                value = studentId,
-                onValueChange = { studentId = it },
-                label = stringResource(R.string.field_student_id),
-                keyboardType = KeyboardType.Number,
+        SettingsGroupLabel(stringResource(R.string.settings_accounts))
+        SettingsGroup {
+            SettingsDestination(
+                icon = Icons.Rounded.DateRange,
+                title = stringResource(R.string.section_edu),
+                supporting = if (state.credentials.studentId.isBlank()) {
+                    stringResource(R.string.settings_not_configured)
+                } else {
+                    stringResource(R.string.settings_edu_configured)
+                },
+                onClick = onEducation,
             )
-            Spacer(Modifier.height(10.dp))
-            AppTextField(
-                value = eduPassword,
-                onValueChange = { eduPassword = it },
-                label = stringResource(R.string.field_edu_password),
-                isPassword = true,
-                supporting = stringResource(R.string.password_kept_hint),
-                imeAction = ImeAction.Next,
-            )
-        }
-
-        Spacer(Modifier.height(12.dp))
-
-        // ---- 电费 ----
-        SectionCard(title = stringResource(R.string.section_power)) {
-            FieldNote(stringResource(R.string.power_no_password_hint))
-            Spacer(Modifier.height(10.dp))
-            AppTextField(
-                value = customerCode,
-                onValueChange = { customerCode = it },
-                label = stringResource(R.string.field_customer_code),
-                keyboardType = KeyboardType.Number,
+            Spacer(Modifier.height(2.dp))
+            SettingsDestination(
+                icon = TabIcons.Campus,
+                shapePosition = SettingsShapePosition.LAST,
+                title = stringResource(R.string.section_portal),
+                supporting = if (state.credentials.campusUser.isBlank()) {
+                    stringResource(R.string.settings_not_configured)
+                } else {
+                    stringResource(R.string.settings_campus_configured)
+                },
+                onClick = onCampus,
             )
         }
 
-        Spacer(Modifier.height(12.dp))
-
-        // ---- 校园网 ----
-        SectionCard(title = stringResource(R.string.section_portal)) {
-            FieldNote(stringResource(R.string.campus_independent_hint))
-            Spacer(Modifier.height(10.dp))
-            AppTextField(
-                value = campusUser,
-                onValueChange = { campusUser = it },
-                label = stringResource(R.string.field_campus_user),
+        SettingsGroupLabel(stringResource(R.string.settings_personalization))
+        SettingsGroup {
+            SettingsDestination(
+                icon = TabIcons.Appearance,
+                title = stringResource(R.string.settings_appearance),
+                supporting = stringResource(R.string.settings_theme_color),
+                onClick = onAppearance,
             )
-            Spacer(Modifier.height(10.dp))
-            AppTextField(
-                value = campusPassword,
-                onValueChange = { campusPassword = it },
-                label = stringResource(R.string.field_campus_password),
-                isPassword = true,
-                supporting = stringResource(R.string.password_kept_hint),
-            )
-            Spacer(Modifier.height(10.dp))
-            AppTextField(
-                value = campusFingerprint,
-                onValueChange = { campusFingerprint = it },
-                label = stringResource(R.string.field_campus_fingerprint),
-                supporting = stringResource(R.string.field_optional),
-                imeAction = ImeAction.Done,
+            Spacer(Modifier.height(2.dp))
+            SettingsDestination(
+                icon = TabIcons.Info,
+                shapePosition = SettingsShapePosition.LAST,
+                title = stringResource(R.string.settings_about),
+                supporting = stringResource(R.string.settings_about_hint),
+                onClick = onAbout,
             )
         }
 
+        SettingsGroupLabel(stringResource(R.string.settings_electricity_title))
+        Surface(
+            color = MaterialTheme.colorScheme.surfaceContainerLow,
+            shape = MaterialTheme.shapes.large,
+        ) {
+            Column(modifier = Modifier.padding(horizontal = 20.dp, vertical = 16.dp)) {
+                Text(
+                    text = stringResource(R.string.power_no_password_hint),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                Text(
+                    text = stringResource(R.string.settings_electricity_source),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(top = 6.dp),
+                )
+            }
+        }
         if (!state.bridgeReady && state.bridgeError != null) {
-            Spacer(Modifier.height(12.dp))
             Text(
-                text = state.bridgeError!!,
+                text = state.bridgeError,
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.error,
+                modifier = Modifier.padding(16.dp),
             )
         }
-
-        Spacer(Modifier.height(20.dp))
-        Button(
-            onClick = {
-                viewModel.saveCredentials(
-                    Credentials(
-                        studentId = studentId.trim(),
-                        eduPassword = eduPassword,
-                        customerCode = customerCode.trim()
-                            .ifBlank { Credentials.DEFAULT_CUSTOMER_CODE },
-                        campusUser = campusUser.trim(),
-                        campusPassword = campusPassword,
-                        campusFingerprint = campusFingerprint.trim(),
-                    ),
-                )
-            },
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(52.dp),
-        ) {
-            Text(
-                text = stringResource(R.string.action_save),
-                style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.SemiBold,
-            )
-        }
-
-        Spacer(Modifier.height(32.dp))
     }
 }
 
 @Composable
-private fun SavedBadge() {
+private fun SettingsGroupLabel(text: String) {
+    Text(
+        text = text,
+        style = MaterialTheme.typography.labelLarge,
+        color = MaterialTheme.colorScheme.primary,
+        modifier = Modifier.padding(start = 12.dp, top = 24.dp, bottom = 8.dp),
+    )
+}
+
+@Composable
+private fun SettingsGroup(content: @Composable ColumnScope.() -> Unit) {
+    Column(content = content)
+}
+
+private enum class SettingsShapePosition { SINGLE, FIRST, MIDDLE, LAST }
+
+/** MD3 Expressive list：同一组使用 4dp 小圆角，首尾用 28dp 大圆角，项间留 2dp。 */
+@Composable
+private fun SettingsDestination(
+    icon: ImageVector,
+    title: String,
+    supporting: String,
+    onClick: () -> Unit,
+    shapePosition: SettingsShapePosition = SettingsShapePosition.FIRST,
+) {
+    val shape = when (shapePosition) {
+        SettingsShapePosition.SINGLE -> MaterialTheme.shapes.large
+        SettingsShapePosition.FIRST -> smoothShape(28.dp, 4.dp)
+        SettingsShapePosition.MIDDLE -> smoothShape(4.dp)
+        SettingsShapePosition.LAST -> smoothShape(4.dp, 28.dp)
+    }
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(start = 4.dp),
+            .background(MaterialTheme.colorScheme.surfaceContainerLow, shape)
+            .clip(shape)
+            .clickable(onClick = onClick)
+            .padding(horizontal = 16.dp, vertical = 16.dp),
         verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(6.dp),
     ) {
+        BoxIcon(icon)
+        Spacer(Modifier.width(16.dp))
+        Column(modifier = Modifier.weight(1f)) {
+            Text(text = title, style = MaterialTheme.typography.titleMedium)
+            Text(
+                text = supporting,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(top = 2.dp),
+            )
+        }
         Icon(
-            imageVector = Icons.Rounded.CheckCircle,
+            imageVector = Icons.AutoMirrored.Rounded.KeyboardArrowRight,
             contentDescription = null,
-            tint = MaterialTheme.colorScheme.primary,
-            modifier = Modifier.size(18.dp),
+            tint = MaterialTheme.colorScheme.onSurfaceVariant,
         )
-        Text(
-            text = stringResource(R.string.save_done),
-            style = MaterialTheme.typography.labelLarge,
-            color = MaterialTheme.colorScheme.primary,
-        )
-        Spacer(Modifier.weight(1f))
     }
 }
 
-/** 卡片头部的一句话说明：解释「这块为什么只填这些」。 */
+@Composable
+private fun BoxIcon(icon: ImageVector) {
+    Icon(
+        imageVector = icon,
+        contentDescription = null,
+        tint = MaterialTheme.colorScheme.primary,
+        modifier = Modifier
+            .size(36.dp)
+            .clip(CircleShape)
+            .background(MaterialTheme.colorScheme.secondaryContainer)
+            .padding(8.dp),
+    )
+}
+
+@Composable
+private fun EducationSettings(state: AppState, viewModel: AppViewModel) {
+    var studentId by remember(state.credentials.studentId) { mutableStateOf(state.credentials.studentId) }
+    var password by remember { mutableStateOf("") }
+    var customerCode by remember(state.credentials.customerCode) {
+        mutableStateOf(state.credentials.customerCode)
+    }
+    LaunchedEffect(state.settingsSaved) {
+        if (state.settingsSaved) {
+            password = ""
+            viewModel.consumeSettingsSaved()
+        }
+    }
+    CredentialForm(
+        note = stringResource(R.string.edu_note),
+        saved = state.settingsSaved,
+        onSave = {
+            viewModel.saveCredentials(
+                state.credentials.copy(
+                    studentId = studentId.trim(),
+                    eduPassword = password,
+                    customerCode = customerCode.trim().ifBlank { Credentials.DEFAULT_CUSTOMER_CODE },
+                ),
+            )
+        },
+    ) {
+        AppTextField(
+            value = studentId,
+            onValueChange = { studentId = it },
+            label = stringResource(R.string.field_student_id),
+            keyboardType = KeyboardType.Number,
+        )
+        AppTextField(
+            value = password,
+            onValueChange = { password = it },
+            label = stringResource(R.string.field_edu_password),
+            isPassword = true,
+            supporting = stringResource(R.string.password_kept_hint),
+        )
+        SettingsGroupLabel(stringResource(R.string.section_power))
+        FieldNote(stringResource(R.string.power_no_password_hint))
+        AppTextField(
+            value = customerCode,
+            onValueChange = { customerCode = it },
+            label = stringResource(R.string.field_customer_code),
+            keyboardType = KeyboardType.Number,
+            imeAction = ImeAction.Done,
+        )
+    }
+}
+
+@Composable
+private fun CampusSettings(state: AppState, viewModel: AppViewModel) {
+    var user by remember(state.credentials.campusUser) { mutableStateOf(state.credentials.campusUser) }
+    var password by remember { mutableStateOf("") }
+    var fingerprint by remember(state.credentials.campusFingerprint) {
+        mutableStateOf(state.credentials.campusFingerprint)
+    }
+    LaunchedEffect(state.settingsSaved) {
+        if (state.settingsSaved) {
+            password = ""
+            viewModel.consumeSettingsSaved()
+        }
+    }
+    CredentialForm(
+        note = stringResource(R.string.campus_independent_hint),
+        saved = state.settingsSaved,
+        onSave = {
+            viewModel.saveCredentials(
+                state.credentials.copy(
+                    campusUser = user.trim(),
+                    campusPassword = password,
+                    campusFingerprint = fingerprint.trim(),
+                ),
+            )
+        },
+    ) {
+        AppTextField(
+            value = user,
+            onValueChange = { user = it },
+            label = stringResource(R.string.field_campus_user),
+        )
+        AppTextField(
+            value = password,
+            onValueChange = { password = it },
+            label = stringResource(R.string.field_campus_password),
+            isPassword = true,
+            supporting = stringResource(R.string.password_kept_hint),
+        )
+        AppTextField(
+            value = fingerprint,
+            onValueChange = { fingerprint = it },
+            label = stringResource(R.string.field_campus_fingerprint),
+            supporting = stringResource(R.string.field_optional),
+            imeAction = ImeAction.Done,
+        )
+    }
+}
+
+@Composable
+private fun CredentialForm(
+    note: String,
+    saved: Boolean,
+    onSave: () -> Unit,
+    content: @Composable ColumnScope.() -> Unit,
+) {
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .verticalScroll(rememberScrollState())
+            .padding(horizontal = 16.dp),
+    ) {
+        FieldNote(note)
+        Spacer(Modifier.padding(top = 16.dp))
+        content()
+        if (saved) {
+            Row(
+                modifier = Modifier.padding(top = 16.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Icon(
+                    imageVector = Icons.Rounded.CheckCircle,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.size(18.dp),
+                )
+                Spacer(Modifier.width(6.dp))
+                Text(
+                    text = stringResource(R.string.save_done),
+                    style = MaterialTheme.typography.labelLarge,
+                    color = MaterialTheme.colorScheme.primary,
+                )
+            }
+        }
+        androidx.compose.material3.Button(
+            onClick = onSave,
+            modifier = Modifier.fillMaxWidth().padding(vertical = 24.dp),
+            contentPadding = androidx.compose.foundation.layout.PaddingValues(vertical = 14.dp),
+        ) { Text(stringResource(R.string.action_save)) }
+    }
+}
+
 @Composable
 private fun FieldNote(text: String) {
     Text(
         text = text,
-        style = MaterialTheme.typography.bodySmall,
-        fontSize = 12.sp,
-        lineHeight = 17.sp,
+        style = MaterialTheme.typography.bodyMedium,
         color = MaterialTheme.colorScheme.onSurfaceVariant,
+        modifier = Modifier.padding(horizontal = 4.dp),
     )
 }
 
-/** 统一外观的输入框：filled 变体 + 固定高度，避免各字段看着像不同组件。 */
+/** 密码只保存在当前 composition，不进 Bundle；留空时仍沿用旧密码。 */
 @Composable
 private fun AppTextField(
     value: String,
     onValueChange: (String) -> Unit,
     label: String,
-    modifier: Modifier = Modifier,
     supporting: String? = null,
     isPassword: Boolean = false,
     keyboardType: KeyboardType = KeyboardType.Text,
     imeAction: ImeAction = ImeAction.Next,
 ) {
-    // Filled 变体：M3 的 filled text field 用容器色而不是描边，
-    // 一屏十来个输入框时不会变成一堆黑框（描边版在本页显得很重）。
-    TextField(
+    OutlinedTextField(
         value = value,
         onValueChange = onValueChange,
         label = { Text(label) },
-        supportingText = supporting?.let { { Text(it, fontSize = 11.sp) } },
+        supportingText = supporting?.let { { Text(it) } },
         singleLine = true,
-        visualTransformation = if (isPassword) {
-            PasswordVisualTransformation()
-        } else {
-            VisualTransformation.None
-        },
+        visualTransformation = if (isPassword) PasswordVisualTransformation() else VisualTransformation.None,
         keyboardOptions = KeyboardOptions(
             keyboardType = if (isPassword) KeyboardType.Password else keyboardType,
             imeAction = imeAction,
         ),
         shape = MaterialTheme.shapes.medium,
-        colors = TextFieldDefaults.colors(
-            focusedContainerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
-            unfocusedContainerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
-            disabledContainerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
-            focusedIndicatorColor = MaterialTheme.colorScheme.primary,
-            unfocusedIndicatorColor = Color.Transparent,
-            disabledIndicatorColor = Color.Transparent,
-        ),
-        modifier = modifier.fillMaxWidth(),
+        modifier = Modifier.fillMaxWidth().padding(top = 14.dp),
     )
 }
