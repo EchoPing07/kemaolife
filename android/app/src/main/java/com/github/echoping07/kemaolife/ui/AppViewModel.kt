@@ -4,6 +4,7 @@ import android.app.Application
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.github.echoping07.kemaolife.data.AppException
+import com.github.echoping07.kemaolife.data.AppPreferences
 import com.github.echoping07.kemaolife.data.Bridge
 import com.github.echoping07.kemaolife.data.CampusState
 import com.github.echoping07.kemaolife.data.CampusStatus
@@ -11,28 +12,32 @@ import com.github.echoping07.kemaolife.data.CredentialStore
 import com.github.echoping07.kemaolife.data.Credentials
 import com.github.echoping07.kemaolife.data.DaySchedule
 import com.github.echoping07.kemaolife.data.ElectricityReport
-import com.github.echoping07.kemaolife.data.Entry
+import com.github.echoping07.kemaolife.data.NetworkState
+import com.github.echoping07.kemaolife.data.ProbeResult
 import com.github.echoping07.kemaolife.data.Repository
 import com.github.echoping07.kemaolife.data.ThemePreferences
 import com.github.echoping07.kemaolife.data.WeekSchedule
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.async
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import java.time.LocalDate
 
 /**
  * 单例式的应用状态容器：三个 tab 共用一个 ViewModel（`MainActivity` 持有）。
  *
- * 为什么不用多个 ViewModel：三个 tab 共享同一份凭据、同一个门面会话；
- * 拆开就要在它们之间同步状态，收益为负。
+ * 课表状态只有一个来源：`week`（整周 7 天）。离线标记 `weekStale` 只由
+ * `timetable.sync` 的成功 / 失败事务提交，任何纯读缓存的 `repo.week()` 都不得覆写它：
+ * `CacheOnly` 的 `stale` 恒为 false，那是「本次没有刷新」，不是「上次刷新成功了」。
  *
- * 课表状态只有一个来源：`week`（整周 7 天）。选中日、今日都在它里面取，
- * 不再单独维护「今日 / 本周 / 选日期」三份数据 —— 那是 UI 难对齐的根源。
+ * 打开 App 的顺序（docs/002 §5.3）：先读课表 / 电费缓存立即渲染，再无条件联网覆盖；
+ * 其余自动触发（切回课表 tab、进入更多页、回到前台之外）按最小间隔节流，手动不受限。
  */
 class AppViewModel(app: Application) : AndroidViewModel(app) {
 
@@ -40,187 +45,556 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     private val bridge = Bridge(app)
     private val repo = Repository(bridge)
     private val themePreferences = ThemePreferences(app)
+    private val preferences = AppPreferences(app)
+    private val networkState = NetworkState(app)
 
     private val today: String = LocalDate.now().toString()
 
-    private val _state = MutableStateFlow(AppState(selectedDate = today, todayDate = today))
+    // 每个链路只保留一个在途 Job：用 Job.isActive 判重入，比普通 Boolean 更可靠
+    // ——协程被取消时 Job 自然完成，不会留下永远为 true 的标志。
+    private var syncJob: Job? = null
+    private var electricityJob: Job? = null
+    private var campusJob: Job? = null
+    private var campusActionJob: Job? = null
+    private var probeJob: Job? = null
+
+    // 课表读取代次：切周 / 选日期 / 同步回读都可能并发，只允许最新一次写 state。
+    @Volatile
+    private var weekSeq = 0L
+
+    // 测试弹窗代次：关闭再开另一个功能域时，旧结果不得写回新弹窗。
+    @Volatile
+    private var probeSeq = 0L
+
+    private val saveMutex = Mutex()
+
+    private val _state = MutableStateFlow(
+        AppState(
+            selectedDate = today,
+            todayDate = today,
+            timetableInterval = preferences.timetableIntervalMinutes,
+            electricityInterval = preferences.electricityIntervalMinutes,
+            campusWifiOnly = preferences.campusWifiOnly,
+            lastTimetableSyncAt = preferences.lastTimetableSyncAt,
+            lastElectricityAt = preferences.lastElectricityAt,
+        ),
+    )
     val state: StateFlow<AppState> = _state.asStateFlow()
 
     init {
-        // 启动路径：先解密凭据 → Init 门面 → 再并行联网。
-        // 这个顺序是 R1 验收项「每次打开先出本地课表」（docs/002 §5.3）：
-        // 周查询内部先刷新，刷新失败则自动回落旧快照并标 stale。
         val credentials = store.load()
-        _state.update { it.copy(credentials = credentials, themeColor = themePreferences.load()) }
+        _state.update {
+            it.copy(
+                credentials = credentials,
+                themeColor = themePreferences.load(),
+                // 只配电费也算「可用」：课表缺失由课表页自己提示。
+                needsSetup = credentials.studentId.isBlank() && credentials.electricityAccount.isBlank(),
+            )
+        }
+        // 老版本用 wall-clock 存时间戳，升到单调时钟后那些值全部失效，重查一次即可。
+        migrateClockBase()
         viewModelScope.launch {
+            // 电费缓存先出内容（不含 roomName / roomVerify，P2）。
+            val cached = withContext(Dispatchers.IO) { cachedElectricityReport() }
+            _state.update { it.copy(electricity = cached) }
+
             withContext(Dispatchers.IO) { repo.init(credentials) }
             _state.update { it.copy(bridgeReady = repo.isReady(), bridgeError = repo.readyError()) }
-            loadInitial()
+
+            // 冷启动：先读缓存渲染，再**无条件**尝试联网。缓存读是 suspend，
+            // 保证「先出缓存」在前，不会出现同步与缓存读并发、最后写入者胜。
+            fetchWeek(0)
+
+            // 「每次打开」是特殊的自动：不受最小间隔约束（docs/002 §5.3）。
+            onAppOpened(force = true)
         }
     }
 
+    /** wall-clock 时间戳迁移：比单调时钟还大的旧值一律清零，首次自动查询照常触发。 */
+    private fun migrateClockBase() {
+        val now = preferences.nowElapsed()
+        if (preferences.lastTimetableSyncAt > now) preferences.lastTimetableSyncAt = 0L
+        if (preferences.lastElectricityAt > now) preferences.lastElectricityAt = 0L
+        _state.update {
+            it.copy(
+                lastTimetableSyncAt = preferences.lastTimetableSyncAt,
+                lastElectricityAt = preferences.lastElectricityAt,
+            )
+        }
+    }
+
+    /** 打开 App（冷启动或从后台回到前台）：课表与电费都无条件尝试获取一次。 */
+    fun onAppOpened(force: Boolean = true) {
+        // 每个链路同时只留一个在途请求：回到前台时冷启动同步可能还在跑，
+        // 不需要再叠一轮完整 CAS 登录 / 电费查询。
+        if (syncJob?.isActive != true) maybeAutoSync(force)
+        if (electricityJob?.isActive != true) maybeAutoElectricity(force)
+        val s = _state.value
+        if (s.campus == null) refreshCampusStatus(manual = false)
+    }
+
+    /** 进入「更多」页：电费按间隔节流；校园网状态未知时判态一次。ViewModel 自己读最新 state。 */
+    fun onEnterMore() {
+        maybeAutoElectricity()
+        val s = _state.value
+        if (s.campus == null || s.campusSkipped) refreshCampusStatus(manual = false)
+    }
+
+    // ---- 课表 -------------------------------------------------------------
+
     /**
-     * 首次加载：① 周课表（内部先刷新）+ ② 一次独立 `timetable.sync` 兜底，两者并行。
+     * 读一次整周缓存并提交到 state（0 请求）。
      *
-     * ② 成功但 ① 失败时只更新 `syncedAt`，不覆写 `stale`（docs/002 §5.3「每次打开」）。
+     * `fromSync=true` 表示这是「同步成功后的回读」：只有它才能把 weekStale 清成 false，
+     * 且只有回读成功才提交数据时间；回读失败保留旧数据与旧数据时间并置离线标记，
+     * 避免「同步写盘成功但界面还是旧课表」被当成新数据（docs/002 §5.3）。
      */
-    private fun loadInitial() {
-        viewModelScope.launch {
-            _state.update { it.copy(weekLoading = true) }
-
-            val weekDeferred = async(Dispatchers.IO) { repo.week(0) }
-            val syncDeferred = async(Dispatchers.IO) { repo.sync() }
-            val week = weekDeferred.await()
-            val synced = syncDeferred.await()
-
-            week.onSuccess { view -> applyWeek(view.schedule, view.stale, view.syncedAt) }
-            week.onFailure { ex ->
+    private suspend fun fetchWeek(
+        week: Int = 0,
+        selectDate: String? = null,
+        fromSync: Boolean = false,
+    ): Boolean {
+        val seq = ++weekSeq
+        _state.update { it.copy(weekLoading = true) }
+        val result = withContext(Dispatchers.IO) { repo.week(week) }
+        return result.fold(
+            onSuccess = { view ->
+                applyWeek(view.schedule, view.syncedAt, selectDate, fromSync, seq)
+                seq == weekSeq
+            },
+            onFailure = { ex ->
                 _state.update { s ->
+                    if (seq != weekSeq) return@update s
                     s.copy(
                         weekLoading = false,
+                        timetableError = (ex as? AppException)?.displayMessage ?: "课表读取失败",
+                        // 同步成功但回读失败：旧课表不能冒充本次新数据。
+                        weekStale = if (fromSync && s.week != null) true else s.weekStale,
                         needsSetup = s.needsSetup || (ex as? AppException)?.needsCredentials == true,
-                        timetableError = (ex as? AppException)?.displayMessage ?: "课表加载失败",
                     )
                 }
-            }
+                false
+            },
+        )
+    }
 
-            synced.onSuccess { result ->
-                if (_state.value.week != null) {
-                    // stale 由 Go 查询信封给出；这里只补数据时间。
-                    _state.update { s -> s.copy(weekSyncedAt = result.syncedAt, timetableError = null) }
-                } else {
-                    // ① 失败但 ② 刷新成功：快照已经有了，再查一次就能出数据。
-                    withContext(Dispatchers.IO) { repo.week(0) }.onSuccess {
-                        applyWeek(it.schedule, it.stale, it.syncedAt)
+    /** 打开 App、切周、选日期、保存设置后的纯缓存读取；不覆写离线标记。 */
+    fun loadCachedWeek(week: Int = 0, selectDate: String? = null) {
+        viewModelScope.launch { fetchWeek(week, selectDate) }
+    }
+
+    /** 联网同步一次课表；成功后回读缓存覆盖界面。不做间隔判断。 */
+    fun syncTimetable() {
+        if (syncJob?.isActive == true) return
+        syncJob = viewModelScope.launch {
+            try {
+                _state.update { it.copy(timetableSyncing = true) }
+                val result = withContext(Dispatchers.IO) { repo.sync() }
+                val attemptedAt = preferences.nowElapsed()
+                preferences.lastTimetableSyncAt = attemptedAt
+
+                result.fold(
+                    onSuccess = {
+                        // 用户在同步期间切了周也不跳过刷新：否则刚同步成功却不更新界面；
+                        // 回读当前用户正在看的那一周，并用 generation 防止旧结果覆盖新选择。
+                        val desired = _state.value.week?.week ?: 0
+                        fetchWeek(desired, fromSync = true)
+                        _state.update {
+                            it.copy(timetableSyncing = false, lastTimetableSyncAt = attemptedAt)
+                        }
+                    },
+                    onFailure = { ex ->
+                        _state.update { s ->
+                            s.copy(
+                                timetableSyncing = false,
+                                lastTimetableSyncAt = attemptedAt,
+                                // 只标离线，不弹错误、不清缓存、不改数据时间。
+                                weekStale = s.week != null,
+                                needsSetup = s.needsSetup ||
+                                    (ex as? AppException)?.needsCredentials == true,
+                            )
+                        }
+                        if (_state.value.week == null) pushError(ex)
+                    },
+                )
+            } finally {
+                _state.update { it.copy(timetableSyncing = false, weekLoading = false) }
+            }
+        }
+    }
+
+    /** 按间隔决定要不要自动同步（切回课表 tab 等）。`force=true` 用于每次打开 App。 */
+    fun maybeAutoSync(force: Boolean = false) {
+        if (syncJob?.isActive == true) return
+        if (!force && !preferences.isDue(
+                preferences.lastTimetableSyncAt,
+                _state.value.timetableInterval,
+            )
+        ) {
+            return
+        }
+        val c = _state.value.credentials
+        if (c.studentId.isBlank() || c.eduPassword.isBlank()) return
+        syncTimetable()
+    }
+
+    /** 头部刷新按钮：手动动作，不受最小间隔约束。 */
+    fun refreshWeek() = syncTimetable()
+
+    /** 点周条上的某一天：该天已经在 `week.days` 里，纯本地选中，不发请求。 */
+    fun selectDate(date: String) {
+        _state.update { it.copy(selectedDate = date) }
+    }
+
+    /** 选日期：先问 Go 侧这一天属于第几周（纯读缓存），再读那一周。 */
+    fun pickDate(date: LocalDate) {
+        viewModelScope.launch {
+            _state.update { it.copy(weekLoading = true) }
+            try {
+                val day = withContext(Dispatchers.IO) { repo.date(date) }
+                day.onFailure { ex ->
+                    pushError(ex)
+                    _state.update { s -> s.copy(weekLoading = false) }
+                }
+                val resolved = day.getOrNull() ?: return@launch
+                fetchWeek(resolved.day.week, selectDate = date.toString())
+            } finally {
+                _state.update { it.copy(weekLoading = false) }
+            }
+        }
+    }
+
+    // ---- 电费 -------------------------------------------------------------
+
+    /** 电费查询并渲染；不做间隔判断（手动刷新与「测试」都走这里）。 */
+    fun refreshElectricity() {
+        if (electricityJob?.isActive == true) return
+        electricityJob = viewModelScope.launch {
+            try {
+                _state.update { it.copy(electricityLoading = true) }
+                val result = withContext(Dispatchers.IO) { repo.electricity() }
+                val attemptedAt = preferences.nowElapsed()
+                preferences.lastElectricityAt = attemptedAt
+                result.fold(
+                    onSuccess = { report ->
+                        withContext(Dispatchers.IO) { cacheElectricityReport(report) }
+                        _state.update {
+                            it.copy(
+                                electricity = report,
+                                electricityLoading = false,
+                                lastElectricityAt = attemptedAt,
+                            )
+                        }
+                    },
+                    onFailure = { ex ->
+                        // 失败不清缓存：旧电费照常可看。
+                        _state.update {
+                            it.copy(electricityLoading = false, lastElectricityAt = attemptedAt)
+                        }
+                        pushError(ex)
+                    },
+                )
+            } finally {
+                _state.update { it.copy(electricityLoading = false) }
+            }
+        }
+    }
+
+    /** 按间隔决定要不要自动查一次电费；`force=true` 用于每次打开 App。 */
+    fun maybeAutoElectricity(force: Boolean = false) {
+        if (electricityJob?.isActive == true) return
+        if (!force && !preferences.isDue(
+                preferences.lastElectricityAt,
+                _state.value.electricityInterval,
+            )
+        ) {
+            return
+        }
+        if (_state.value.credentials.electricityAccount.isBlank()) return
+        refreshElectricity()
+    }
+
+    // ---- 校园网 -----------------------------------------------------------
+
+    /** 「仅在 WiFi 下探测」打开时，非 WiFi 一律不发任何 `campusnet.*` 请求。 */
+    private fun campusAllowed(): Boolean =
+        !_state.value.campusWifiOnly || networkState.isOnWifi()
+
+    private fun applyCampusOfflineSkipped() {
+        campusJob?.cancel()
+        campusActionJob?.cancel()
+        _state.update { s ->
+            s.copy(
+                campus = CampusStatus(state = CampusState.OFFLINE, errorMsg = "", checkedAt = ""),
+                campusSkipped = true,
+                campusLoading = false,
+                campusActing = null,
+            )
+        }
+    }
+
+    private fun applyCampusFailure(ex: Throwable) {
+        val message = (ex as? AppException)?.displayMessage ?: "校园网判态失败"
+        _state.update { s ->
+            s.copy(
+                // 探测失败归 offline（docs/002 §3.3），不留在「加载中…」。
+                campus = CampusStatus(state = CampusState.OFFLINE, errorMsg = message, checkedAt = ""),
+                campusSkipped = false,
+                campusLoading = false,
+            )
+        }
+    }
+
+    fun refreshCampusStatus(manual: Boolean = true) {
+        if (!campusAllowed()) {
+            applyCampusOfflineSkipped()
+            return
+        }
+        campusJob?.cancel()
+        campusJob = viewModelScope.launch {
+            try {
+                _state.update { it.copy(campusLoading = true, campusSkipped = false) }
+                val result = withContext(Dispatchers.IO) { repo.campusStatus() }
+                result.fold(
+                    onSuccess = { status ->
+                        _state.update { it.copy(campus = status, campusLoading = false) }
+                    },
+                    onFailure = { ex ->
+                        applyCampusFailure(ex)
+                        if (manual) pushError(ex)
+                    },
+                )
+            } finally {
+                _state.update { it.copy(campusLoading = false) }
+            }
+        }
+    }
+
+    /** 手动登录 / 下线 / 重登；不再失败后复探（会绕过 WiFi 门控且多一次请求）。 */
+    fun campusAction(action: CampusAction) {
+        if (!campusAllowed()) {
+            applyCampusOfflineSkipped()
+            return
+        }
+        campusActionJob?.cancel()
+        campusActionJob = viewModelScope.launch {
+            try {
+                _state.update { it.copy(campusActing = action) }
+                val result = withContext(Dispatchers.IO) {
+                    when (action) {
+                        CampusAction.LOGIN -> repo.campusLogin()
+                        CampusAction.LOGOUT -> repo.campusLogout()
+                        CampusAction.RELOGIN -> repo.campusRelogin()
+                    }
+                }
+                result.fold(
+                    onSuccess = { status ->
+                        _state.update { it.copy(campus = status, campusActing = null) }
+                    },
+                    onFailure = { ex ->
+                        pushError(ex)
+                        applyCampusFailure(ex)
+                        _state.update { it.copy(campusActing = null) }
+                    },
+                )
+            } finally {
+                _state.update { it.copy(campusActing = null, campusLoading = false) }
+            }
+        }
+    }
+
+    fun setCampusWifiOnly(enabled: Boolean) {
+        preferences.campusWifiOnly = enabled
+        _state.update { it.copy(campusWifiOnly = enabled) }
+        if (enabled && !networkState.isOnWifi()) {
+            // 打开开关时立刻把残留的 online/unauth 置为 offline，动作按钮同时禁用。
+            applyCampusOfflineSkipped()
+        } else {
+            refreshCampusStatus(manual = false)
+        }
+    }
+
+    // ---- 测试（弹窗） -----------------------------------------------------
+
+    private fun probeActive(id: Long, target: ProbeTarget, s: AppState): Boolean {
+        val p = s.probe ?: return false
+        return p.id == id && p.target == target
+    }
+
+    /** 跑一次功能域自检；用同一次请求的结果刷新 UI，不再二次联网。 */
+    fun runProbe(target: ProbeTarget) {
+        probeJob?.cancel()
+        val id = ++probeSeq
+        _state.update { it.copy(probe = ProbeState(id = id, target = target, running = true)) }
+        probeJob = viewModelScope.launch {
+            try {
+                if (target == ProbeTarget.CAMPUS && !campusAllowed()) {
+                    val skipped = ProbeResult(
+                        ok = false,
+                        elapsedMs = 0L,
+                        code = 0,
+                        message = getApplication<Application>()
+                            .getString(com.github.echoping07.kemaolife.R.string.probe_skipped_wifi),
+                        detail = mapOf("state" to "offline"),
+                    )
+                    _state.update { s ->
+                        if (!probeActive(id, target, s)) return@update s
+                        s.copy(probe = ProbeState(id, target, running = false, result = skipped))
+                    }
+                    applyCampusOfflineSkipped()
+                    return@launch
+                }
+
+                val result = withContext(Dispatchers.IO) {
+                    when (target) {
+                        ProbeTarget.TIMETABLE -> repo.testTimetable()
+                        ProbeTarget.ELECTRICITY -> repo.testElectricity()
+                        ProbeTarget.CAMPUS -> repo.testCampus()
+                    }
+                }
+                result.fold(
+                    onSuccess = { probe -> commitProbe(id, target, probe) },
+                    onFailure = { ex ->
+                        val failure = ProbeResult(
+                            ok = false,
+                            elapsedMs = 0L,
+                            code = (ex as? AppException)?.code ?: 0,
+                            message = (ex as? AppException)?.displayMessage ?: "测试失败",
+                            detail = emptyMap(),
+                        )
+                        _state.update { s ->
+                            if (!probeActive(id, target, s)) return@update s
+                            s.copy(probe = ProbeState(id, target, running = false, result = failure))
+                        }
+                    },
+                )
+            } finally {
+                _state.update { s ->
+                    val p = s.probe
+                    if (p != null && p.id == id && p.running) {
+                        s.copy(probe = p.copy(running = false))
+                    } else {
+                        s
                     }
                 }
             }
         }
     }
 
-    /** 切周：`week = 0` 表示当周，由 Go 侧解析（假期返回 7 天 inSemester:false）。 */
-    fun loadWeek(week: Int) {
-        viewModelScope.launch {
-            _state.update { it.copy(weekLoading = true) }
-            val result = withContext(Dispatchers.IO) { repo.week(week) }
-            result.onSuccess { applyWeek(it.schedule, it.stale, it.syncedAt) }
-            result.onFailure { ex ->
-                pushError(ex)
-                _state.update { s -> s.copy(weekLoading = false) }
+    private suspend fun commitProbe(id: Long, target: ProbeTarget, probe: ProbeResult) {
+        if (!probeActive(id, target, _state.value)) return
+
+        if (probe.ok) {
+            when (target) {
+                ProbeTarget.TIMETABLE -> preferences.lastTimetableSyncAt = preferences.nowElapsed()
+                ProbeTarget.ELECTRICITY -> preferences.lastElectricityAt = preferences.nowElapsed()
+                ProbeTarget.CAMPUS -> Unit
             }
         }
-    }
-
-    /** 头部刷新按钮：重拉当前这一周（内部先刷新快照）。 */
-    fun refreshWeek() {
-        val current = _state.value.week?.week ?: 0
-        loadWeek(current)
-    }
-
-    /**
-     * 点周条上的某一天：该天已经在 `week.days` 里，纯本地选中，不发请求。
-     */
-    fun selectDate(date: String) {
-        _state.update { it.copy(selectedDate = date) }
-    }
-
-    /**
-     * 选日期：先问 Go 侧这一天属于第几周（`timetable.date`），再拉整周。
-     *
-     * 周次计算属于 `core`（AGENTS A3），Kotlin 不自己拿 `week1Monday` 做除法；
-     * 因此这里会多一次查询 —— 选日期是低频动作，正确性比省一个请求重要。
-     */
-    fun pickDate(date: LocalDate) {
-        viewModelScope.launch {
-            _state.update { it.copy(weekLoading = true) }
-            val day = withContext(Dispatchers.IO) { repo.date(date) }
-            day.onFailure { ex ->
-                pushError(ex)
-                _state.update { s -> s.copy(weekLoading = false) }
-            }
-            val resolved = day.getOrNull() ?: return@launch
-            val weekNo = resolved.day.week
-
-            val week = withContext(Dispatchers.IO) { repo.week(weekNo) }
-            week.onSuccess { view ->
-                applyWeek(view.schedule, view.stale, view.syncedAt, selectDate = date.toString())
-            }
-            week.onFailure { ex ->
-                pushError(ex)
-                _state.update { s -> s.copy(weekLoading = false) }
-            }
+        _state.update { s ->
+            if (!probeActive(id, target, s)) return@update s
+            s.copy(
+                probe = ProbeState(id, target, running = false, result = probe),
+                lastTimetableSyncAt = preferences.lastTimetableSyncAt,
+                lastElectricityAt = preferences.lastElectricityAt,
+            )
         }
-    }
+        if (!probe.ok || !probeActive(id, target, _state.value)) return
 
-    /** 电费刷新（tab2 手动动作）。 */
-    fun refreshElectricity() {
-        viewModelScope.launch {
-            _state.update { it.copy(electricityLoading = true) }
-            val result = withContext(Dispatchers.IO) { repo.electricity() }
-            result.onSuccess { report ->
-                _state.update { it.copy(electricity = report, electricityLoading = false) }
+        when (target) {
+            ProbeTarget.TIMETABLE -> {
+                // 测试已同步并写盘：回读缓存（0 请求）把界面更新成同一份数据。
+                val desired = _state.value.week?.week ?: 0
+                fetchWeek(desired, fromSync = true)
             }
-            result.onFailure {
-                pushError(it)
-                _state.update { s -> s.copy(electricityLoading = false) }
-            }
-        }
-    }
-
-    /** 校园网判态。探测失败归 offline 且 `ok:true`，不算错误（docs/002 §3.3）。 */
-    fun refreshCampusStatus() {
-        viewModelScope.launch {
-            _state.update { it.copy(campusLoading = true) }
-            val result = withContext(Dispatchers.IO) { repo.campusStatus() }
-            result.onSuccess { status ->
-                _state.update { it.copy(campus = status, campusLoading = false) }
-            }
-            result.onFailure {
-                pushError(it)
-                _state.update { s -> s.copy(campusLoading = false) }
-            }
-        }
-    }
-
-    /** 手动登录 / 下线 / 重登；成功后用返回的最新判态刷新 UI。 */
-    fun campusAction(action: CampusAction) {
-        viewModelScope.launch {
-            _state.update { it.copy(campusActing = action) }
-            val result = withContext(Dispatchers.IO) {
-                when (action) {
-                    CampusAction.LOGIN -> repo.campusLogin()
-                    CampusAction.LOGOUT -> repo.campusLogout()
-                    CampusAction.RELOGIN -> repo.campusRelogin()
+            ProbeTarget.ELECTRICITY -> probe.report?.let { report ->
+                withContext(Dispatchers.IO) { cacheElectricityReport(report) }
+                _state.update { s ->
+                    if (!probeActive(id, target, s)) return@update s
+                    s.copy(electricity = report)
                 }
             }
-            result.onSuccess { status ->
-                _state.update { it.copy(campus = status, campusActing = null) }
-            }
-            result.onFailure {
-                pushError(it)
-                // 失败也复探一次：动作可能「受理失败」但也可能已经改变了状态。
-                val status = withContext(Dispatchers.IO) { repo.campusStatus() }
-                _state.update { s -> s.copy(campus = status.getOrNull() ?: s.campus, campusActing = null) }
+            ProbeTarget.CAMPUS -> probe.campusStatus?.let { status ->
+                _state.update { s ->
+                    if (!probeActive(id, target, s)) return@update s
+                    s.copy(campus = status, campusSkipped = false)
+                }
             }
         }
     }
 
-    /** 保存设置：写 Keystore 后重新 Init 门面（设置页保存后立即生效）。 */
-    fun saveCredentials(next: Credentials) {
+    fun closeProbe() {
+        probeJob?.cancel()
+        probeJob = null
+        _state.update { it.copy(probe = null) }
+    }
+
+    // ---- 设置 -------------------------------------------------------------
+
+    /**
+     * 增量保存凭据：设置页只提交本域字段，由 ViewModel 基于最新 state 合并，
+     * 避免三个表单各自捕获旧 `state.credentials` 互相覆盖。Mutex 串行化 Init。
+     */
+    fun updateCredentials(change: (Credentials) -> Credentials) {
         viewModelScope.launch {
-            val merged = withContext(Dispatchers.IO) { store.save(next, _state.value.credentials) }
-            val env = withContext(Dispatchers.IO) { repo.init(merged) }
-            _state.update {
-                it.copy(
-                    credentials = merged,
-                    bridgeReady = repo.isReady(),
-                    bridgeError = repo.readyError(),
-                    needsSetup = !env.ok,
-                    settingsSaved = env.ok,
-                )
+            saveMutex.withLock {
+                val previous = _state.value.credentials
+                val next = change(previous)
+                val merged = withContext(Dispatchers.IO) { store.save(next, previous) }
+
+                // 账号身份变了：清掉旧账号的电费缓存，并让 Go 删掉旧快照（含 Cookie）。
+                val identityChanged = merged.studentId != previous.studentId ||
+                    merged.eduPassword != previous.eduPassword ||
+                    merged.electricityAccount != previous.electricityAccount ||
+                    merged.customerCode != previous.customerCode
+                if (identityChanged) {
+                    preferences.clearElectricityCache()
+                    _state.update {
+                        it.copy(
+                            electricity = null,
+                            lastElectricityAt = 0L,
+                            week = null,
+                            todayDay = null,
+                            weekStale = false,
+                            weekSyncedAt = "",
+                            timetableError = null,
+                        )
+                    }
+                }
+
+                val env = withContext(Dispatchers.IO) { repo.init(merged, resetSnapshot = identityChanged) }
+                _state.update {
+                    it.copy(
+                        credentials = merged,
+                        bridgeReady = repo.isReady(),
+                        bridgeError = repo.readyError(),
+                        needsSetup = !env.ok,
+                        settingsSaved = env.ok,
+                    )
+                }
+                if (!env.ok) {
+                    pushError(AppException(env.error))
+                    return@withLock
+                }
+
+                fetchWeek(_state.value.week?.week ?: 0)
+                // 首次配置 / 换账号后立刻取一次，不必再让用户手动点刷新。
+                if (identityChanged || _state.value.week == null) maybeAutoSync(force = true)
+                if (identityChanged || _state.value.electricity == null) {
+                    maybeAutoElectricity(force = true)
+                }
             }
-            if (env.ok) loadInitial() else pushError(AppException(env.error))
         }
+    }
+
+    fun setTimetableInterval(minutes: Int) {
+        preferences.timetableIntervalMinutes = minutes
+        _state.update { it.copy(timetableInterval = preferences.timetableIntervalMinutes) }
+    }
+
+    fun setElectricityInterval(minutes: Int) {
+        preferences.electricityIntervalMinutes = minutes
+        _state.update { it.copy(electricityInterval = preferences.electricityIntervalMinutes) }
     }
 
     fun setThemeColor(value: String) {
@@ -232,14 +606,45 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
 
     fun consumeError() = _state.update { it.copy(error = null) }
 
+    /** 读上一次的电费结果；没有或解析失败都返回 null（不阻断启动）。 */
+    private fun cachedElectricityReport(): ElectricityReport? {
+        val raw = preferences.electricityCacheJson
+        if (raw.isBlank()) return null
+        return runCatching { ElectricityReport.from(org.json.JSONObject(raw)) }.getOrNull()
+    }
+
+    /** 只写 UI 必需字段：`roomName` 是个人隐私，既不展示也不落盘（P2）。 */
+    private fun cacheElectricityReport(report: ElectricityReport) {
+        val status = org.json.JSONObject()
+            .put("balance", report.status.balance)
+            .put("unit", report.status.unit)
+            .put("collectedAt", report.status.collectedAt)
+            .put("dailyAvg", report.status.dailyAvg ?: org.json.JSONObject.NULL)
+            .put("estimatedDays", report.status.estimatedDays ?: org.json.JSONObject.NULL)
+        val days = org.json.JSONArray()
+        report.usage.days.forEach {
+            days.put(org.json.JSONObject().put("date", it.date).put("use", it.use))
+        }
+        val usage = org.json.JSONObject()
+            .put("yearMonth", report.usage.yearMonth)
+            .put("monthUse", report.usage.monthUse)
+            .put("dataUntil", report.usage.dataUntil)
+            .put("days", days)
+        preferences.electricityCacheJson = org.json.JSONObject()
+            .put("status", status)
+            .put("usage", usage)
+            .toString()
+    }
+
     private fun applyWeek(
         schedule: WeekSchedule,
-        stale: Boolean,
         syncedAt: String,
-        selectDate: String? = null,
+        selectDate: String?,
+        fromSync: Boolean,
+        seq: Long,
     ) {
         _state.update { s ->
-            // 保持选中日落在这一周里：切周后旧选中日可能已经不在本周了。
+            if (seq != weekSeq) return@update s
             val keep = selectDate ?: s.selectedDate
             val inWeek = schedule.days.any { it.date == keep }
             val fallback = schedule.days.firstOrNull { it.date == s.todayDate }?.date
@@ -247,16 +652,15 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                 ?: s.selectedDate
             s.copy(
                 week = schedule,
-                // 今日概览（「更多」页）不能被切周影响：只有当本次拉到的这一周
-                // 恰好含今天时才更新缓存，否则保留上一次的今日数据。
                 todayDay = schedule.days.firstOrNull { it.date == s.todayDate } ?: s.todayDay,
-                weekStale = stale,
+                // 纯读缓存不碰离线标记；只有「同步 + 回读」这个事务成功才清成 false。
+                weekStale = if (fromSync) false else s.weekStale,
                 weekSyncedAt = syncedAt,
                 weekLoading = false,
                 selectedDate = if (inWeek) keep else fallback,
-                // 查到数据就说明凭据可用，顺手清掉「需要配置」与上一次的错误。
                 needsSetup = false,
                 timetableError = null,
+                lastTimetableSyncAt = preferences.lastTimetableSyncAt,
             )
         }
     }
@@ -276,12 +680,17 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
 
 enum class CampusAction { LOGIN, LOGOUT, RELOGIN }
 
-/**
- * 单一 UI 状态。
- *
- * 每个字段都能为 null：null 表示「还没查过」，与「查到了但没数据」是不同的语义，
- * 用空字符串或 0 代替会让 UI 无法区分。
- */
+/** 设置页「测试」覆盖的功能域。 */
+enum class ProbeTarget { TIMETABLE, ELECTRICITY, CAMPUS }
+
+/** 一次测试的瞬时状态（弹窗打开期间有效）；id 用于淘汰过期结果。 */
+data class ProbeState(
+    val id: Long = 0L,
+    val target: ProbeTarget,
+    val running: Boolean,
+    val result: ProbeResult? = null,
+)
+
 data class AppState(
     val bridgeReady: Boolean = false,
     val bridgeError: String? = null,
@@ -289,43 +698,44 @@ data class AppState(
 
     val credentials: Credentials = Credentials(),
 
-    /** 当周（或用户切到的那一周）的 7 天课表 —— 课表 UI 的唯一数据源。 */
     val week: WeekSchedule? = null,
     val weekStale: Boolean = false,
     val weekSyncedAt: String = "",
     val weekLoading: Boolean = false,
-    /** 课表「连旧快照都没有」时的原因；有数据时为 null。 */
+    val timetableSyncing: Boolean = false,
     val timetableError: String? = null,
+    /** 上次课表同步尝试时刻（单调时钟 millis），0 表示从未同步。 */
+    val lastTimetableSyncAt: Long = 0L,
 
-    /** 选中日与今天，都是 `YYYY-MM-DD`；选中日必须落在 [week] 里（由 ViewModel 保证）。 */
     val selectedDate: String = "",
     val todayDate: String = "",
-    /**
-     * 今天那一天的课表（「更多」页今日概览用）。
-     *
-     * 单独缓存而不是从 [week] 里取：用户可能把课表切到别的周，
-     * 那时「今日概览」仍应显示今天，而不是变成空白。
-     */
     val todayDay: DaySchedule? = null,
 
     val electricity: ElectricityReport? = null,
     val electricityLoading: Boolean = false,
+    /** 上次电费查询时刻（单调时钟 millis），0 表示从未查询。 */
+    val lastElectricityAt: Long = 0L,
 
     val campus: CampusStatus? = null,
     val campusLoading: Boolean = false,
     val campusActing: CampusAction? = null,
+    val campusSkipped: Boolean = false,
+
+    /** 两项自动查询的最小间隔（分钟），来自本地偏好；默认均为 5 分钟、下限 1 分钟。 */
+    val timetableInterval: Int = AppPreferences.DEFAULT_TIMETABLE_INTERVAL,
+    val electricityInterval: Int = AppPreferences.DEFAULT_ELECTRICITY_INTERVAL,
+    val campusWifiOnly: Boolean = true,
 
     val themeColor: String = "BLUE",
     val settingsSaved: Boolean = false,
     val error: String? = null,
-) {
-    /** 校园网动作用：offline 时不允许登录 / 下线 / 重登（docs/002 §3.3）。 */
-    val campusActionsEnabled: Boolean
-        get() = campus != null && campus.state != CampusState.OFFLINE
 
-    /** 周里与 [selectedDate] 对应的那天；切周后若选中日不在本周则为 null。 */
+    val probe: ProbeState? = null,
+) {
+    /** 校园网动作用：offline / 已跳过探测时不允许登录 / 下线 / 重登。 */
+    val campusActionsEnabled: Boolean
+        get() = campus != null && campus.state != CampusState.OFFLINE && !campusSkipped
+
     val selectedDay: DaySchedule?
         get() = week?.days?.firstOrNull { it.date == selectedDate }
-
-    val todayEntries: List<Entry> get() = todayDay?.entries ?: emptyList()
 }

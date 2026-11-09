@@ -5,7 +5,6 @@ package porttest
 
 import (
 	"bytes"
-	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -13,6 +12,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/EchoPing07/kemaolife/internal/core"
 )
 
 // MemStore 是 KVStore 的 map 实现。
@@ -25,14 +26,12 @@ func NewMemStore() *MemStore {
 	return &MemStore{data: make(map[string][]byte)}
 }
 
-var ErrKeyNotFound = errors.New("key not found")
-
 func (s *MemStore) Get(key string) ([]byte, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	v, ok := s.data[key]
 	if !ok {
-		return nil, fmt.Errorf("%w: %s", ErrKeyNotFound, key)
+		return nil, fmt.Errorf("%w: %s", core.ErrKeyNotFound, key)
 	}
 	out := make([]byte, len(v))
 	copy(out, v)

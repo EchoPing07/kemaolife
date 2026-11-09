@@ -89,7 +89,7 @@ func timetableDay(ctx context.Context, opts options, rt *session, date model.Dat
 	if err != nil {
 		return err
 	}
-	result, err := app.GetSchedule(ctx, rt.deps, cfg, date)
+	result, err := app.GetSchedule(ctx, rt.deps, cfg, date, app.RefreshFirst)
 	if err != nil {
 		return err
 	}
@@ -117,7 +117,7 @@ func timetableWeek(ctx context.Context, opts options, rt *session, week int) err
 	if err != nil {
 		return err
 	}
-	result, err := app.GetWeekSchedule(ctx, rt.deps, cfg, week)
+	result, err := app.GetWeekSchedule(ctx, rt.deps, cfg, week, app.RefreshFirst)
 	if err != nil {
 		return err
 	}

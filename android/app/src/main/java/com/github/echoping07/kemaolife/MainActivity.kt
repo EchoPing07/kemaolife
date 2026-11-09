@@ -37,9 +37,14 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.compose.runtime.DisposableEffect
 import com.github.echoping07.kemaolife.ui.AppViewModel
 import com.github.echoping07.kemaolife.ui.MoreScreen
+import com.github.echoping07.kemaolife.ui.ProbeDialog
 import com.github.echoping07.kemaolife.ui.SettingsScreen
 import com.github.echoping07.kemaolife.ui.TabIcons
 import com.github.echoping07.kemaolife.ui.TimetableScreen
@@ -69,11 +74,31 @@ private fun AppRoot(viewModel: AppViewModel) {
     var tab by rememberSaveable { mutableStateOf(Tab.TIMETABLE) }
     val snackbar = remember { SnackbarHostState() }
 
+    // 回到前台也算「每次打开」：先读缓存（state 里已有），再无条件尝试联网覆盖。
+    // 冷启动由 ViewModel.init 触发，这里只处理 ON_RESUME，避免启动时重复两轮。
+    val lifecycleOwner = LocalLifecycleOwner.current
+    DisposableEffect(lifecycleOwner) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_RESUME) viewModel.onAppOpened(force = true)
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+    }
+
     LaunchedEffect(state.error) {
         state.error?.let {
             snackbar.showSnackbar(it)
             viewModel.consumeError()
         }
+    }
+
+    // 设置页 / 更多页的「测试」都进同一个弹窗，避免两处各写一套展示。
+    state.probe?.let { probe ->
+        ProbeDialog(
+            state = probe,
+            onClose = viewModel::closeProbe,
+            onRetry = { viewModel.runProbe(probe.target) },
+        )
     }
 
     Scaffold(
@@ -85,17 +110,17 @@ private fun AppRoot(viewModel: AppViewModel) {
             ) {
                 NavItem(
                     selected = tab == Tab.TIMETABLE,
-                    onClick = { tab = Tab.TIMETABLE },
+                    onClick = {
+                        tab = Tab.TIMETABLE
+                        // 切回课表时按最小间隔补一次同步（打开 App 本身是特殊自动，不受限）。
+                        viewModel.maybeAutoSync()
+                    },
                     label = stringResource(R.string.tab_timetable),
                     icon = { Icon(TabIcons.Timetable, contentDescription = null) },
                 )
                 NavItem(
                     selected = tab == Tab.MORE,
-                    onClick = {
-                        tab = Tab.MORE
-                        if (state.electricity == null) viewModel.refreshElectricity()
-                        viewModel.refreshCampusStatus()
-                    },
+                    onClick = { tab = Tab.MORE },
                     label = stringResource(R.string.tab_more),
                     icon = { Icon(TabIcons.More, contentDescription = null) },
                 )

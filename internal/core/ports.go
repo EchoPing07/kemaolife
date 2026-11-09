@@ -5,14 +5,22 @@ package core
 
 import (
 	"context"
+	"errors"
 	"net/http"
 	"time"
 
 	"github.com/EchoPing07/kemaolife/internal/core/model"
 )
 
+// ErrKeyNotFound 是 KVStore 的「键不存在」标准哨兵。
+//
+// 为什么需要统一：app 层要区分「从没同步过」（可引导首次同步）与「快照读取失败」
+// （必须提示重新同步）。各适配器用 %w 包装本哨兵，core 只判 errors.Is。
+var ErrKeyNotFound = errors.New("key not found")
+
 // KVStore 隔离「存哪儿 / 怎么加密」的差异（0600 文件 / DPAPI / Keystore）。
-// 实现方负责权限、加密与原子写；失败时不得留下半份数据。
+// 实现方负责权限、加密与原子写；失败时不得留下半份数据；键不存在时返回包装了
+// ErrKeyNotFound 的错误。
 type KVStore interface {
 	Get(key string) ([]byte, error)
 	Put(key string, v []byte) error

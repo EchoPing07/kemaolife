@@ -50,6 +50,9 @@ gomobile bind -target=android -androidapi 24 \
 
 > `libs/*.aar` 是构建产物，**不入版本库**（见 `.gitignore`）；
 > 新克隆仓库后先跑一次上面的命令。
+>
+> 改动 `cmd/kemaolife-mobile/bridge.go` 里的门面 `op` 后，必须先重新执行本节命令生成 AAR，
+> 再跑 `:app:assembleDebug`；否则 Kotlin 侧仍链接旧的 AAR。
 
 ## 3. 本地构建 APK
 
@@ -57,7 +60,7 @@ gomobile bind -target=android -androidapi 24 \
 cd android
 ./gradlew :app:assembleDebug        # 4 个 ABI 的 debug APK
 ./gradlew :app:assembleRelease      # 未注入发布密钥时回落 debug 签名，仅供自测
-./gradlew :app:testDebugUnitTest    # 信封 → DTO 投影单测
+./gradlew :app:testDebugUnitTest    # 信封 → DTO 投影、查询间隔纯函数与 probe DTO 单测
 ```
 
 产物在 `app/build/outputs/apk/<变体>/app-<ABI>-<变体>.apk`。装到真机：

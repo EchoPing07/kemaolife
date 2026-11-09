@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+
+	"github.com/EchoPing07/kemaolife/internal/core"
 )
 
 // SingleFileStore 是「整份内容存在一个文件里」的 KVStore，用于配置。
@@ -37,7 +39,14 @@ func (s *SingleFileStore) Get(key string) ([]byte, error) {
 	if key != s.key {
 		return nil, fmt.Errorf("配置存储只接受键 %q", s.key)
 	}
-	return os.ReadFile(s.path)
+	raw, err := os.ReadFile(s.path)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil, fmt.Errorf("%w: %s", core.ErrKeyNotFound, key)
+		}
+		return nil, err
+	}
+	return raw, nil
 }
 
 func (s *SingleFileStore) Put(key string, v []byte) error {

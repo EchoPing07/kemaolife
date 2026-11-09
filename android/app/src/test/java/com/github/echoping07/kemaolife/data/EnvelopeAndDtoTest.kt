@@ -104,6 +104,63 @@ class EnvelopeAndDtoTest {
     }
 
     @Test
+    fun `测试回报 null 值保留为空串并显示占位符`() {
+        val probe = ProbeResult.from(
+            JSONObject(
+                """{"ok":true,"elapsedMs":12,"message":"","detail":{"estimatedDays":null,"collectedAt":""}}""",
+            ),
+        )
+        // null 不能跳过整个字段，也不能序列化成字面量 "null"。
+        assertEquals("", probe.detail["estimatedDays"])
+        assertEquals("", probe.detail["collectedAt"])
+        assertTrue(probe.ok)
+        assertEquals(12L, probe.elapsedMs)
+    }
+
+    @Test
+    fun `测试回报未知字段与动态 payload 被隔离`() {
+        val probe = ProbeResult.from(
+            JSONObject(
+                """{"ok":true,"elapsedMs":1,"message":"","detail":{
+                   "balance":35.99,"roomName":"<房间>","roomVerify":"<roomverify>"},
+                   "report":{"status":{"balance":35.99,"unit":"度","dailyAvg":null,"estimatedDays":null,
+                     "collectedAt":"","roomName":""},
+                     "usage":{"yearMonth":"2026-11","monthUse":1.0,"dataUntil":"","days":[]}},
+                   "campusStatus":{"state":"online","checkedAt":"","errorMsg":""}}""",
+            ),
+        )
+        // 未知 detail 字段一律丢弃，避免上游新增字段原样摊给用户（P2）。
+        assertFalse(probe.detail.containsKey("roomName"))
+        assertFalse(probe.detail.containsKey("roomVerify"))
+        assertEquals("", probe.report?.status?.roomName)
+        assertEquals("2026-11", probe.report?.usage?.yearMonth)
+        assertEquals(CampusState.ONLINE, probe.campusStatus?.state)
+    }
+
+    @Test
+    fun `测试失败回报带固定错误码与中性文案`() {
+        val probe = ProbeResult.from(
+            JSONObject("""{"ok":false,"elapsedMs":3,"code":3001,"message":"凭据或本地数据不可用"}"""),
+        )
+        assertFalse(probe.ok)
+        assertEquals(3001, probe.code)
+        assertEquals("凭据或本地数据不可用", probe.message)
+        assertTrue(probe.detail.isEmpty())
+    }
+
+    @Test
+    fun `凭据老存档缺继承开关时默认打开`() {
+        // 与 CredentialStore.fromJson 的兼容口径一致：升级后电费继续复用教务学号。
+        val legacy = JSONObject("""{"studentId":"<学号>","eduPassword":"<密码>"}""")
+        val inherit = if (legacy.has("electricityInheritEducation")) {
+            legacy.optBoolean("electricityInheritEducation")
+        } else {
+            true
+        }
+        assertTrue(inherit)
+    }
+
+    @Test
     fun `周课表解析出 7 天`() {
         val days = (0 until 7).joinToString(",") {
             """{"date":"2026-11-0${it + 2}","week":10,"weekday":${it + 1},

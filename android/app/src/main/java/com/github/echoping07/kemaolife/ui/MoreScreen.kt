@@ -30,6 +30,7 @@ import androidx.compose.material.icons.rounded.Refresh
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.FilledTonalButton
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
@@ -67,12 +68,9 @@ internal fun MoreScreen(
     viewModel: AppViewModel,
     onGoSettings: () -> Unit,
 ) {
-    // 进入本页就并行拉一次电费与判态（Android 不做后台，离开即停）。
-    // 放在这里而不是只绑在底栏 onClick 上：tab 可能因重建直接恢复到本页。
-    LaunchedEffect(Unit) {
-        if (state.electricity == null) viewModel.refreshElectricity()
-        if (state.campus == null) viewModel.refreshCampusStatus()
-    }
+    // 只把稳定依赖放进 effect：ViewModel 自己读最新 state，不捕获整个 AppState。
+    // 进入本页的自动查询按最小间隔节流；手动刷新按钮不受约束。
+    LaunchedEffect(Unit) { viewModel.onEnterMore() }
 
     Column(
         modifier = Modifier
@@ -82,8 +80,12 @@ internal fun MoreScreen(
     ) {
         ScreenTitle(stringResource(R.string.tab_more))
 
-        if (state.needsSetup) {
-            SetupCard(onGoSettings)
+        if (state.credentials.studentId.isBlank() || state.credentials.electricityAccount.isBlank()) {
+            SetupCard(
+                missingEducation = state.credentials.studentId.isBlank(),
+                missingElectricity = state.credentials.electricityAccount.isBlank(),
+                onGoSettings = onGoSettings,
+            )
             Spacer(Modifier.height(12.dp))
         }
 
@@ -100,10 +102,19 @@ internal fun MoreScreen(
 }
 
 @Composable
-private fun SetupCard(onGoSettings: () -> Unit) {
+private fun SetupCard(
+    missingEducation: Boolean,
+    missingElectricity: Boolean,
+    onGoSettings: () -> Unit,
+) {
     SectionCard(title = stringResource(R.string.setup_missing_title)) {
         Text(
-            text = stringResource(R.string.setup_missing_body),
+            // 教务与电费已拆开：只缺一个时不要笼统说「都要填」。
+            text = when {
+                missingEducation && missingElectricity -> stringResource(R.string.setup_missing_body)
+                missingEducation -> stringResource(R.string.setup_missing_education)
+                else -> stringResource(R.string.setup_missing_electricity)
+            },
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
@@ -154,10 +165,17 @@ private fun ElectricityCard(state: AppState, viewModel: AppViewModel) {
     SectionCard(
         title = stringResource(R.string.section_electricity),
         action = {
-            RefreshAction(
-                loading = state.electricityLoading,
-                onClick = { viewModel.refreshElectricity() },
-            )
+            SectionActions {
+                TestAction(
+                    target = ProbeTarget.ELECTRICITY,
+                    state = state,
+                    onTest = { viewModel.runProbe(ProbeTarget.ELECTRICITY) },
+                )
+                RefreshAction(
+                    loading = state.electricityLoading,
+                    onClick = { viewModel.refreshElectricity() },
+                )
+            }
         },
     ) {
         when {
@@ -318,11 +336,18 @@ private fun CampusCard(state: AppState, viewModel: AppViewModel) {
     SectionCard(
         title = stringResource(R.string.section_campusnet),
         action = {
-            RefreshAction(
-                loading = state.campusLoading,
-                contentDescription = stringResource(R.string.action_probe),
-                onClick = { viewModel.refreshCampusStatus() },
-            )
+            SectionActions {
+                TestAction(
+                    target = ProbeTarget.CAMPUS,
+                    state = state,
+                    onTest = { viewModel.runProbe(ProbeTarget.CAMPUS) },
+                )
+                RefreshAction(
+                    loading = state.campusLoading,
+                    contentDescription = stringResource(R.string.action_probe),
+                    onClick = { viewModel.refreshCampusStatus() },
+                )
+            }
         },
     ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
@@ -357,7 +382,10 @@ private fun CampusCard(state: AppState, viewModel: AppViewModel) {
         if (campus?.state == CampusState.OFFLINE) {
             Spacer(Modifier.height(6.dp))
             Text(
-                text = stringResource(R.string.campusnet_offline_hint),
+                text = stringResource(
+                    if (state.campusSkipped) R.string.campusnet_wifi_only_hint
+                    else R.string.campusnet_offline_hint,
+                ),
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
@@ -453,6 +481,41 @@ private fun CampusButton(
     } else {
         OutlinedButton(onClick = onClick, enabled = enabled, shape = CircleShape, modifier = modifier) {
             Text(label, maxLines = 1)
+        }
+    }
+}
+
+/** 卡片右上角的动作组：测试 + 刷新并排，间距固定，避免两个 44dp 贴在一起。 */
+@Composable
+private fun SectionActions(content: @Composable androidx.compose.foundation.layout.RowScope.() -> Unit) {
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(2.dp),
+        content = content,
+    )
+}
+
+/**
+ * 「测试」按钮：打开设置页的测试弹窗，跑一次该功能域的完整请求。
+ *
+ * 与刷新按钮的区别：刷新是「把界面更新成最新」，测试是「告诉我这条链路通不通、
+ * 花了多久、失败在哪一步」。后者会打开弹窗并显示结构化结果（docs/002 §5.3）。
+ */
+@Composable
+internal fun TestAction(target: ProbeTarget, state: AppState, onTest: () -> Unit) {
+    val running = state.probe?.target == target && state.probe.running
+    Box(modifier = Modifier.size(40.dp), contentAlignment = Alignment.Center) {
+        if (running) {
+            ExpressiveLoadingIndicator(size = 18.dp)
+        } else {
+            IconButton(onClick = onTest, modifier = Modifier.size(40.dp)) {
+                Icon(
+                    imageVector = TabIcons.Flask,
+                    contentDescription = stringResource(R.string.action_test),
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.size(19.dp),
+                )
+            }
         }
     }
 }

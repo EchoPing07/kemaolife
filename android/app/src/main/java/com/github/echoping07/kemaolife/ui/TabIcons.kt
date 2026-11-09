@@ -119,6 +119,29 @@ internal object TabIcons {
         "M12 11v6",
     ))
 
+    // 图标集只装了 material-icons-core，没有 Science / Bolt / ErrorOutline；
+    // 与其为此再引一个图标依赖（AGENTS A5），不如沿用这里的 Tabler 路径。
+    val Flask = icon("Flask", listOf(
+        "M9 3l6 0",
+        "M10 9l4 0",
+        "M9 3v6l-4.5 7.5a2 2 0 0 0 1.7 3h9.6a2 2 0 0 0 1.7 -3l-4.5 -7.5v-6",
+    ))
+
+    val Bolt = icon("Bolt", listOf(
+        "M13 3v7h6l-8 11v-7h-6l8 -11z",
+    ))
+
+    val AlertCircle = icon("AlertCircle", listOf(
+        "M3 12a9 9 0 1 0 18 0a9 9 0 0 0 -18 0",
+        "M12 8v4",
+        "M12 16h.01",
+    ))
+
+    val Clock = icon("Clock", listOf(
+        "M12 12m-9 0a9 9 0 1 0 18 0a9 9 0 1 0 -18 0",
+        "M12 7v5l3 3",
+    ))
+
     val Clear = icon("X", listOf(
         "M18 6l-12 12",
         "M6 6l12 12",

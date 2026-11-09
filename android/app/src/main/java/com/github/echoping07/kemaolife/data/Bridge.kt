@@ -28,7 +28,11 @@ class Bridge(private val context: Context) {
      * Kotlin 负责 Keystore 加解密与持久化，Go 只处理内存里的凭据；
      * 设置页保存后重新调用本方法即可热更新，门面不提供 `config.*` op。
      */
-    fun init(credentials: Credentials): Envelope {
+    /**
+     * `resetSnapshot = true` 用于凭据身份变更：Go 侧先删本地快照（含旧 Cookie）再换会话，
+     * 避免旧账号课表在 CacheOnly 路径上先显示出来（docs/002 §2.1 规则 2）。
+     */
+    fun init(credentials: Credentials, resetSnapshot: Boolean = false): Envelope {
         // 时区必须由 Kotlin 传入：Go 在 Android 上找不到系统的 zoneinfo 目录，
         // time.Local 会退化成 UTC，导致所有时间戳差 8 小时（见 android/README.md）。
         val zone = java.util.TimeZone.getDefault()
@@ -37,11 +41,17 @@ class Bridge(private val context: Context) {
             .put("studentId", credentials.studentId)
             .put("eduPassword", credentials.eduPassword)
             .put("customerCode", credentials.customerCode)
+            // 空串 = 继承教务学号（Go 侧 Config.ElectricityStudent() 回落 StudentID）。
+            .put(
+                "electricityStudentId",
+                if (credentials.electricityInheritEducation) "" else credentials.electricityStudentId,
+            )
             .put("campusUser", credentials.campusUser)
             .put("campusPassword", credentials.campusPassword)
             .put("campusFingerprint", credentials.campusFingerprint)
             .put("timeZone", zone.id)
             .put("timeZoneOffsetSeconds", zone.getOffset(System.currentTimeMillis()) / 1000)
+            .put("resetSnapshot", resetSnapshot)
 
         val env = Envelope.parse(Kemaolife.init(config.toString()))
         initialized = env.ok

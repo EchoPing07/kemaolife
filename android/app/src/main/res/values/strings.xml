@@ -32,6 +32,7 @@
     <string name="data_stale">离线数据（同步于 %1$s）</string>
     <string name="data_stale_short">离线 · %1$s</string>
     <string name="data_collected_at">数据截至 %1$s</string>
+    <string name="data_collected_at_plain">数据截至</string>
 
     <!-- 更多页。 -->
     <string name="section_today">今日课表</string>
@@ -52,24 +53,29 @@
     <string name="campus_probed_at">探测于 %1$s</string>
     <string name="setup_missing_title">还没有配置账号</string>
     <string name="setup_missing_body">填写学号与密码后才能查询课表与电费。</string>
+    <string name="setup_missing_education">课表需要教务学号与密码，电费可在设置里单独配置。</string>
+    <string name="setup_missing_electricity">电费需要学号，可在设置 → 电费里填写或打开「继承教务信息」。</string>
     <string name="setup_missing_action">去填写</string>
 
     <string name="campusnet_online">已在线</string>
     <string name="campusnet_unauth">未认证</string>
     <string name="campusnet_offline">不在校园网</string>
     <string name="campusnet_offline_hint">校园网认证需要连接校园网 WiFi，蜂窝数据下无法使用。</string>
+    <string name="campusnet_wifi_only_hint">当前不在 WiFi 下，已跳过探测（可在设置里的校园网页关闭此限制）。</string>
     <string name="action_login">登录</string>
     <string name="action_logout">下线</string>
     <string name="action_relogin">重登</string>
     <string name="action_probe">重新探测</string>
+    <string name="action_test">测试</string>
+    <string name="action_test_again">重新测试</string>
 
-    <!-- 设置页：总览 + 教务 / 校园网两个二级页。 -->
+    <!-- 设置页：总览 + 教务 / 电费 / 校园网三个二级页。 -->
     <string name="settings_accounts">账号与服务</string>
     <string name="settings_not_configured">尚未配置</string>
-    <string name="settings_edu_configured">教务账号已配置，电费共用学号</string>
+    <string name="settings_edu_configured">教务账号已配置</string>
+    <string name="settings_electricity_inherited">继承教务学号</string>
+    <string name="settings_electricity_own_account">使用独立学号</string>
     <string name="settings_campus_configured">校园网账号已配置</string>
-    <string name="settings_electricity_title">电费查询</string>
-    <string name="settings_electricity_source">学号与学校代码在「教务（课表）」中维护。</string>
     <string name="action_back">返回</string>
     <string name="settings_personalization">个性化</string>
     <string name="settings_appearance">外观</string>
@@ -89,9 +95,9 @@
     <string name="campus_vlan">VLAN</string>
     <string name="campus_device_ip">本机内网 IP</string>
     <string name="campus_mac">MAC</string>
-    <string name="section_edu">教务（课表）</string>
+    <string name="section_edu">教务</string>
     <string name="section_power">电费</string>
-    <string name="section_portal">校园网认证</string>
+    <string name="section_portal">校园网</string>
     <string name="field_student_id">学号</string>
     <string name="field_edu_password">教务密码</string>
     <string name="field_customer_code">学校代码</string>
@@ -99,13 +105,44 @@
     <string name="field_campus_password">校园网密码</string>
     <string name="field_campus_fingerprint">浏览器指纹</string>
     <string name="field_optional">选填</string>
+    <string name="field_inherit_edu">继承教务信息</string>
+    <string name="field_inherit_edu_hint">打开时电费直接使用教务学号，关闭后可单独填写。</string>
+    <string name="field_inherit_edu_value">当前使用教务学号</string>
+    <string name="field_electricity_student_id">电费学号</string>
+    <string name="field_min_interval">最小查询间隔</string>
+    <string name="field_campus_wifi_only">仅在 WiFi 下探测</string>
+    <string name="field_campus_wifi_only_hint">非 WiFi 下不发起任何探测 / 登录 / 下线 / 重登请求，直接显示「不在校园网」。</string>
     <string name="action_save">保存</string>
     <string name="save_done">已保存</string>
     <string name="password_kept_hint">留空表示不修改</string>
     <string name="edu_note">用于登录教务系统拉取课表，密码加密保存在本机。</string>
-    <string name="power_no_password_hint">电费接口只需学号与学校代码，无独立密码。</string>
+    <string name="power_no_password_hint">电费接口只需学号与学校代码，无独立密码；也不进任何日志。</string>
+    <string name="interval_hint_education">自动同步的最小间隔，最少 %1$d 分钟；手动刷新不受限制。</string>
+    <string name="interval_hint_electricity">自动查询的最小间隔，最少 %1$d 分钟；手动查询不受限制。</string>
+    <string name="interval_clamped">低于下限，将按 %1$d %2$s 生效</string>
+    <string name="action_apply_interval">应用间隔</string>
     <string name="campus_independent_hint">校园网凭据独立保存，不复用教务密码。</string>
     <string name="credentials_keystore_hint">凭据经 Android Keystore 加密后保存在本机，不上传、不进日志。</string>
+
+    <!-- 测试弹窗：*.probe 的结构化回报。 -->
+    <string name="probe_title">%1$s 测试</string>
+    <string name="probe_subtitle">会真的联网请求一次，用来确认这条链路是否可用</string>
+    <string name="probe_running">正在测试…</string>
+    <string name="probe_idle">尚未测试</string>
+    <string name="probe_passed">通过 · 耗时 %1$d ms</string>
+    <string name="probe_failed">未通过 · 耗时 %1$d ms</string>
+    <string name="probe_error_code">错误码 %1$d</string>
+    <string name="probe_field_synced_at">同步时间</string>
+    <string name="probe_field_week1">第 1 周周一</string>
+    <string name="probe_field_last_week">最后一周</string>
+    <string name="probe_field_lesson_count">课程条目</string>
+    <string name="probe_field_balance">余额</string>
+    <string name="probe_field_unit">单位</string>
+    <string name="probe_field_data_until">用量截至</string>
+    <string name="probe_field_day_count">用量天数</string>
+    <string name="probe_field_state">探测状态</string>
+    <string name="probe_field_checked_at">探测时间</string>
+    <string name="probe_skipped_wifi">当前不在 WiFi 下，已跳过探测（可在校园网设置里关闭此限制）</string>
 
     <!-- 通用。 -->
     <string name="action_retry">重试</string>
