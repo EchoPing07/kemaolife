@@ -108,9 +108,13 @@ func refreshSnapshot(ctx context.Context, d Deps, cfg model.Config) error {
 }
 
 // WeekResult 是某周查询结果。
+//
+// LastWeek 是快照推断出的学期最后一周，供 Android 翻页容器确定翻页边界
+// （docs/002 §3.1 的可选字段）；快照缺失时为 0 = 未知，调用方不得据此拦截翻页。
 type WeekResult struct {
 	Week     int
 	Days     []model.DaySchedule
+	LastWeek int
 	Stale    bool
 	SyncedAt time.Time
 }
@@ -165,6 +169,7 @@ func GetWeekSchedule(ctx context.Context, d Deps, cfg model.Config, week int, mo
 	return WeekResult{
 		Week:     resolved,
 		Days:     days,
+		LastWeek: snap.LastWeek,
 		Stale:    refreshErr != nil,
 		SyncedAt: snap.SyncedAt,
 	}, nil

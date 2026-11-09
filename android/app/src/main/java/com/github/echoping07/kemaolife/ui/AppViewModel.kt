@@ -21,6 +21,9 @@ import com.github.echoping07.kemaolife.data.TimetableCache
 import com.github.echoping07.kemaolife.data.WeekSchedule
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -66,9 +69,22 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     private var campusActionJob: Job? = null
     private var probeJob: Job? = null
 
-    // 课表读取代次：切周 / 选日期 / 同步回读都可能并发，只允许最新一次写 state。
+    // 课表读取代次：切周 / 同步回读都可能并发，只允许最新一次写 state。
     @Volatile
     private var weekSeq = 0L
+
+    /**
+     * 翻页容器的邻周缓存（周次 → 该周整周数据）；对外通过 `AppState.weekNeighbors` 暴露。
+     *
+     * 为什么必须有它：跟手翻页时 pager 会同时组合相邻页，若邻居页现读缓存
+     * 就来不及渲染 —— 拖到一半只能看到留白，「跟手」就失去意义。
+     * 只存内存不落盘：正本快照已含全部课节，落盘只会多一份可过期的副本。
+     */
+    @Volatile
+    private var weekCache: Map<Int, WeekSchedule> = emptyMap()
+
+    // 预取只保留一个在途 Job：滑得快时不需要为每个中间周都排队读一次。
+    private var prefetchJob: Job? = null
 
     // 测试弹窗代次：关闭再开另一个功能域时，旧结果不得写回新弹窗。
     @Volatile
@@ -86,8 +102,8 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
 
     private val _state = MutableStateFlow(
         AppState(
-            selectedDate = today,
             todayDate = today,
+            currentWeek = cachedWeek?.schedule?.week,
             week = cachedWeek?.schedule,
             // 更多页「今日概览」也从镜像里取：否则首帧课表出了、概览还空着。
             todayDay = cachedWeek?.schedule?.days?.firstOrNull { it.date == today },
@@ -187,12 +203,11 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
      */
     private suspend fun fetchWeek(
         week: Int = 0,
-        selectDate: String? = null,
         fromSync: Boolean = false,
     ): Boolean {
         val seq = ++weekSeq
         _state.update { it.copy(weekLoading = true) }
-        // 只把「当周」写进首帧镜像：切周 / 选日期读到的是别的周次，
+        // 只把「当周」写进首帧镜像：切周读到的是别的周次，
         // 存进去会让下次冷启动先闪一帧过期周次。当周由 Go 的 week=0 判定，
         // Kotlin 不自己算周（AGENTS A3）。
         val result = withContext(Dispatchers.IO) {
@@ -202,7 +217,16 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         }
         return result.fold(
             onSuccess = { view ->
-                applyWeek(view.schedule, view.syncedAt, selectDate, fromSync, seq)
+                applyWeek(
+                    schedule = view.schedule,
+                    syncedAt = view.syncedAt,
+                    fromSync = fromSync,
+                    seq = seq,
+                    viewLastWeek = view.lastWeek,
+                    currentWeek = if (week == 0) view.schedule.week else null,
+                )
+                // 落页后补一格邻页：保证下一次拖动时邻居页已经有内容（docs/002 §5.3 tab1）。
+                prefetchNeighborWeeks()
                 seq == weekSeq
             },
             onFailure = { ex ->
@@ -225,9 +249,41 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         )
     }
 
-    /** 打开 App、切周、选日期、保存设置后的纯缓存读取；不覆写离线标记。 */
-    fun loadCachedWeek(week: Int = 0, selectDate: String? = null) {
-        viewModelScope.launch { fetchWeek(week, selectDate) }
+    /** 打开 App、切周、保存设置后的纯缓存读取；不覆写离线标记。 */
+    fun loadCachedWeek(week: Int = 0) {
+        viewModelScope.launch { fetchWeek(week) }
+    }
+
+    /**
+     * 预取当前周两侧的整周数据（docs/002 §5.3 tab1 翻页）。
+     *
+     * 失败一律静默：预取只是为了让邻居页拖动时就有内容，
+     * 失败了落页时还会再走一次 `CacheOnly` 读取，不得因此弹错误或清空当前页。
+     */
+    fun prefetchNeighborWeeks() {
+        if (prefetchJob?.isActive == true) return
+        val s = _state.value
+        val current = s.week?.week ?: return
+        val targets = WeekPager.neighbors(current, s.lastWeek).filter { it !in weekCache }
+        if (targets.isEmpty()) return
+        prefetchJob = viewModelScope.launch {
+            val fetched = withContext(Dispatchers.IO) {
+                coroutineScope {
+                    targets.map { week ->
+                        async {
+                            // 预取同样只读缓存（0 请求），不触发任何联网动作。
+                            repo.week(week).getOrNull()?.schedule?.let { week to it }
+                        }
+                    }.awaitAll()
+                }
+            }.filterNotNull().toMap()
+            if (fetched.isEmpty()) return@launch
+            weekCache = weekCache + fetched
+            val keep = WeekPager.retained(weekCache.keys, _state.value.week?.week ?: current)
+            weekCache = weekCache.filterKeys { it in keep }
+            // 同步进 state：pager 的邻居页靠它渲染，不写入 state 就永远看不到预取结果。
+            _state.update { it.copy(weekNeighbors = weekCache) }
+        }
     }
 
     /** 联网同步一次课表；成功后回读缓存覆盖界面。不做间隔判断。 */
@@ -287,29 +343,6 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
 
     /** 头部刷新按钮：手动动作，不受最小间隔约束。 */
     fun refreshWeek() = syncTimetable()
-
-    /** 点周条上的某一天：该天已经在 `week.days` 里，纯本地选中，不发请求。 */
-    fun selectDate(date: String) {
-        _state.update { it.copy(selectedDate = date) }
-    }
-
-    /** 选日期：先问 Go 侧这一天属于第几周（纯读缓存），再读那一周。 */
-    fun pickDate(date: LocalDate) {
-        viewModelScope.launch {
-            _state.update { it.copy(weekLoading = true) }
-            try {
-                val day = withContext(Dispatchers.IO) { repo.date(date) }
-                day.onFailure { ex ->
-                    pushError(ex)
-                    _state.update { s -> s.copy(weekLoading = false) }
-                }
-                val resolved = day.getOrNull() ?: return@launch
-                fetchWeek(resolved.day.week, selectDate = date.toString())
-            } finally {
-                _state.update { it.copy(weekLoading = false) }
-            }
-        }
-    }
 
     // ---- 电费 -------------------------------------------------------------
 
@@ -602,6 +635,8 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                             electricity = null,
                             lastElectricityAt = 0L,
                             week = null,
+                            currentWeek = null,
+                            lastWeek = 0,
                             todayDay = null,
                             weekStale = false,
                             weekSyncedAt = "",
@@ -694,25 +729,28 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     private fun applyWeek(
         schedule: WeekSchedule,
         syncedAt: String,
-        selectDate: String?,
         fromSync: Boolean,
         seq: Long,
+        viewLastWeek: Int = 0,
+        currentWeek: Int? = null,
     ) {
         _state.update { s ->
             if (seq != weekSeq) return@update s
-            val keep = selectDate ?: s.selectedDate
-            val inWeek = schedule.days.any { it.date == keep }
-            val fallback = schedule.days.firstOrNull { it.date == s.todayDate }?.date
-                ?: schedule.days.firstOrNull()?.date
-                ?: s.selectedDate
+            // 翻页容器的邻周缓存：当前周一定要在，否则滑回来会闪一下空白。
+            weekCache = weekCache + (schedule.week to schedule)
+            val keepWeeks = WeekPager.retained(weekCache.keys, schedule.week)
+            weekCache = weekCache.filterKeys { it in keepWeeks }
             s.copy(
                 week = schedule,
+                currentWeek = currentWeek ?: s.currentWeek,
+                weekNeighbors = weekCache,
+                // 可选 lastWeek：0 = 未知，翻页容器此时不拦截翻页（docs/002 §3.1）。
+                lastWeek = if (viewLastWeek > 0) viewLastWeek else s.lastWeek,
                 todayDay = schedule.days.firstOrNull { it.date == s.todayDate } ?: s.todayDay,
                 // 纯读缓存不碰离线标记；只有「同步 + 回读」这个事务成功才清成 false。
                 weekStale = if (fromSync) false else s.weekStale,
                 weekSyncedAt = syncedAt,
                 weekLoading = false,
-                selectedDate = if (inWeek) keep else fallback,
                 needsSetup = false,
                 timetableError = null,
                 lastTimetableSyncAt = preferences.lastTimetableSyncAt,
@@ -757,6 +795,12 @@ data class AppState(
     val credentials: Credentials = Credentials(),
 
     val week: WeekSchedule? = null,
+    /** 今天所属周；浏览其他周时仍保留，与 week.week 分离。 */
+    val currentWeek: Int? = null,
+    /** 学期最后一周（`timetable.week` 的可选 `lastWeek`，0 = 未知）：翻页容器的边界。 */
+    val lastWeek: Int = 0,
+    /** 翻页容器可用的整周数据（周次 → 周数据），含当前周与预取到的邻周。 */
+    val weekNeighbors: Map<Int, WeekSchedule> = emptyMap(),
     val weekStale: Boolean = false,
     val weekSyncedAt: String = "",
     val weekLoading: Boolean = false,
@@ -765,7 +809,6 @@ data class AppState(
     /** 上次课表同步尝试时刻（单调时钟 millis），0 表示从未同步。 */
     val lastTimetableSyncAt: Long = 0L,
 
-    val selectedDate: String = "",
     val todayDate: String = "",
     val todayDay: DaySchedule? = null,
 
@@ -793,7 +836,4 @@ data class AppState(
     /** 校园网动作用：offline / 已跳过探测时不允许登录 / 下线 / 重登。 */
     val campusActionsEnabled: Boolean
         get() = campus != null && campus.state != CampusState.OFFLINE && !campusSkipped
-
-    val selectedDay: DaySchedule?
-        get() = week?.days?.firstOrNull { it.date == selectedDate }
 }

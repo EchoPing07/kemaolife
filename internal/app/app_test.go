@@ -165,6 +165,10 @@ func TestGetWeekSchedule(t *testing.T) {
 	if len(result.Days) != 7 {
 		t.Fatalf("days = %d, want 7", len(result.Days))
 	}
+	// LastWeek 是 Android 翻页容器的边界（docs/002 §3.1 可选字段）。
+	if result.LastWeek != 16 {
+		t.Errorf("lastWeek = %d, want 16（快照推断的学期最后一周）", result.LastWeek)
+	}
 
 	// 越界周次：7 天全部 inSemester:false，不报错。
 	out, err := app.GetWeekSchedule(context.Background(), deps, testConfig(), 30, app.RefreshFirst)

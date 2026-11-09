@@ -1,42 +1,35 @@
 package com.github.echoping07.kemaolife.ui
 
-import androidx.compose.animation.AnimatedContent
-import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
-import androidx.compose.animation.slideInHorizontally
-import androidx.compose.animation.slideOutHorizontally
-import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.pager.HorizontalPager
+import androidx.compose.foundation.pager.rememberPagerState
+import androidx.compose.foundation.ScrollState
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.rounded.KeyboardArrowLeft
-import androidx.compose.material.icons.automirrored.rounded.KeyboardArrowRight
-import androidx.compose.material.icons.rounded.DateRange
 import androidx.compose.material.icons.rounded.Refresh
-import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.DatePicker
-import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -45,11 +38,12 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.Surface
-import androidx.compose.material3.rememberDatePickerState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -66,137 +60,164 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
-import androidx.compose.ui.window.DialogProperties
 import com.github.echoping07.kemaolife.R
 import com.github.echoping07.kemaolife.data.DaySchedule
 import com.github.echoping07.kemaolife.data.Entry
 import com.github.echoping07.kemaolife.ui.theme.coursePalette
 import com.github.echoping07.kemaolife.ui.theme.smoothShape
-import java.time.Instant
-import java.time.ZoneId
+import kotlinx.coroutines.launch
 
 private val RowHeight = 52.dp
+private val WeekStripHeight = 64.dp
 private val GutterWidth = 26.dp
 private val GridEndPadding = 8.dp
 private val WEEKDAY_CN = listOf("一", "二", "三", "四", "五", "六", "日")
-private const val MOTION_MEDIUM = 280
 
 private data class CourseTarget(val day: DaySchedule, val entry: Entry)
 
 /**
  * 课表以整周为唯一主视图。头部只占两行，课程详情进入底部弹层，
  * 避免在网格下再重复一份当天列表，把首屏空间留给课程本身。
+ *
+ * 网格区是**横向翻页容器**，不是「松手才切」的抽手手势：[HorizontalPager]
+ * 拖动过程中相邻周已经在同一屏幕上跟手位移，用户能看到下一周的课程随手指滑进来
+ * （docs/002 §5.3 tab1）。邻居页内容由 ViewModel 预取进内存，否则拖到一半只有留白。
  */
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 internal fun TimetableScreen(state: AppState, viewModel: AppViewModel) {
-    var showPicker by remember { mutableStateOf(false) }
+    var showWeekPicker by remember { mutableStateOf(false) }
     var detail by remember { mutableStateOf<CourseTarget?>(null) }
     val week = state.week
-    val selected = state.selectedDay
+
+    // 翻页序列：页码只由周次序列换算，UI 不自己算周（AGENTS A3）。
+    // 还没有课表时不给 pager 任何页，直接展示空态。
+    val pages = remember(state.lastWeek, week?.week) {
+        WeekPager.pages(state.lastWeek, week?.week ?: 0)
+    }
+    val startPage = remember(pages, week?.week) {
+        WeekPager.indexOf(pages, week?.week ?: 0)
+    }
+    val pagerState = rememberPagerState(initialPage = startPage) { pages.size }
+    val scope = rememberCoroutineScope()
+    // 竖向滚动位置跨周共享：12 行网格每页高度相同，翻页时保持同一滚动位置，
+    // 用户「先滚到第 5 大节，再左右看各周的 5-6 节」不会每次都被拉回顶部。
+    val gridScroll = rememberScrollState()
+
+    // 周次弹窗与手势共用 pager，二者不会维护两套浏览状态。
+    fun goToPage(target: Int) {
+        if (target in pages.indices) {
+            scope.launch { pagerState.animateScrollToPage(target) }
+        }
+    }
+
+    fun goToWeek(target: Int) {
+        val index = WeekPager.indexOf(pages, target)
+        if (index == 0 && target !in pages) return
+        goToPage(index)
+    }
+
+    // 页码落定 → 读该页对应周（0 请求），并补一格邻页。
+    //
+    // 用 settledPage 而不是 currentPage：后者在拖动过程中就提前跳变，
+    // 滑到一半重新读缓存会把邻居页刷成占位，跟手就断了。
+    // 只在「落定周 != 当前显示的周」时才读，避免与下面的对齐逻辑互相触发成环。
+    LaunchedEffect(pagerState.settledPage, pages) {
+        val targetWeek = pages.getOrNull(pagerState.settledPage) ?: return@LaunchedEffect
+        if (targetWeek != week?.week) viewModel.loadCachedWeek(targetWeek)
+        viewModel.prefetchNeighborWeeks()
+    }
+
+    // 周次由弹窗 / 回到当周 / 同步回读 / 首帧校正改变时对齐 pager。
+    // 用 scrollToPage 而非 animate：这只是「跟随数据」，不该和用户的拖动抢动画。
+    LaunchedEffect(week?.week, pages) {
+        val current = week?.week ?: return@LaunchedEffect
+        val target = WeekPager.indexOf(pages, current)
+        if (target in pages.indices && pagerState.settledPage != target && !pagerState.isScrollInProgress) {
+            pagerState.scrollToPage(target)
+        }
+    }
 
     Column(modifier = Modifier.fillMaxSize()) {
         TimetableHeader(
-            selected = selected,
+            todayDate = state.todayDate,
+            week = week?.week,
+            currentWeek = state.currentWeek,
+            isCurrentWeek = week?.days?.any { it.date == state.todayDate } == true,
             loading = state.weekLoading || state.timetableSyncing,
             stale = state.weekStale,
             syncedAt = state.weekSyncedAt,
-            isCurrentWeek = week?.days?.any { it.date == state.todayDate } == true,
-            // 切周只读缓存（0 请求）；联网刷新由头部刷新按钮与「每次打开」负责（docs/002 §5.3）。
-            onPrevWeek = { week?.let { viewModel.loadCachedWeek(it.week - 1) } },
-            onNextWeek = { week?.let { viewModel.loadCachedWeek(it.week + 1) } },
-            onBackToCurrent = { viewModel.loadCachedWeek(0) },
+            onOpenWeekPicker = { showWeekPicker = true },
             onRefresh = { viewModel.refreshWeek() },
-            onPickDate = { showPicker = true },
         )
 
-        WeekStrip(
-            days = week?.days.orEmpty(),
-            selectedDate = state.selectedDate,
-            todayDate = state.todayDate,
-            onSelect = viewModel::selectDate,
-        )
-
-        AnimatedContent(
-            targetState = week,
-            transitionSpec = {
-                val forward = (targetState?.week ?: 0) >= (initialState?.week ?: 0)
-                slideInHorizontally(
-                    animationSpec = tween(MOTION_MEDIUM, easing = FastOutSlowInEasing),
-                    initialOffsetX = { if (forward) it / 5 else -it / 5 },
-                ) + fadeIn(tween(180)) togetherWith
-                    slideOutHorizontally(
-                        animationSpec = tween(MOTION_MEDIUM, easing = FastOutSlowInEasing),
-                        targetOffsetX = { if (forward) -it / 5 else it / 5 },
-                    ) + fadeOut(tween(140))
-            },
-            label = "weekTransition",
-            modifier = Modifier.weight(1f),
-        ) { displayedWeek ->
-            when {
-                displayedWeek == null && state.weekLoading -> LoadingBlock()
-                // 缓存缺失时不再只是一句提示：直接给「同步」入口，
-                // 否则用户既看不到课表也不知道该点哪里（docs/002 §5.3）。
-                displayedWeek == null -> MissingCacheHint(
-                    // 真错误走 snackbar / 设置页；空态只给中性引导 + 可操作入口，
-                    // 不再把内部初始化状态摊到课表位。
-                    text = state.timetableError ?: stringResource(R.string.timetable_cache_missing),
+        // 星期日期行在翻页容器**内部**：它与下面的网格属于同一周，
+        // 拖动时日期必须跟着课表一起走，否则日期停在旧周而课表滑到新周，两者错位。
+        // 网格区 = 横向翻页容器：拖动时两侧课表同屏跟手位移，松手吸附（docs/002 §5.3 tab1）。
+        // 没有课表时不给 pager 任何页，直接走空态 / 加载态，避免「0 页 0 号页」边界问题。
+        val showPager = week != null && pages.isNotEmpty()
+        Box(modifier = Modifier.weight(1f)) {
+            if (showPager) {
+                HorizontalPager(
+                    state = pagerState,
+                    // 多组合两侧各一页：拖动开始的瞬间邻居页已经布局好，
+                    // 否则要等它进入可见区域才开始测量，跟手会踉一下。
+                    beyondViewportPageCount = 1,
+                    modifier = Modifier.fillMaxSize(),
+                ) { page ->
+                    val pageWeek = pages.getOrNull(page)
+                    // 命中内存缓存就直接画（预取结果），否则回退到当前 state 的周
+                    // —— 回退只在「刚落到还没预取到的页」短暂出现，随后 LaunchedEffect 补读。
+                    val days = pageWeek?.let { w ->
+                        state.weekNeighbors[w]?.days ?: state.week?.takeIf { it.week == w }?.days
+                    }
+                    // 只有「当前页」才显示加载圈与「还没有课表」文案：
+                    // 邻居页只是还没预取到，给它转圈或空态提示都会误导（拖动时一闪而过）。
+                    PageContent(
+                        days = days,
+                        state = when {
+                            days != null -> PageState.CONTENT
+                            pageWeek == week?.week -> PageState.CURRENT
+                            else -> PageState.PENDING
+                        },
+                        loading = state.weekLoading,
+                        error = state.timetableError,
+                        todayDate = state.todayDate,
+                        scrollState = gridScroll,
+                        onSync = { viewModel.syncTimetable() },
+                        onCourseClick = { day, entry -> detail = CourseTarget(day, entry) },
+                    )
+                }
+            } else {
+                PageContent(
+                    days = week?.days,
+                    state = if (week != null) PageState.CONTENT else PageState.CURRENT,
+                    loading = state.weekLoading,
+                    error = state.timetableError,
+                    todayDate = state.todayDate,
+                    scrollState = gridScroll,
                     onSync = { viewModel.syncTimetable() },
-                )
-
-                displayedWeek.days.none { it.inSemester } -> EmptyHint(
-                    text = stringResource(R.string.timetable_not_in_semester),
-                    modifier = Modifier.padding(20.dp),
-                )
-
-                else -> WeekGrid(
-                    days = displayedWeek.days,
-                    selectedDate = state.selectedDate,
                     onCourseClick = { day, entry -> detail = CourseTarget(day, entry) },
                 )
             }
         }
     }
 
-    if (showPicker) {
-        val initial = runCatching { java.time.LocalDate.parse(state.selectedDate) }
-            .getOrElse { java.time.LocalDate.now() }
-        val pickerState = rememberDatePickerState(
-            initialSelectedDateMillis = initial.atStartOfDay(ZoneId.of("UTC")).toInstant().toEpochMilli(),
+    if (showWeekPicker) {
+        WeekPickerDialog(
+            weeks = pages,
+            selectedWeek = week?.week,
+            currentWeek = state.currentWeek,
+            onSelect = { target ->
+                showWeekPicker = false
+                goToWeek(target)
+            },
+            onBackToCurrent = {
+                showWeekPicker = false
+                // 当前周由 Go 的 week=0 判定，UI 不自己换算周次。
+                viewModel.loadCachedWeek(0)
+            },
+            onDismiss = { showWeekPicker = false },
         )
-        Dialog(
-            onDismissRequest = { showPicker = false },
-            properties = DialogProperties(usePlatformDefaultWidth = false),
-        ) {
-            Surface(
-                shape = MaterialTheme.shapes.extraLarge,
-                color = MaterialTheme.colorScheme.surfaceContainerHigh,
-                modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
-            ) {
-                Column {
-                    DatePicker(
-                        state = pickerState,
-                        title = null,
-                        headline = null,
-                        showModeToggle = false,
-                        modifier = Modifier.fillMaxWidth().padding(horizontal = 4.dp),
-                    )
-                    Row(
-                        modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
-                        horizontalArrangement = Arrangement.End,
-                    ) {
-                        TextButton(onClick = { showPicker = false }) { Text(stringResource(android.R.string.cancel)) }
-                        TextButton(onClick = {
-                            pickerState.selectedDateMillis?.let { millis ->
-                                val date = Instant.ofEpochMilli(millis).atZone(ZoneId.of("UTC")).toLocalDate()
-                                viewModel.pickDate(date)
-                            }
-                            showPicker = false
-                        }) { Text(stringResource(R.string.action_confirm)) }
-                    }
-                }
-            }
-        }
     }
 
     detail?.let { target ->
@@ -211,44 +232,119 @@ internal fun TimetableScreen(state: AppState, viewModel: AppViewModel) {
     }
 }
 
-/** 日期、周次和操作集中在同一视觉单元，不再让同步时间另占一整行。 */
+/**
+ * 一页在翻页容器里的呈现状态。
+ *
+ * 为什么不复用 `weekLoading` 一个布尔：pager 会同时组合相邻页，邻居页「还没取到数据」
+ * 和当前页「正在加载」是两件事，混用会让邻居页闪出加载圈或「本机还没有课表」。
+ */
+private enum class PageState { CONTENT, CURRENT, PENDING }
+
+/**
+ * 一页的内容：整周网格 / 不在学期 / 缓存缺失 / 加载中。
+ */
+@Composable
+private fun PageContent(
+    days: List<DaySchedule>?,
+    state: PageState,
+    loading: Boolean,
+    error: String?,
+    todayDate: String,
+    scrollState: ScrollState,
+    onSync: () -> Unit,
+    onCourseClick: (DaySchedule, Entry) -> Unit,
+) {
+    when {
+        days != null && days.none { it.inSemester } -> {
+            WeekStrip(days = days, todayDate = todayDate)
+            EmptyHint(
+                text = stringResource(R.string.timetable_not_in_semester),
+                modifier = Modifier.padding(20.dp),
+            )
+        }
+        days != null -> Column(Modifier.fillMaxSize()) {
+            // 星期条属于「这一周」，必须与网格同在一页：翻页时日期和课表一起跟手移动。
+            WeekStrip(days = days, todayDate = todayDate)
+            WeekGrid(
+                days = days,
+                scrollState = scrollState,
+                onCourseClick = onCourseClick,
+            )
+        }
+        state == PageState.CURRENT && loading -> LoadingBlock()
+        state == PageState.CURRENT -> MissingCacheHint(
+            // 真错误走 snackbar / 设置页；空态只给中性引导 + 可操作入口，
+            // 不把内部初始化状态摊到课表位。
+            text = error ?: stringResource(R.string.timetable_cache_missing),
+            onSync = onSync,
+        )
+        // 邻居页还没预取到：留白即可，落页时 LaunchedEffect 会补读并补上内容。
+        else -> Box(Modifier.fillMaxSize())
+    }
+}
+
+/** 日期始终属于今天；第二行的「当前为第 N 周」明确区分浏览周与自然周。 */
 @Composable
 private fun TimetableHeader(
-    selected: DaySchedule?,
+    todayDate: String,
+    week: Int?,
+    currentWeek: Int?,
+    isCurrentWeek: Boolean,
     loading: Boolean,
     stale: Boolean,
     syncedAt: String,
-    isCurrentWeek: Boolean,
-    onPrevWeek: () -> Unit,
-    onNextWeek: () -> Unit,
-    onBackToCurrent: () -> Unit,
+    onOpenWeekPicker: () -> Unit,
     onRefresh: () -> Unit,
-    onPickDate: () -> Unit,
 ) {
     Column(modifier = Modifier.padding(start = 16.dp, end = 6.dp, top = 2.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
-            AnimatedContent(
-                targetState = selected?.date.orEmpty(),
-                transitionSpec = { fadeIn(tween(180)) togetherWith fadeOut(tween(120)) },
-                label = "dateTransition",
-                modifier = Modifier.weight(1f),
-            ) { date ->
+            Column(
+                modifier = Modifier
+                    .weight(1f)
+                    .clip(MaterialTheme.shapes.medium)
+                    .clickable(role = Role.Button, onClick = onOpenWeekPicker),
+            ) {
                 Text(
-                    text = if (date.isBlank()) stringResource(R.string.tab_timetable) else prettyDate(date),
+                    text = if (todayDate.isBlank()) stringResource(R.string.tab_timetable) else prettyDate(todayDate),
                     style = MaterialTheme.typography.titleLarge,
                     fontWeight = FontWeight.SemiBold,
                     maxLines = 1,
                 )
+                if (week != null) {
+                    // 周次与同步时间同属可点击区，避免右侧重复一小块元信息。
+                    Row(
+                        modifier = Modifier.padding(top = 3.dp, bottom = 4.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Text(
+                            text = buildString {
+                                if (week > 0) append(stringResource(R.string.week_only, week))
+                                if (!isCurrentWeek) {
+                                    if (isNotEmpty()) append("  ")
+                                    append(
+                                        currentWeek?.let { stringResource(R.string.week_actual_current, it) }
+                                            ?: stringResource(R.string.week_not_current),
+                                    )
+                                }
+                            },
+                            style = MaterialTheme.typography.labelLarge,
+                            color = MaterialTheme.colorScheme.primary,
+                            fontWeight = FontWeight.Medium,
+                            maxLines = 1,
+                        )
+                        Spacer(Modifier.weight(1f))
+                        when {
+                            stale -> MetaText(
+                                text = stringResource(R.string.data_stale_short, shortStamp(syncedAt)),
+                                emphasize = true,
+                            )
+                            syncedAt.isNotBlank() -> MetaText(
+                                stringResource(R.string.data_synced_at, shortStamp(syncedAt)),
+                            )
+                        }
+                    }
+                }
             }
-            WeekArrow(onPrevWeek, stringResource(R.string.timetable_prev_week), true)
-            AnimatedVisibility(visible = !isCurrentWeek) {
-                TextButton(
-                    onClick = onBackToCurrent,
-                    contentPadding = PaddingValues(horizontal = 8.dp),
-                ) { Text(stringResource(R.string.week_current), maxLines = 1) }
-            }
-            WeekArrow(onNextWeek, stringResource(R.string.timetable_next_week), false)
-            HeaderIcon(onPickDate, Icons.Rounded.DateRange, stringResource(R.string.timetable_pick_date))
             val rotation by animateFloatAsState(
                 targetValue = if (loading) 360f else 0f,
                 animationSpec = tween(500, easing = FastOutSlowInEasing),
@@ -266,52 +362,73 @@ private fun TimetableHeader(
                 }
             }
         }
-        Row(
-            modifier = Modifier.padding(end = 12.dp, bottom = 4.dp),
-            verticalAlignment = Alignment.CenterVertically,
+    }
+}
+
+/** 周次与手势翻页共用同一个页码序列，弹窗不再引入另一套日期选择状态。 */
+@Composable
+private fun WeekPickerDialog(
+    weeks: List<Int>,
+    selectedWeek: Int?,
+    currentWeek: Int?,
+    onSelect: (Int) -> Unit,
+    onBackToCurrent: () -> Unit,
+    onDismiss: () -> Unit,
+) {
+    Dialog(onDismissRequest = onDismiss) {
+        val listState = rememberLazyListState(
+            initialFirstVisibleItemIndex = weeks.indexOf(selectedWeek).coerceAtLeast(0),
+        )
+        Surface(
+            shape = MaterialTheme.shapes.extraLarge,
+            color = MaterialTheme.colorScheme.surfaceContainerHigh,
         ) {
-            if (selected != null) {
+            Column(modifier = Modifier.padding(vertical = 20.dp)) {
                 Text(
-                    text = buildString {
-                        if (selected.week > 0) append(stringResource(R.string.week_only, selected.week))
-                        if (selected.weekdayCn.isNotBlank()) {
-                            if (isNotEmpty()) append("  ·  ")
-                            append(stringResource(R.string.weekday_cn, selected.weekdayCn))
+                    text = stringResource(R.string.timetable_pick_week),
+                    style = MaterialTheme.typography.titleLarge,
+                    modifier = Modifier.padding(horizontal = 24.dp),
+                )
+                LazyColumn(
+                    state = listState,
+                    modifier = Modifier.heightIn(max = 420.dp).padding(top = 10.dp),
+                ) {
+                    items(weeks, key = { it }) { week ->
+                        val selected = week == selectedWeek
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable(role = Role.Button) { onSelect(week) }
+                                .padding(horizontal = 24.dp, vertical = 14.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Text(
+                                text = stringResource(R.string.week_only, week),
+                                style = MaterialTheme.typography.bodyLarge,
+                                color = if (selected) MaterialTheme.colorScheme.primary
+                                else MaterialTheme.colorScheme.onSurface,
+                                fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal,
+                                modifier = Modifier.weight(1f),
+                            )
+                            if (week == currentWeek) {
+                                Text(
+                                    text = stringResource(R.string.week_current_label),
+                                    style = MaterialTheme.typography.labelMedium,
+                                    color = MaterialTheme.colorScheme.primary,
+                                )
+                            }
                         }
-                    },
-                    style = MaterialTheme.typography.labelLarge,
-                    color = MaterialTheme.colorScheme.primary,
-                    fontWeight = FontWeight.Medium,
-                )
-            }
-            Spacer(Modifier.weight(1f))
-            when {
-                stale -> MetaText(
-                    text = stringResource(R.string.data_stale_short, shortStamp(syncedAt)),
-                    emphasize = true,
-                )
-                syncedAt.isNotBlank() -> MetaText(stringResource(R.string.data_synced_at, shortStamp(syncedAt)))
+                    }
+                }
+                Row(
+                    modifier = Modifier.fillMaxWidth().padding(start = 12.dp, end = 12.dp, top = 8.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                ) {
+                    TextButton(onClick = onBackToCurrent) { Text(stringResource(R.string.week_current)) }
+                    TextButton(onClick = onDismiss) { Text(stringResource(android.R.string.cancel)) }
+                }
             }
         }
-    }
-}
-
-@Composable
-private fun WeekArrow(onClick: () -> Unit, description: String, previous: Boolean) {
-    IconButton(onClick = onClick, modifier = Modifier.size(36.dp)) {
-        Icon(
-            imageVector = if (previous) Icons.AutoMirrored.Rounded.KeyboardArrowLeft
-            else Icons.AutoMirrored.Rounded.KeyboardArrowRight,
-            contentDescription = description,
-            modifier = Modifier.size(23.dp),
-        )
-    }
-}
-
-@Composable
-private fun HeaderIcon(onClick: () -> Unit, icon: androidx.compose.ui.graphics.vector.ImageVector, description: String) {
-    IconButton(onClick = onClick, modifier = Modifier.size(40.dp)) {
-        Icon(icon, contentDescription = description, modifier = Modifier.size(21.dp))
     }
 }
 
@@ -319,37 +436,34 @@ private fun HeaderIcon(onClick: () -> Unit, icon: androidx.compose.ui.graphics.v
 @Composable
 private fun WeekStrip(
     days: List<DaySchedule>,
-    selectedDate: String,
     todayDate: String,
-    onSelect: (String) -> Unit,
 ) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
+            .height(WeekStripHeight)
             .padding(end = GridEndPadding, bottom = 4.dp),
+        verticalAlignment = Alignment.CenterVertically,
     ) {
         Column(
             modifier = Modifier.width(GutterWidth),
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
             val month = days.firstOrNull()?.date?.split('-')?.getOrNull(1)?.toIntOrNull()
-            Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                Text(
-                    text = month?.toString().orEmpty(),
-                    style = MaterialTheme.typography.titleSmall,
-                    fontWeight = FontWeight.SemiBold,
-                    color = MaterialTheme.colorScheme.onSurface,
-                )
-                Text(
-                    text = "月",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
+            Text(
+                text = month?.toString().orEmpty(),
+                style = MaterialTheme.typography.titleSmall,
+                fontWeight = FontWeight.SemiBold,
+                color = MaterialTheme.colorScheme.onSurface,
+            )
+            Text(
+                text = "月",
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
         }
         for (index in 0 until 7) {
             val day = days.getOrNull(index)
-            val isSelected = day != null && day.date == selectedDate
             val isToday = day != null && day.date == todayDate
             val contentColor by animateColorAsState(
                 targetValue = if (isToday) MaterialTheme.colorScheme.onSurface
@@ -360,11 +474,7 @@ private fun WeekStrip(
             Column(
                 modifier = Modifier
                     .weight(1f)
-                    .padding(horizontal = 3.dp, vertical = 3.dp)
-                    .clip(MaterialTheme.shapes.small)
-                    .background(if (isSelected) MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.6f) else Color.Transparent)
-                    .clickable(enabled = day != null, role = Role.Button) { day?.let { onSelect(it.date) } }
-                    .padding(vertical = 5.dp),
+                    .padding(horizontal = 3.dp),
                 horizontalAlignment = Alignment.CenterHorizontally,
             ) {
                 Text(
@@ -379,7 +489,7 @@ private fun WeekStrip(
                     text = day?.date?.substringAfterLast('-')?.toIntOrNull()?.toString().orEmpty(),
                     style = MaterialTheme.typography.titleSmall,
                     fontWeight = if (isToday) FontWeight.Bold else FontWeight.Medium,
-                    color = if (isSelected) MaterialTheme.colorScheme.onPrimaryContainer else contentColor,
+                    color = contentColor,
                     maxLines = 1,
                 )
             }
@@ -390,13 +500,13 @@ private fun WeekStrip(
 @Composable
 private fun WeekGrid(
     days: List<DaySchedule>,
-    selectedDate: String,
+    scrollState: ScrollState,
     onCourseClick: (DaySchedule, Entry) -> Unit,
 ) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .verticalScroll(rememberScrollState())
+            .verticalScroll(scrollState)
             .padding(end = GridEndPadding, bottom = 16.dp)
             .height(RowHeight * TIMETABLE_ROWS),
     ) {
@@ -404,30 +514,22 @@ private fun WeekGrid(
             for (row in 1..TIMETABLE_ROWS) {
                 Box(
                     modifier = Modifier.fillMaxWidth().height(RowHeight),
-                    contentAlignment = Alignment.TopCenter,
+                    contentAlignment = Alignment.Center,
                 ) {
                     Text(
                         text = row.toString(),
                         style = MaterialTheme.typography.labelSmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.padding(top = 5.dp),
                     )
                 }
             }
         }
         for (column in 0 until 7) {
             val day = days.getOrNull(column)
-            val selected = day != null && day.date == selectedDate
-            val columnColor by animateColorAsState(
-                targetValue = if (selected) MaterialTheme.colorScheme.primary.copy(alpha = 0.025f)
-                else Color.Transparent,
-                label = "selectedColumn",
-            )
             Box(
                 modifier = Modifier
                     .weight(1f)
-                    .fillMaxHeight()
-                    .background(columnColor),
+                    .fillMaxHeight(),
             ) {
                 Column(Modifier.fillMaxSize()) {
                     repeat(TIMETABLE_ROWS) {

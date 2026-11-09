@@ -1,7 +1,5 @@
 package com.github.echoping07.kemaolife.data
 
-import java.time.LocalDate
-
 /**
  * 用例调用面：UI 只通过这里访问数据，不理解 `op` 字符串，也不做业务计算。
  *
@@ -9,9 +7,9 @@ import java.time.LocalDate
  * 返回的 [Result] 要么带 DTO，要么带可展示的错误文案。
  *
  * 调用方必须先区分「读缓存」与「联网」两条链路（docs/002 §5.3）：
- *  - [week] / [cached] 纯读本地快照，0 请求，用于打开 App、切周、选日期；
+ *  - [week] 纯读本地快照，0 请求，用于打开 App 与切周；
  *  - [sync] 联网刷新一次，成功后 UI 再调 [week] 回来。
- * 课表查询**不再**隐式带刷新，选日期不会再把整份课表重拉一遍。
+ * 课表查询**不再**隐式带刷新，切周不会把整份课表重拉一遍。
  */
 class Repository(private val bridge: Bridge) {
 
@@ -33,15 +31,19 @@ class Repository(private val bridge: Bridge) {
         val data = env.data
         if (!env.ok || data == null) return Result.failure(AppException(env.error))
         return try {
-            Result.success(WeekView(WeekSchedule.from(data), env.stale, env.syncedAt))
+            Result.success(
+                WeekView(
+                    schedule = WeekSchedule.from(data),
+                    stale = env.stale,
+                    syncedAt = env.syncedAt,
+                    // 可选字段：缺省 0 = 未知，翻页容器不得据此拦截翻页（docs/002 §3.1）。
+                    lastWeek = data.optInt("lastWeek"),
+                ),
+            )
         } catch (e: Exception) {
             Result.failure(AppException(ApiError(4002, "响应格式异常")))
         }
     }
-
-    /** `timetable.date`：纯读缓存，取这一天所属周次（周次计算只在 Go 侧）。 */
-    fun date(date: LocalDate): Result<ScheduleView> =
-        bridge.call("timetable.date", "date" to date.toString()).toSchedule()
 
     /** `timetable.probe`：设置页「测试」，同步一次并回报耗时与快照摘要。 */
     fun testTimetable(): Result<ProbeResult> =
@@ -77,14 +79,6 @@ class Repository(private val bridge: Bridge) {
 
     // ---- 信封 → Result ----------------------------------------------------
 
-    private fun Envelope.toSchedule(): Result<ScheduleView> = toResult { data ->
-        ScheduleView(
-            day = DaySchedule.from(data),
-            stale = stale,
-            syncedAt = syncedAt,
-        )
-    }
-
     private fun <T> Envelope.toResult(map: (org.json.JSONObject) -> T): Result<T> {
         val data = data
         if (!ok || data == null) return Result.failure(AppException(error))
@@ -102,9 +96,13 @@ class Repository(private val bridge: Bridge) {
  * `stale` / `syncedAt` 是查询语义的一部分（docs/002 §2），必须和 DTO 一起传给 UI，
  * 不能由展示层猜。
  */
-data class ScheduleView(val day: DaySchedule, val stale: Boolean, val syncedAt: String)
-
-data class WeekView(val schedule: WeekSchedule, val stale: Boolean, val syncedAt: String)
+data class WeekView(
+    val schedule: WeekSchedule,
+    val stale: Boolean,
+    val syncedAt: String,
+    /** 学期最后一周（`timetable.week` 的可选 `lastWeek`）；0 = 未知。 */
+    val lastWeek: Int = 0,
+)
 
 /**
  * 用例失败。message 已由 Go 侧脱敏（P2），UI 直接展示即可。

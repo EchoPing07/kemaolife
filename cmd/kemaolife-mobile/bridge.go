@@ -332,6 +332,11 @@ func (s *session) timetableWeek(week int) string {
 		return failure(err)
 	}
 	data := map[string]any{"week": result.Week, "days": result.Days}
+	// lastWeek 是可选字段（0 = 未知）：Android 翻页容器用它确定翻页边界，
+	// 老客户端忽略即可（docs/002 §3.1）。
+	if result.LastWeek > 0 {
+		data["lastWeek"] = result.LastWeek
+	}
 	return envelopeWithStale(s.clock.Now(), data, result.Stale, result.SyncedAt)
 }
 

@@ -10,17 +10,14 @@
     <!-- 课表。 -->
     <string name="action_sync">同步</string>
     <string name="action_refresh">刷新</string>
-    <string name="timetable_today">今日</string>
-    <string name="timetable_week">本周</string>
-    <string name="timetable_pick_date">选日期</string>
     <string name="timetable_no_class">当天没课</string>
     <string name="timetable_not_in_semester">不在本学期范围</string>
-    <string name="timetable_prev_week">上一周</string>
-    <string name="timetable_next_week">下一周</string>
-    <string name="week_current">回到本周</string>
+    <string name="timetable_pick_week">切换周</string>
+    <string name="week_current">返回当前周</string>
+    <string name="week_current_label">当前周</string>
+    <string name="week_actual_current">当前为第 %1$d 周</string>
+    <string name="week_not_current">当前不在本学期</string>
     <string name="week_only">第 %1$d 周</string>
-    <string name="weekday_cn">周%1$s</string>
-    <string name="section_selected_day">当天课程</string>
     <string name="detail_time">时间</string>
     <string name="detail_location">地点</string>
     <string name="detail_teacher">教师</string>
