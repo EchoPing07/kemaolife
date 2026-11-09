@@ -6,6 +6,7 @@ import androidx.lifecycle.viewModelScope
 import com.github.echoping07.kemaolife.data.AppException
 import com.github.echoping07.kemaolife.data.AppPreferences
 import com.github.echoping07.kemaolife.data.Bridge
+import com.github.echoping07.kemaolife.data.CachedWeek
 import com.github.echoping07.kemaolife.data.CampusState
 import com.github.echoping07.kemaolife.data.CampusStatus
 import com.github.echoping07.kemaolife.data.CredentialStore
@@ -16,6 +17,7 @@ import com.github.echoping07.kemaolife.data.NetworkState
 import com.github.echoping07.kemaolife.data.ProbeResult
 import com.github.echoping07.kemaolife.data.Repository
 import com.github.echoping07.kemaolife.data.ThemePreferences
+import com.github.echoping07.kemaolife.data.TimetableCache
 import com.github.echoping07.kemaolife.data.WeekSchedule
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -36,8 +38,14 @@ import java.time.LocalDate
  * `timetable.sync` 的成功 / 失败事务提交，任何纯读缓存的 `repo.week()` 都不得覆写它：
  * `CacheOnly` 的 `stale` 恒为 false，那是「本次没有刷新」，不是「上次刷新成功了」。
  *
- * 打开 App 的顺序（docs/002 §5.3）：先读课表 / 电费缓存立即渲染，再无条件联网覆盖；
- * 其余自动触发（切回课表 tab、进入更多页、回到前台之外）按最小间隔节流，手动不受限。
+ * 打开 App 的顺序（docs/002 §5.3）：**构造函数里同步**读课表 / 电费镜像缓存，
+ * 首帧立刻渲染，再无条件联网覆盖；其余自动触发（切回课表 tab、进入更多页、
+ * 回到前台之外）按最小间隔节流，手动不受限。
+ *
+ * 课表镜像是 DTO 展示字段的 Kotlin 副本：正本快照含 Cookie，只能由 Go 在
+ * `Init` 后读，而 `Init` 排在 IO 协程里；没有镜像，课表位会先空一帧，
+ * 甚至把「桥接尚未初始化」的失败信封当成空态文案。Gate 与 `pendingOpen`
+ * 保证冷启动只发起一轮无条件联网，且不会在 `Init` 之前误触发。
  */
 class AppViewModel(app: Application) : AndroidViewModel(app) {
 
@@ -68,10 +76,23 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
 
     private val saveMutex = Mutex()
 
+    /** Init 未就绪时到来的「打开」只挂起一次，Init 完成后补跑，不丢也不重。 */
+    @Volatile
+    private var pendingOpen = false
+
+    // 首帧缓存同步读：SharedPreferences 的读取很轻，且必须在 ViewModel 构造时完成，
+    // 不能像以前那样塞进 viewModelScope.launch（那会等到协程调度 + JNI Init 之后）。
+    private val cachedWeek: CachedWeek? = TimetableCache.decode(preferences.timetableCacheJson)
+
     private val _state = MutableStateFlow(
         AppState(
             selectedDate = today,
             todayDate = today,
+            week = cachedWeek?.schedule,
+            // 更多页「今日概览」也从镜像里取：否则首帧课表出了、概览还空着。
+            todayDay = cachedWeek?.schedule?.days?.firstOrNull { it.date == today },
+            weekSyncedAt = cachedWeek?.syncedAt.orEmpty(),
+            electricity = cachedElectricityReport(),
             timetableInterval = preferences.timetableIntervalMinutes,
             electricityInterval = preferences.electricityIntervalMinutes,
             campusWifiOnly = preferences.campusWifiOnly,
@@ -94,19 +115,16 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         // 老版本用 wall-clock 存时间戳，升到单调时钟后那些值全部失效，重查一次即可。
         migrateClockBase()
         viewModelScope.launch {
-            // 电费缓存先出内容（不含 roomName / roomVerify，P2）。
-            val cached = withContext(Dispatchers.IO) { cachedElectricityReport() }
-            _state.update { it.copy(electricity = cached) }
-
+            // 冷启动：门面 Init 之后先用 CacheOnly 校正跨周 / 跨学期的镜像，
+            // 再无条件联网。镜像已在首帧显示，这里的回读只负责「更正」。
             withContext(Dispatchers.IO) { repo.init(credentials) }
             _state.update { it.copy(bridgeReady = repo.isReady(), bridgeError = repo.readyError()) }
 
-            // 冷启动：先读缓存渲染，再**无条件**尝试联网。缓存读是 suspend，
-            // 保证「先出缓存」在前，不会出现同步与缓存读并发、最后写入者胜。
             fetchWeek(0)
-
             // 「每次打开」是特殊的自动：不受最小间隔约束（docs/002 §5.3）。
-            onAppOpened(force = true)
+            // 与挂起的 ON_RESUME 合并，保证冷启动恰好一轮。
+            pendingOpen = true
+            replayPendingOpen()
         }
     }
 
@@ -125,6 +143,24 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
 
     /** 打开 App（冷启动或从后台回到前台）：课表与电费都无条件尝试获取一次。 */
     fun onAppOpened(force: Boolean = true) {
+        // Init 是 JNI 调用，可能晚于 ON_RESUME。挂起而不是丢弃：Init 完成后补跑，
+        // 既不撞 Bridge 的未初始化拦截，也不会永久少掉这一轮无条件联网。
+        if (StartupTiming.shouldDefer(repo.isReady())) {
+            pendingOpen = true
+            return
+        }
+        dispatchOpen(force)
+    }
+
+    /** Init 完成后消费挂起的「打开」；冷启动与后台返回共用这一条路径。 */
+    private fun replayPendingOpen() {
+        if (StartupTiming.consumePending(repo.isReady(), pendingOpen)) {
+            pendingOpen = false
+            dispatchOpen(force = true)
+        }
+    }
+
+    private fun dispatchOpen(force: Boolean) {
         // 每个链路同时只留一个在途请求：回到前台时冷启动同步可能还在跑，
         // 不需要再叠一轮完整 CAS 登录 / 电费查询。
         if (syncJob?.isActive != true) maybeAutoSync(force)
@@ -156,7 +192,14 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     ): Boolean {
         val seq = ++weekSeq
         _state.update { it.copy(weekLoading = true) }
-        val result = withContext(Dispatchers.IO) { repo.week(week) }
+        // 只把「当周」写进首帧镜像：切周 / 选日期读到的是别的周次，
+        // 存进去会让下次冷启动先闪一帧过期周次。当周由 Go 的 week=0 判定，
+        // Kotlin 不自己算周（AGENTS A3）。
+        val result = withContext(Dispatchers.IO) {
+            repo.week(week).onSuccess { view ->
+                if (week == 0) cacheWeek(view.schedule, view.syncedAt)
+            }
+        }
         return result.fold(
             onSuccess = { view ->
                 applyWeek(view.schedule, view.syncedAt, selectDate, fromSync, seq)
@@ -165,9 +208,13 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
             onFailure = { ex ->
                 _state.update { s ->
                     if (seq != weekSeq) return@update s
+                    // 门面未就绪是启动时序问题（自动查询已挂起补跑），不是课表数据错误；
+                    // 不能让它变成课表位 / 更多页概览的文案。
+                    val internalNotReady = !repo.isReady() && (ex as? AppException)?.code == 2001
                     s.copy(
                         weekLoading = false,
-                        timetableError = (ex as? AppException)?.displayMessage ?: "课表读取失败",
+                        timetableError = if (internalNotReady) null
+                        else (ex as? AppException)?.displayMessage ?: "课表读取失败",
                         // 同步成功但回读失败：旧课表不能冒充本次新数据。
                         weekStale = if (fromSync && s.week != null) true else s.weekStale,
                         needsSetup = s.needsSetup || (ex as? AppException)?.needsCredentials == true,
@@ -549,6 +596,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                     merged.customerCode != previous.customerCode
                 if (identityChanged) {
                     preferences.clearElectricityCache()
+                    preferences.clearTimetableCache()
                     _state.update {
                         it.copy(
                             electricity = null,
@@ -577,6 +625,8 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                     return@withLock
                 }
 
+                // 冷启动 Init 失败时挂起的那一轮打开，在设置页保存成功后补跑。
+                replayPendingOpen()
                 fetchWeek(_state.value.week?.week ?: 0)
                 // 首次配置 / 换账号后立刻取一次，不必再让用户手动点刷新。
                 if (identityChanged || _state.value.week == null) maybeAutoSync(force = true)
@@ -605,6 +655,11 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     fun consumeSettingsSaved() = _state.update { it.copy(settingsSaved = false) }
 
     fun consumeError() = _state.update { it.copy(error = null) }
+
+    /** 只写 DTO 展示字段；快照里的 Cookie / 凭据一概不进 SharedPreferences。 */
+    private fun cacheWeek(schedule: WeekSchedule, syncedAt: String) {
+        preferences.timetableCacheJson = TimetableCache.encode(schedule, syncedAt)
+    }
 
     /** 读上一次的电费结果；没有或解析失败都返回 null（不阻断启动）。 */
     private fun cachedElectricityReport(): ElectricityReport? {
@@ -666,6 +721,9 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     private fun pushError(t: Throwable) {
+        // 门面未就绪是启动时序问题，不是用户能处理的操作失败；自动查询已改为
+        // 挂起补跑，这一层只是兜底，避免再把「桥接尚未初始化」弹成 snackbar。
+        if (t is AppException && t.code == 2001 && !repo.isReady()) return
         val message = (t as? AppException)?.displayMessage ?: "操作失败，请稍后重试"
         val needsSetup = (t as? AppException)?.needsCredentials == true
         _state.update { s ->

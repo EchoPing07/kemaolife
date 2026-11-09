@@ -108,7 +108,6 @@ internal fun TimetableScreen(state: AppState, viewModel: AppViewModel) {
             onBackToCurrent = { viewModel.loadCachedWeek(0) },
             onRefresh = { viewModel.refreshWeek() },
             onPickDate = { showPicker = true },
-            onTest = { viewModel.runProbe(ProbeTarget.TIMETABLE) },
         )
 
         WeekStrip(
@@ -136,12 +135,13 @@ internal fun TimetableScreen(state: AppState, viewModel: AppViewModel) {
         ) { displayedWeek ->
             when {
                 displayedWeek == null && state.weekLoading -> LoadingBlock()
-                // 缓存缺失时不再只是一句提示：直接给「测试 / 首次刷新」入口，
+                // 缓存缺失时不再只是一句提示：直接给「同步」入口，
                 // 否则用户既看不到课表也不知道该点哪里（docs/002 §5.3）。
                 displayedWeek == null -> MissingCacheHint(
-                    text = state.timetableError ?: stringResource(R.string.bridge_not_ready),
+                    // 真错误走 snackbar / 设置页；空态只给中性引导 + 可操作入口，
+                    // 不再把内部初始化状态摊到课表位。
+                    text = state.timetableError ?: stringResource(R.string.timetable_cache_missing),
                     onSync = { viewModel.syncTimetable() },
-                    onTest = { viewModel.runProbe(ProbeTarget.TIMETABLE) },
                 )
 
                 displayedWeek.days.none { it.inSemester } -> EmptyHint(
@@ -224,7 +224,6 @@ private fun TimetableHeader(
     onBackToCurrent: () -> Unit,
     onRefresh: () -> Unit,
     onPickDate: () -> Unit,
-    onTest: () -> Unit,
 ) {
     Column(modifier = Modifier.padding(start = 16.dp, end = 6.dp, top = 2.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
@@ -292,15 +291,6 @@ private fun TimetableHeader(
                     emphasize = true,
                 )
                 syncedAt.isNotBlank() -> MetaText(stringResource(R.string.data_synced_at, shortStamp(syncedAt)))
-            }
-            // 「测试」贴近数据时间：它验证的就是这条数据链路（docs/002 §5.3）。
-            IconButton(onClick = onTest, modifier = Modifier.size(32.dp)) {
-                Icon(
-                    imageVector = TabIcons.Flask,
-                    contentDescription = stringResource(R.string.action_test),
-                    tint = MaterialTheme.colorScheme.primary,
-                    modifier = Modifier.size(18.dp),
-                )
             }
         }
     }
@@ -601,22 +591,17 @@ private fun CourseDetailRow(label: String, value: String, supporting: String = "
     }
 }
 
-/** 本地还没有课表缓存时的空态：给出同步与测试两个出口。 */
+/** 本地还没有课表缓存时的空态：给出同步出口。 */
 @Composable
-private fun MissingCacheHint(text: String, onSync: () -> Unit, onTest: () -> Unit) {
+private fun MissingCacheHint(text: String, onSync: () -> Unit) {
     Column(
         modifier = Modifier.padding(20.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
         EmptyHint(text = text)
         Spacer(Modifier.height(12.dp))
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            androidx.compose.material3.Button(onClick = onSync, shape = CircleShape) {
-                Text(stringResource(R.string.action_sync))
-            }
-            androidx.compose.material3.OutlinedButton(onClick = onTest, shape = CircleShape) {
-                Text(stringResource(R.string.action_test))
-            }
+        androidx.compose.material3.Button(onClick = onSync, shape = CircleShape) {
+            Text(stringResource(R.string.action_sync))
         }
     }
 }

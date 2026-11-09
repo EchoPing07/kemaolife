@@ -13,6 +13,7 @@ import android.os.SystemClock
  *
  * 隐私口径：电费缓存只写 UI 必需字段，不含 `roomName` / `roomVerify` / 学号 /
  * Cookie（P2）；`roomName` 是本人宿舍标识，既不需要展示也不需要落盘。
+ * 课表镜像只写 `WeekSchedule` 的展示字段，同样不含 Cookie / 凭据。
  */
 class AppPreferences(context: Context) {
 
@@ -69,6 +70,21 @@ class AppPreferences(context: Context) {
     var electricityCacheJson: String
         get() = prefs.getString(KEY_ELECTRICITY_CACHE, "").orEmpty()
         set(value) = prefs.editCommit { putString(KEY_ELECTRICITY_CACHE, value) }
+
+    /**
+     * 上次课表周视图的展示镜像（[TimetableCache] 编码）。
+     *
+     * 冷启动首帧要在门面 Init 之前就渲染课表：正本快照含 Cookie 只能由 Go 读，
+     * 而 Init 是 JNI 调用，排在 IO 协程里。这里只存 DTO 展示字段（docs/002 §5.3）。
+     */
+    var timetableCacheJson: String
+        get() = prefs.getString(KEY_TIMETABLE_CACHE, "").orEmpty()
+        set(value) = prefs.editCommit { putString(KEY_TIMETABLE_CACHE, value) }
+
+    /** 换账号时与电费缓存一起清掉，避免旧账号课表先显示（docs/002 §2.1 规则 2）。 */
+    fun clearTimetableCache() {
+        prefs.editCommit { putString(KEY_TIMETABLE_CACHE, "") }
+    }
 
     /** 清除电费缓存：换账号 / 凭据失效时用，旧账号数据不能先显示。 */
     fun clearElectricityCache() {
@@ -133,5 +149,6 @@ class AppPreferences(context: Context) {
         private const val KEY_LAST_TIMETABLE_SYNC = "last_timetable_sync_at"
         private const val KEY_LAST_ELECTRICITY = "last_electricity_at"
         private const val KEY_ELECTRICITY_CACHE = "electricity_cache_json"
+        private const val KEY_TIMETABLE_CACHE = "timetable_cache_json"
     }
 }

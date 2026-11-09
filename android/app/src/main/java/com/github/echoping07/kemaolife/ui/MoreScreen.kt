@@ -30,7 +30,6 @@ import androidx.compose.material.icons.rounded.Refresh
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.FilledTonalButton
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
@@ -165,17 +164,10 @@ private fun ElectricityCard(state: AppState, viewModel: AppViewModel) {
     SectionCard(
         title = stringResource(R.string.section_electricity),
         action = {
-            SectionActions {
-                TestAction(
-                    target = ProbeTarget.ELECTRICITY,
-                    state = state,
-                    onTest = { viewModel.runProbe(ProbeTarget.ELECTRICITY) },
-                )
-                RefreshAction(
-                    loading = state.electricityLoading,
-                    onClick = { viewModel.refreshElectricity() },
-                )
-            }
+            RefreshAction(
+                loading = state.electricityLoading,
+                onClick = { viewModel.refreshElectricity() },
+            )
         },
     ) {
         when {
@@ -336,18 +328,11 @@ private fun CampusCard(state: AppState, viewModel: AppViewModel) {
     SectionCard(
         title = stringResource(R.string.section_campusnet),
         action = {
-            SectionActions {
-                TestAction(
-                    target = ProbeTarget.CAMPUS,
-                    state = state,
-                    onTest = { viewModel.runProbe(ProbeTarget.CAMPUS) },
-                )
-                RefreshAction(
-                    loading = state.campusLoading,
-                    contentDescription = stringResource(R.string.action_probe),
-                    onClick = { viewModel.refreshCampusStatus() },
-                )
-            }
+            RefreshAction(
+                loading = state.campusLoading,
+                contentDescription = stringResource(R.string.action_probe),
+                onClick = { viewModel.refreshCampusStatus() },
+            )
         },
     ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
@@ -481,41 +466,6 @@ private fun CampusButton(
     } else {
         OutlinedButton(onClick = onClick, enabled = enabled, shape = CircleShape, modifier = modifier) {
             Text(label, maxLines = 1)
-        }
-    }
-}
-
-/** 卡片右上角的动作组：测试 + 刷新并排，间距固定，避免两个 44dp 贴在一起。 */
-@Composable
-private fun SectionActions(content: @Composable androidx.compose.foundation.layout.RowScope.() -> Unit) {
-    Row(
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(2.dp),
-        content = content,
-    )
-}
-
-/**
- * 「测试」按钮：打开设置页的测试弹窗，跑一次该功能域的完整请求。
- *
- * 与刷新按钮的区别：刷新是「把界面更新成最新」，测试是「告诉我这条链路通不通、
- * 花了多久、失败在哪一步」。后者会打开弹窗并显示结构化结果（docs/002 §5.3）。
- */
-@Composable
-internal fun TestAction(target: ProbeTarget, state: AppState, onTest: () -> Unit) {
-    val running = state.probe?.target == target && state.probe.running
-    Box(modifier = Modifier.size(40.dp), contentAlignment = Alignment.Center) {
-        if (running) {
-            ExpressiveLoadingIndicator(size = 18.dp)
-        } else {
-            IconButton(onClick = onTest, modifier = Modifier.size(40.dp)) {
-                Icon(
-                    imageVector = TabIcons.Flask,
-                    contentDescription = stringResource(R.string.action_test),
-                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.size(19.dp),
-                )
-            }
         }
     }
 }

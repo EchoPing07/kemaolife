@@ -150,4 +150,6 @@
     <string name="loading">加载中…</string>
     <string name="empty_placeholder">—</string>
     <string name="bridge_not_ready">桥接尚未初始化</string>
+    <!-- 课表空态：不把内部初始化状态摊到课表位，只给可操作的引导。 -->
+    <string name="timetable_cache_missing">本机还没有课表，点「同步」获取一次</string>
 </resources>

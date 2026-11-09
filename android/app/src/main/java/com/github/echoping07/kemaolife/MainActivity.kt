@@ -42,6 +42,7 @@ import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.runtime.DisposableEffect
+import com.github.echoping07.kemaolife.ui.AppOpenGate
 import com.github.echoping07.kemaolife.ui.AppViewModel
 import com.github.echoping07.kemaolife.ui.MoreScreen
 import com.github.echoping07.kemaolife.ui.ProbeDialog
@@ -74,12 +75,21 @@ private fun AppRoot(viewModel: AppViewModel) {
     var tab by rememberSaveable { mutableStateOf(Tab.TIMETABLE) }
     val snackbar = remember { SnackbarHostState() }
 
-    // 回到前台也算「每次打开」：先读缓存（state 里已有），再无条件尝试联网覆盖。
-    // 冷启动由 ViewModel.init 触发，这里只处理 ON_RESUME，避免启动时重复两轮。
+    // 回到前台也算「每次打开」：首帧缓存由 ViewModel 构造函数同步给出，
+    // 这里只负责触发那一轮无条件联网。注册 observer 时 Activity 可能已处于 RESUMED，
+    // Lifecycle 会补发一次没有 ON_STOP 前缀的 ON_RESUME —— 它不是真实打开，
+    // 更不能让自动查询撞上 Bridge 的未初始化拦截。Gate 用 remember 跨重组存活。
     val lifecycleOwner = LocalLifecycleOwner.current
+    val gate = remember { AppOpenGate() }
     DisposableEffect(lifecycleOwner) {
         val observer = LifecycleEventObserver { _, event ->
-            if (event == Lifecycle.Event.ON_RESUME) viewModel.onAppOpened(force = true)
+            when (event) {
+                Lifecycle.Event.ON_STOP -> gate.onStop()
+                Lifecycle.Event.ON_RESUME -> if (gate.onResume()) {
+                    viewModel.onAppOpened(force = true)
+                }
+                else -> Unit
+            }
         }
         lifecycleOwner.lifecycle.addObserver(observer)
         onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
