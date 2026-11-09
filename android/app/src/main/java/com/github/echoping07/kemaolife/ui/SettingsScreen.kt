@@ -11,6 +11,7 @@ import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
@@ -33,6 +34,8 @@ import androidx.compose.material.icons.rounded.CheckCircle
 import androidx.compose.material.icons.rounded.DateRange
 import androidx.compose.material.icons.rounded.Lock
 import androidx.compose.material.icons.rounded.Settings
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -43,6 +46,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.ui.unit.sp
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
@@ -71,18 +75,27 @@ internal fun SettingsScreen(state: AppState, viewModel: AppViewModel) {
 
     Column(modifier = Modifier.fillMaxSize()) {
         Row(
-            modifier = Modifier.padding(start = 8.dp, end = 16.dp, top = 2.dp),
+            modifier = Modifier.padding(start = 12.dp, end = 16.dp, top = 8.dp, bottom = 4.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             if (page != SettingsPage.ROOT) {
-                IconButton(onClick = { pageName = SettingsPage.ROOT.name }) {
+                IconButton(
+                    onClick = { pageName = SettingsPage.ROOT.name },
+                    modifier = Modifier
+                        .size(40.dp)
+                        .clip(CircleShape)
+                        .background(MaterialTheme.colorScheme.surfaceContainerHigh),
+                ) {
                     Icon(
                         imageVector = Icons.AutoMirrored.Rounded.ArrowBack,
                         contentDescription = stringResource(R.string.action_back),
+                        tint = MaterialTheme.colorScheme.onSurface,
+                        modifier = Modifier.size(20.dp),
                     )
                 }
-            } else {
                 Spacer(Modifier.width(8.dp))
+            } else {
+                Spacer(Modifier.width(4.dp))
             }
             Text(
                 text = stringResource(
@@ -94,9 +107,9 @@ internal fun SettingsScreen(state: AppState, viewModel: AppViewModel) {
                         SettingsPage.ABOUT -> R.string.settings_about
                     },
                 ),
-                style = MaterialTheme.typography.headlineSmall,
-                fontWeight = FontWeight.SemiBold,
-                modifier = Modifier.padding(horizontal = 8.dp, vertical = 12.dp),
+                style = MaterialTheme.typography.headlineMedium,
+                fontWeight = FontWeight.Bold,
+                modifier = Modifier.padding(horizontal = 6.dp, vertical = 8.dp),
             )
         }
 
@@ -150,29 +163,51 @@ private fun SettingsOverview(
             .padding(horizontal = 16.dp),
     ) {
         Surface(
-            color = MaterialTheme.colorScheme.primaryContainer,
-            shape = MaterialTheme.shapes.large,
+            color = MaterialTheme.colorScheme.surfaceContainerLow,
+            shape = MaterialTheme.shapes.extraLarge,
+            modifier = Modifier.fillMaxWidth().padding(top = 4.dp),
         ) {
             Row(
-                modifier = Modifier.padding(20.dp),
+                modifier = Modifier.padding(18.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                Icon(
-                    imageVector = Icons.Rounded.Lock,
-                    contentDescription = null,
-                    tint = MaterialTheme.colorScheme.onPrimaryContainer,
-                )
+                Box(
+                    modifier = Modifier
+                        .size(42.dp)
+                        .clip(CircleShape)
+                        .background(MaterialTheme.colorScheme.primaryContainer),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Icon(
+                        imageVector = TabIcons.Lock,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.size(20.dp),
+                    )
+                }
                 Spacer(Modifier.width(14.dp))
-                Text(
-                    text = stringResource(R.string.credentials_keystore_hint),
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onPrimaryContainer,
-                )
+                Column {
+                    Text(
+                        text = "硬件级加密存储",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold,
+                    )
+                    Text(
+                        text = stringResource(R.string.credentials_keystore_hint),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(top = 2.dp),
+                    )
+                }
             }
         }
 
         SettingsGroupLabel(stringResource(R.string.settings_accounts))
-        SettingsGroup {
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow),
+            shape = MaterialTheme.shapes.extraLarge,
+        ) {
             SettingsDestination(
                 icon = Icons.Rounded.DateRange,
                 title = stringResource(R.string.section_edu),
@@ -183,10 +218,9 @@ private fun SettingsOverview(
                 },
                 onClick = onEducation,
             )
-            Spacer(Modifier.height(2.dp))
+            ThinDivider(modifier = Modifier.padding(horizontal = 18.dp))
             SettingsDestination(
                 icon = TabIcons.Campus,
-                shapePosition = SettingsShapePosition.LAST,
                 title = stringResource(R.string.section_portal),
                 supporting = if (state.credentials.campusUser.isBlank()) {
                     stringResource(R.string.settings_not_configured)
@@ -198,17 +232,20 @@ private fun SettingsOverview(
         }
 
         SettingsGroupLabel(stringResource(R.string.settings_personalization))
-        SettingsGroup {
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow),
+            shape = MaterialTheme.shapes.extraLarge,
+        ) {
             SettingsDestination(
                 icon = TabIcons.Appearance,
                 title = stringResource(R.string.settings_appearance),
                 supporting = stringResource(R.string.settings_theme_color),
                 onClick = onAppearance,
             )
-            Spacer(Modifier.height(2.dp))
+            ThinDivider(modifier = Modifier.padding(horizontal = 18.dp))
             SettingsDestination(
                 icon = TabIcons.Info,
-                shapePosition = SettingsShapePosition.LAST,
                 title = stringResource(R.string.settings_about),
                 supporting = stringResource(R.string.settings_about_hint),
                 onClick = onAbout,
@@ -218,13 +255,15 @@ private fun SettingsOverview(
         SettingsGroupLabel(stringResource(R.string.settings_electricity_title))
         Surface(
             color = MaterialTheme.colorScheme.surfaceContainerLow,
-            shape = MaterialTheme.shapes.large,
+            shape = MaterialTheme.shapes.extraLarge,
+            modifier = Modifier.fillMaxWidth(),
         ) {
-            Column(modifier = Modifier.padding(horizontal = 20.dp, vertical = 16.dp)) {
+            Column(modifier = Modifier.padding(horizontal = 20.dp, vertical = 18.dp)) {
                 Text(
                     text = stringResource(R.string.power_no_password_hint),
                     style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    fontWeight = FontWeight.Medium,
+                    color = MaterialTheme.colorScheme.onSurface,
                 )
                 Text(
                     text = stringResource(R.string.settings_electricity_source),
@@ -242,6 +281,7 @@ private fun SettingsOverview(
                 modifier = Modifier.padding(16.dp),
             )
         }
+        Spacer(Modifier.height(28.dp))
     }
 }
 
@@ -250,46 +290,35 @@ private fun SettingsGroupLabel(text: String) {
     Text(
         text = text,
         style = MaterialTheme.typography.labelLarge,
-        color = MaterialTheme.colorScheme.primary,
-        modifier = Modifier.padding(start = 12.dp, top = 24.dp, bottom = 8.dp),
+        fontWeight = FontWeight.Bold,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+        modifier = Modifier.padding(start = 12.dp, top = 22.dp, bottom = 8.dp),
     )
 }
 
-@Composable
-private fun SettingsGroup(content: @Composable ColumnScope.() -> Unit) {
-    Column(content = content)
-}
-
-private enum class SettingsShapePosition { SINGLE, FIRST, MIDDLE, LAST }
-
-/** MD3 Expressive list：同一组使用 4dp 小圆角，首尾用 28dp 大圆角，项间留 2dp。 */
+/** MD3 Expressive list 项：整洁卡片内部条目。 */
 @Composable
 private fun SettingsDestination(
     icon: ImageVector,
     title: String,
     supporting: String,
     onClick: () -> Unit,
-    shapePosition: SettingsShapePosition = SettingsShapePosition.FIRST,
 ) {
-    val shape = when (shapePosition) {
-        SettingsShapePosition.SINGLE -> MaterialTheme.shapes.large
-        SettingsShapePosition.FIRST -> smoothShape(28.dp, 4.dp)
-        SettingsShapePosition.MIDDLE -> smoothShape(4.dp)
-        SettingsShapePosition.LAST -> smoothShape(4.dp, 28.dp)
-    }
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .background(MaterialTheme.colorScheme.surfaceContainerLow, shape)
-            .clip(shape)
             .clickable(onClick = onClick)
-            .padding(horizontal = 16.dp, vertical = 16.dp),
+            .padding(horizontal = 18.dp, vertical = 16.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         BoxIcon(icon)
         Spacer(Modifier.width(16.dp))
         Column(modifier = Modifier.weight(1f)) {
-            Text(text = title, style = MaterialTheme.typography.titleMedium)
+            Text(
+                text = title,
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.SemiBold,
+            )
             Text(
                 text = supporting,
                 style = MaterialTheme.typography.bodySmall,
@@ -301,22 +330,27 @@ private fun SettingsDestination(
             imageVector = Icons.AutoMirrored.Rounded.KeyboardArrowRight,
             contentDescription = null,
             tint = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.size(20.dp),
         )
     }
 }
 
 @Composable
 private fun BoxIcon(icon: ImageVector) {
-    Icon(
-        imageVector = icon,
-        contentDescription = null,
-        tint = MaterialTheme.colorScheme.primary,
+    Box(
         modifier = Modifier
-            .size(36.dp)
+            .size(40.dp)
             .clip(CircleShape)
-            .background(MaterialTheme.colorScheme.secondaryContainer)
-            .padding(8.dp),
-    )
+            .background(MaterialTheme.colorScheme.surfaceContainerHigh),
+        contentAlignment = Alignment.Center,
+    ) {
+        Icon(
+            imageVector = icon,
+            contentDescription = null,
+            tint = MaterialTheme.colorScheme.primary,
+            modifier = Modifier.size(20.dp),
+        )
+    }
 }
 
 @Composable
@@ -333,6 +367,7 @@ private fun EducationSettings(state: AppState, viewModel: AppViewModel) {
         }
     }
     CredentialForm(
+        title = "教务与电费凭据",
         note = stringResource(R.string.edu_note),
         saved = state.settingsSaved,
         onSave = {
@@ -349,21 +384,36 @@ private fun EducationSettings(state: AppState, viewModel: AppViewModel) {
             value = studentId,
             onValueChange = { studentId = it },
             label = stringResource(R.string.field_student_id),
+            leadingIcon = TabIcons.User,
             keyboardType = KeyboardType.Number,
         )
+        Spacer(Modifier.height(14.dp))
         AppTextField(
             value = password,
             onValueChange = { password = it },
             label = stringResource(R.string.field_edu_password),
+            leadingIcon = TabIcons.Lock,
             isPassword = true,
             supporting = stringResource(R.string.password_kept_hint),
         )
-        SettingsGroupLabel(stringResource(R.string.section_power))
-        FieldNote(stringResource(R.string.power_no_password_hint))
+        Spacer(Modifier.height(18.dp))
+        Text(
+            text = stringResource(R.string.section_power),
+            style = MaterialTheme.typography.titleSmall,
+            fontWeight = FontWeight.Bold,
+            color = MaterialTheme.colorScheme.primary,
+        )
+        Text(
+            text = stringResource(R.string.power_no_password_hint),
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.padding(top = 4.dp, bottom = 10.dp),
+        )
         AppTextField(
             value = customerCode,
             onValueChange = { customerCode = it },
             label = stringResource(R.string.field_customer_code),
+            leadingIcon = TabIcons.School,
             keyboardType = KeyboardType.Number,
             imeAction = ImeAction.Done,
         )
@@ -384,6 +434,7 @@ private fun CampusSettings(state: AppState, viewModel: AppViewModel) {
         }
     }
     CredentialForm(
+        title = "校园网认证凭据",
         note = stringResource(R.string.campus_independent_hint),
         saved = state.settingsSaved,
         onSave = {
@@ -400,18 +451,23 @@ private fun CampusSettings(state: AppState, viewModel: AppViewModel) {
             value = user,
             onValueChange = { user = it },
             label = stringResource(R.string.field_campus_user),
+            leadingIcon = TabIcons.User,
         )
+        Spacer(Modifier.height(14.dp))
         AppTextField(
             value = password,
             onValueChange = { password = it },
             label = stringResource(R.string.field_campus_password),
+            leadingIcon = TabIcons.Lock,
             isPassword = true,
             supporting = stringResource(R.string.password_kept_hint),
         )
+        Spacer(Modifier.height(14.dp))
         AppTextField(
             value = fingerprint,
             onValueChange = { fingerprint = it },
             label = stringResource(R.string.field_campus_fingerprint),
+            leadingIcon = TabIcons.Fingerprint,
             supporting = stringResource(R.string.field_optional),
             imeAction = ImeAction.Done,
         )
@@ -420,6 +476,7 @@ private fun CampusSettings(state: AppState, viewModel: AppViewModel) {
 
 @Composable
 private fun CredentialForm(
+    title: String,
     note: String,
     saved: Boolean,
     onSave: () -> Unit,
@@ -431,12 +488,65 @@ private fun CredentialForm(
             .verticalScroll(rememberScrollState())
             .padding(horizontal = 16.dp),
     ) {
-        FieldNote(note)
-        Spacer(Modifier.padding(top = 16.dp))
-        content()
+        // 安全提示横幅卡片
+        Surface(
+            color = MaterialTheme.colorScheme.surfaceContainerLow,
+            shape = MaterialTheme.shapes.extraLarge,
+            modifier = Modifier.fillMaxWidth().padding(top = 4.dp),
+        ) {
+            Row(
+                modifier = Modifier.padding(18.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Box(
+                    modifier = Modifier
+                        .size(38.dp)
+                        .clip(CircleShape)
+                        .background(MaterialTheme.colorScheme.primaryContainer),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Icon(
+                        imageVector = TabIcons.Lock,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.size(18.dp),
+                    )
+                }
+                Spacer(Modifier.width(14.dp))
+                Text(
+                    text = note,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    lineHeight = 18.sp,
+                    modifier = Modifier.weight(1f),
+                )
+            }
+        }
+
+        Spacer(Modifier.height(16.dp))
+
+        // 表单卡片容器
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            colors = androidx.compose.material3.CardDefaults.cardColors(
+                containerColor = MaterialTheme.colorScheme.surfaceContainerLow,
+            ),
+            shape = MaterialTheme.shapes.extraLarge,
+        ) {
+            Column(modifier = Modifier.padding(horizontal = 20.dp, vertical = 22.dp)) {
+                Text(
+                    text = title,
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold,
+                    modifier = Modifier.padding(bottom = 16.dp),
+                )
+                content()
+            }
+        }
+
         if (saved) {
             Row(
-                modifier = Modifier.padding(top = 16.dp),
+                modifier = Modifier.padding(top = 16.dp, start = 8.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Icon(
@@ -450,50 +560,92 @@ private fun CredentialForm(
                     text = stringResource(R.string.save_done),
                     style = MaterialTheme.typography.labelLarge,
                     color = MaterialTheme.colorScheme.primary,
+                    fontWeight = FontWeight.SemiBold,
                 )
             }
         }
+
         androidx.compose.material3.Button(
             onClick = onSave,
-            modifier = Modifier.fillMaxWidth().padding(vertical = 24.dp),
-            contentPadding = androidx.compose.foundation.layout.PaddingValues(vertical = 14.dp),
-        ) { Text(stringResource(R.string.action_save)) }
+            shape = CircleShape,
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(vertical = 24.dp)
+                .height(52.dp),
+        ) {
+            Text(
+                text = stringResource(R.string.action_save),
+                style = MaterialTheme.typography.titleSmall,
+                fontWeight = FontWeight.Bold,
+            )
+        }
     }
 }
 
-@Composable
-private fun FieldNote(text: String) {
-    Text(
-        text = text,
-        style = MaterialTheme.typography.bodyMedium,
-        color = MaterialTheme.colorScheme.onSurfaceVariant,
-        modifier = Modifier.padding(horizontal = 4.dp),
-    )
-}
-
-/** 密码只保存在当前 composition，不进 Bundle；留空时仍沿用旧密码。 */
+/** 现代 MD3 Expressive 风格输入框：平滑大圆角 + 前缀图标 + 密码明暗切换眼睛。 */
 @Composable
 private fun AppTextField(
     value: String,
     onValueChange: (String) -> Unit,
     label: String,
+    leadingIcon: ImageVector? = null,
     supporting: String? = null,
     isPassword: Boolean = false,
     keyboardType: KeyboardType = KeyboardType.Text,
     imeAction: ImeAction = ImeAction.Next,
 ) {
+    var passwordVisible by rememberSaveable { mutableStateOf(false) }
+
     OutlinedTextField(
         value = value,
         onValueChange = onValueChange,
         label = { Text(label) },
+        leadingIcon = leadingIcon?.let {
+            {
+                Icon(
+                    imageVector = it,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.size(20.dp),
+                )
+            }
+        },
+        trailingIcon = {
+            if (isPassword) {
+                val icon = if (passwordVisible) TabIcons.EyeOff else TabIcons.Eye
+                IconButton(onClick = { passwordVisible = !passwordVisible }) {
+                    Icon(
+                        imageVector = icon,
+                        contentDescription = if (passwordVisible) "隐藏密码" else "显示密码",
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.size(20.dp),
+                    )
+                }
+            } else if (value.isNotEmpty()) {
+                IconButton(onClick = { onValueChange("") }) {
+                    Icon(
+                        imageVector = TabIcons.Clear,
+                        contentDescription = "清空",
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.size(18.dp),
+                    )
+                }
+            }
+        },
         supportingText = supporting?.let { { Text(it) } },
         singleLine = true,
-        visualTransformation = if (isPassword) PasswordVisualTransformation() else VisualTransformation.None,
+        visualTransformation = if (isPassword && !passwordVisible) PasswordVisualTransformation() else VisualTransformation.None,
         keyboardOptions = KeyboardOptions(
             keyboardType = if (isPassword) KeyboardType.Password else keyboardType,
             imeAction = imeAction,
         ),
-        shape = MaterialTheme.shapes.medium,
-        modifier = Modifier.fillMaxWidth().padding(top = 14.dp),
+        colors = androidx.compose.material3.OutlinedTextFieldDefaults.colors(
+            focusedContainerColor = MaterialTheme.colorScheme.surface,
+            unfocusedContainerColor = MaterialTheme.colorScheme.surface,
+            focusedBorderColor = MaterialTheme.colorScheme.primary,
+            unfocusedBorderColor = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f),
+        ),
+        shape = smoothShape(16.dp),
+        modifier = Modifier.fillMaxWidth(),
     )
 }

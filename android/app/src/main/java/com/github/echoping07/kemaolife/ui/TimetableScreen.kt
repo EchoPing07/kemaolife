@@ -249,7 +249,7 @@ private fun TimetableHeader(
             )
             IconButton(onClick = onRefresh, enabled = !loading, modifier = Modifier.size(40.dp)) {
                 if (loading) {
-                    CircularProgressIndicator(modifier = Modifier.size(19.dp), strokeWidth = 2.dp)
+                    ExpressiveLoadingIndicator(size = 20.dp)
                 } else {
                     Icon(
                         imageVector = Icons.Rounded.Refresh,

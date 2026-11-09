@@ -22,6 +22,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import com.github.echoping07.kemaolife.ui.theme.smoothShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
@@ -343,7 +344,7 @@ private fun CampusCard(state: AppState, viewModel: AppViewModel) {
             }
             if (busy) {
                 Spacer(Modifier.width(10.dp))
-                CircularProgressIndicator(modifier = Modifier.size(14.dp), strokeWidth = 2.dp)
+                ExpressiveLoadingIndicator(size = 16.dp)
             }
         }
 
@@ -446,11 +447,11 @@ private fun CampusButton(
     modifier: Modifier = Modifier,
 ) {
     if (filled) {
-        Button(onClick = onClick, enabled = enabled, modifier = modifier) {
+        Button(onClick = onClick, enabled = enabled, shape = CircleShape, modifier = modifier) {
             Text(label, maxLines = 1)
         }
     } else {
-        OutlinedButton(onClick = onClick, enabled = enabled, modifier = modifier) {
+        OutlinedButton(onClick = onClick, enabled = enabled, shape = CircleShape, modifier = modifier) {
             Text(label, maxLines = 1)
         }
     }
@@ -465,7 +466,7 @@ internal fun RefreshAction(
 ) {
     Box(modifier = Modifier.size(44.dp), contentAlignment = Alignment.Center) {
         if (loading) {
-            CircularProgressIndicator(modifier = Modifier.size(18.dp), strokeWidth = 2.dp)
+            ExpressiveLoadingIndicator(size = 20.dp)
         } else {
             TextButton(onClick = onClick) {
                 Icon(

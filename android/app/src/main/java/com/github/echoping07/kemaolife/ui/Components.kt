@@ -1,5 +1,14 @@
 package com.github.echoping07.kemaolife.ui
 
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.keyframes
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.tween
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -15,18 +24,23 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.StrokeJoin
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.github.echoping07.kemaolife.R
@@ -34,12 +48,16 @@ import com.github.echoping07.kemaolife.data.CampusState
 import com.github.echoping07.kemaolife.data.Entry
 import com.github.echoping07.kemaolife.ui.theme.coursePalette
 import com.github.echoping07.kemaolife.ui.theme.smoothShape
+import kotlin.math.cos
+import kotlin.math.min
+import kotlin.math.sin
 
 /**
- * 通用容器：MD3 filled card + 标题行。
+ * 通用容器：MD3 Expressive filled card + 标题行。
  *
- * 卡片用 `surfaceContainerLowest`（浅色模式下就是纯白），页面底色是 `surface`：
- * 两者差一档，卡片边界清楚但不靠描边和阴影。
+ * 卡片使用 [MaterialTheme.colorScheme.surfaceContainerLow]（在浅色模式下为高亮纯白），
+ * 与柔和浅灰的背景色（surface）形成明暗对比，让内容区域成为视觉焦点。
+ * 圆角采用 extraLarge（28dp 平滑圆角），展现饱满包容的张力。
  */
 @Composable
 internal fun SectionCard(
@@ -53,45 +71,150 @@ internal fun SectionCard(
         colors = CardDefaults.cardColors(
             containerColor = MaterialTheme.colorScheme.surfaceContainerLow,
         ),
-        shape = MaterialTheme.shapes.large,
+        shape = MaterialTheme.shapes.extraLarge,
     ) {
-        Column(modifier = Modifier.padding(vertical = 8.dp)) {
+        Column(modifier = Modifier.padding(top = 10.dp, bottom = 14.dp)) {
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(start = 20.dp, end = 8.dp, top = 4.dp, bottom = 2.dp),
+                    .padding(start = 22.dp, end = 12.dp, top = 4.dp, bottom = 4.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Text(
                     text = title,
                     style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.SemiBold,
+                    fontWeight = FontWeight.Bold,
                     modifier = Modifier.weight(1f),
                 )
                 action?.invoke()
             }
-            Column(modifier = Modifier.padding(horizontal = 20.dp, vertical = 8.dp), content = content)
+            Column(modifier = Modifier.padding(horizontal = 22.dp, vertical = 6.dp), content = content)
         }
     }
 }
 
-/** 主 tab 标题与设置详情页共用同一字阶，不让标题抢占内容空间。 */
+/** 主 tab 标题：MD3 Expressive 大字重标题。 */
 @Composable
 internal fun ScreenTitle(text: String, modifier: Modifier = Modifier) {
     Text(
         text = text,
-        style = MaterialTheme.typography.headlineSmall,
-        fontWeight = FontWeight.SemiBold,
-        modifier = modifier.padding(start = 4.dp, top = 10.dp, bottom = 8.dp),
+        style = MaterialTheme.typography.headlineLarge,
+        fontWeight = FontWeight.Bold,
+        modifier = modifier.padding(start = 8.dp, top = 16.dp, bottom = 14.dp),
     )
 }
 
 /**
- * 今日课表条目（「更多」页用）。
+ * MD3 Expressive 标准的灵动波浪环形加载指示器 (Circular Wavy Progress Indicator)。
  *
- * 左侧色条与课表网格里同一门课的色块同色（按课程名散列），
- * 这样两处能对上号。
+ * 结合 Material 官方非对称缓动伸缩与流体环形正弦波浪，
+ * 彻底告别传统死板细圈，展现富有弹性质感的现代科技感。
  */
+@Composable
+internal fun ExpressiveLoadingIndicator(
+    modifier: Modifier = Modifier,
+    color: Color = MaterialTheme.colorScheme.primary,
+    size: Dp = 22.dp,
+    strokeWidth: Dp = if (size < 22.dp) 2.2.dp else 3.2.dp,
+) {
+    val transition = rememberInfiniteTransition(label = "expressiveWavy")
+
+    // 基础自转相位 (0 ~ 360)
+    val baseRotation by transition.animateFloat(
+        initialValue = 0f,
+        targetValue = 360f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(durationMillis = 2200, easing = LinearEasing),
+            repeatMode = RepeatMode.Restart,
+        ),
+        label = "baseRotation",
+    )
+
+    // 头部扩展相位 (0 ~ 360)
+    val headAngle by transition.animateFloat(
+        initialValue = 0f,
+        targetValue = 360f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(durationMillis = 1332, easing = FastOutSlowInEasing),
+            repeatMode = RepeatMode.Restart,
+        ),
+        label = "headAngle",
+    )
+
+    // 尾部追赶相位 (0 ~ 360)
+    val tailAngle by transition.animateFloat(
+        initialValue = 0f,
+        targetValue = 360f,
+        animationSpec = infiniteRepeatable(
+            animation = keyframes {
+                durationMillis = 1332
+                0f at 0 using FastOutSlowInEasing
+                0f at 380 using FastOutSlowInEasing
+                360f at 1332
+            },
+            repeatMode = RepeatMode.Restart,
+        ),
+        label = "tailAngle",
+    )
+
+    // 波浪流体向前行进相位
+    val wavePhase by transition.animateFloat(
+        initialValue = 0f,
+        targetValue = (2 * Math.PI).toFloat(),
+        animationSpec = infiniteRepeatable(
+            animation = tween(durationMillis = 900, easing = LinearEasing),
+            repeatMode = RepeatMode.Restart,
+        ),
+        label = "wavePhase",
+    )
+
+    Canvas(modifier = modifier.size(size)) {
+        val w = this.size.width
+        val h = this.size.height
+        val cx = w / 2f
+        val cy = h / 2f
+        val strokePx = strokeWidth.toPx()
+        val baseR = (min(w, h) - strokePx * 1.5f) / 2f
+        val waveAmplitude = (baseR * 0.14f).coerceIn(1.2f, 3.2f)
+        val waveCount = 5
+
+        // 计算当前圆弧的扫描跨度
+        val sweep = (headAngle - tailAngle).let { if (it < 0f) it + 360f else it }.coerceIn(18f, 290f)
+        val startAngle = (baseRotation + tailAngle) % 360f
+
+        val path = Path()
+        val steps = (sweep / 4).toInt().coerceAtLeast(16)
+        for (i in 0..steps) {
+            val progress = i.toFloat() / steps
+            val currentDeg = startAngle + sweep * progress
+            val currentRad = Math.toRadians(currentDeg.toDouble()).toFloat()
+
+            // 径向正弦波扰动
+            val waveOffset = waveAmplitude * sin(waveCount * currentRad - wavePhase)
+            val r = baseR + waveOffset
+            val x = cx + r * cos(currentRad)
+            val y = cy + r * sin(currentRad)
+
+            if (i == 0) {
+                path.moveTo(x, y)
+            } else {
+                path.lineTo(x, y)
+            }
+        }
+
+        drawPath(
+            path = path,
+            color = color,
+            style = Stroke(
+                width = strokePx,
+                cap = StrokeCap.Round,
+                join = StrokeJoin.Round,
+            ),
+        )
+    }
+}
+
+/** 今日课表条目（「更多」页用）。 */
 @Composable
 internal fun EntryRow(entry: Entry) {
     val palette = coursePalette(entry.name)
@@ -148,26 +271,27 @@ internal fun EntryRow(entry: Entry) {
     }
 }
 
-/** 小节之间的浅分隔线，避免每条都画完整卡片导致视觉噪音。 */
+/** 小节之间的浅分隔线。 */
 @Composable
 internal fun ThinDivider(modifier: Modifier = Modifier) {
     HorizontalDivider(
         modifier = modifier,
         thickness = 0.5.dp,
-        color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.6f),
+        color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f),
     )
 }
 
-/** 通用「加载中」占位。 */
+/** 通用「加载中」占位：使用 M3 Expressive 形变加载动效。 */
 @Composable
 internal fun LoadingBlock(modifier: Modifier = Modifier) {
     Row(
         modifier = modifier
             .fillMaxWidth()
-            .padding(vertical = 28.dp),
+            .padding(vertical = 32.dp),
         horizontalArrangement = Arrangement.Center,
+        verticalAlignment = Alignment.CenterVertically,
     ) {
-        CircularProgressIndicator(modifier = Modifier.size(22.dp), strokeWidth = 2.dp)
+        ExpressiveLoadingIndicator(size = 32.dp)
     }
 }
 
@@ -177,9 +301,9 @@ internal fun EmptyHint(text: String, modifier: Modifier = Modifier) {
     Box(
         modifier = modifier
             .fillMaxWidth()
-            .clip(MaterialTheme.shapes.large)
-            .background(MaterialTheme.colorScheme.surfaceContainerLowest)
-            .padding(horizontal = 20.dp, vertical = 28.dp),
+            .clip(MaterialTheme.shapes.extraLarge)
+            .background(MaterialTheme.colorScheme.surfaceContainerLow)
+            .padding(horizontal = 24.dp, vertical = 32.dp),
         contentAlignment = Alignment.Center,
     ) {
         Text(
@@ -196,7 +320,7 @@ internal fun EmptyHint(text: String, modifier: Modifier = Modifier) {
 internal fun StatusDot(color: Color, modifier: Modifier = Modifier) {
     Box(
         modifier = modifier
-            .size(9.dp)
+            .size(10.dp)
             .clip(CircleShape)
             .background(color),
     )
@@ -218,7 +342,7 @@ internal fun MetaText(text: String, modifier: Modifier = Modifier, emphasize: Bo
     )
 }
 
-/** 校园网三态 → 本地化文案（Windows 托盘与 Android 用同一套术语，见 docs/002 §3.3）。 */
+/** 校园网三态 → 本地化文案。 */
 @Composable
 internal fun campusStateLabel(state: CampusState): String = when (state) {
     CampusState.ONLINE -> stringResource(R.string.campusnet_online)
