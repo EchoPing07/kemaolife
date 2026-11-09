@@ -18,6 +18,8 @@
     <string name="week_actual_current">当前为第 %1$d 周</string>
     <string name="week_not_current">当前不在本学期</string>
     <string name="week_only">第 %1$d 周</string>
+    <!-- 本周时周次右侧的周几（如「周一」），参数是 DTO 的 weekdayCn。 -->
+    <string name="weekday_with_prefix">周%1$s</string>
     <string name="detail_time">时间</string>
     <string name="detail_location">地点</string>
     <string name="detail_teacher">教师</string>

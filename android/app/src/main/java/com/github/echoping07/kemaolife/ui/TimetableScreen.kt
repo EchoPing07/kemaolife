@@ -30,7 +30,6 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Refresh
-import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.AlertDialog
@@ -143,6 +142,9 @@ internal fun TimetableScreen(state: AppState, viewModel: AppViewModel) {
             week = week?.week,
             currentWeek = state.currentWeek,
             isCurrentWeek = week?.days?.any { it.date == state.todayDate } == true,
+            // 周几只在「浏览的就是今天所在周」时有意义，取该周里今天那条的 weekdayCn；
+            // 取不到（缓存还没覆盖今天）就留空，不自己按日期推算星期（AGENTS A3）。
+            todayWeekday = week?.days?.firstOrNull { it.date == state.todayDate }?.weekdayCn.orEmpty(),
             loading = state.weekLoading || state.timetableSyncing,
             stale = state.weekStale,
             syncedAt = state.weekSyncedAt,
@@ -283,13 +285,19 @@ private fun PageContent(
     }
 }
 
-/** 日期始终属于今天；第二行的「当前为第 N 周」明确区分浏览周与自然周。 */
+/**
+ * 头部第二行：浏览周 + 今天周几（本周）/ 当前为第 N 周（非本周）。
+ *
+ * 本周时右侧只有周几：这时「浏览周」与「当前周」是同一个数，再显示「当前为第 N 周」
+ * 就是同一句话重复两遍；换成今天周几才提供了新信息（docs/002 §5.3 tab1）。
+ */
 @Composable
 private fun TimetableHeader(
     todayDate: String,
     week: Int?,
     currentWeek: Int?,
     isCurrentWeek: Boolean,
+    todayWeekday: String,
     loading: Boolean,
     stale: Boolean,
     syncedAt: String,
@@ -319,7 +327,14 @@ private fun TimetableHeader(
                         Text(
                             text = buildString {
                                 if (week > 0) append(stringResource(R.string.week_only, week))
-                                if (!isCurrentWeek) {
+                                if (isCurrentWeek) {
+                                    // 本周：周次右侧并排今天周几（第 5 周 周一），
+                                    // 不再重复「当前为第 N 周」——浏览周就是当前周。
+                                    if (todayWeekday.isNotBlank()) {
+                                        if (isNotEmpty()) append("  ")
+                                        append(stringResource(R.string.weekday_with_prefix, todayWeekday))
+                                    }
+                                } else {
                                     if (isNotEmpty()) append("  ")
                                     append(
                                         currentWeek?.let { stringResource(R.string.week_actual_current, it) }
@@ -328,7 +343,8 @@ private fun TimetableHeader(
                                 }
                             },
                             style = MaterialTheme.typography.labelLarge,
-                            color = MaterialTheme.colorScheme.primary,
+                            // 周次与周几都用正文色：主题色在这行偏弱，容易只看见数字。
+                            color = MaterialTheme.colorScheme.onSurface,
                             fontWeight = FontWeight.Medium,
                             maxLines = 1,
                         )
@@ -450,21 +466,29 @@ private fun WeekStrip(
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
             val month = days.firstOrNull()?.date?.split('-')?.getOrNull(1)?.toIntOrNull()
+            // 数字与「月」用完全相同的字号 / 字重 / 颜色：两者不同字号时，
+            // 「月」会又小又淡地悬在数字下面，看起来像两个不相干的字。
+            val monthStyle = MaterialTheme.typography.titleSmall
             Text(
                 text = month?.toString().orEmpty(),
-                style = MaterialTheme.typography.titleSmall,
+                style = monthStyle,
                 fontWeight = FontWeight.SemiBold,
                 color = MaterialTheme.colorScheme.onSurface,
             )
             Text(
                 text = "月",
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                style = monthStyle,
+                fontWeight = FontWeight.SemiBold,
+                color = MaterialTheme.colorScheme.onSurface,
             )
         }
         for (index in 0 until 7) {
             val day = days.getOrNull(index)
             val isToday = day != null && day.date == todayDate
+            // 今天只靠字重强调，不改颜色、不加背景（docs/002 §5.3 tab1）。
+            // 取 ExtraBold(800)。
+            // 字号保持全列一致，否则今天那列变高、上下两个字会与邻列错位。
+            val todayWeight = FontWeight.ExtraBold
             val contentColor by animateColorAsState(
                 targetValue = if (isToday) MaterialTheme.colorScheme.onSurface
                 else MaterialTheme.colorScheme.onSurfaceVariant,
@@ -481,14 +505,14 @@ private fun WeekStrip(
                     text = day?.weekdayCn ?: WEEKDAY_CN[index],
                     style = MaterialTheme.typography.labelMedium,
                     color = contentColor,
-                    fontWeight = if (isToday) FontWeight.Bold else FontWeight.Normal,
+                    fontWeight = if (isToday) todayWeight else FontWeight.Normal,
                     maxLines = 1,
                 )
                 Spacer(Modifier.height(3.dp))
                 Text(
                     text = day?.date?.substringAfterLast('-')?.toIntOrNull()?.toString().orEmpty(),
                     style = MaterialTheme.typography.titleSmall,
-                    fontWeight = if (isToday) FontWeight.Bold else FontWeight.Medium,
+                    fontWeight = if (isToday) todayWeight else FontWeight.Medium,
                     color = contentColor,
                     maxLines = 1,
                 )
@@ -531,17 +555,8 @@ private fun WeekGrid(
                     .weight(1f)
                     .fillMaxHeight(),
             ) {
-                Column(Modifier.fillMaxSize()) {
-                    repeat(TIMETABLE_ROWS) {
-                        Box(modifier = Modifier.fillMaxWidth().height(RowHeight)) {
-                            HorizontalDivider(
-                                modifier = Modifier.align(Alignment.BottomCenter),
-                                thickness = 0.5.dp,
-                                color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.25f),
-                            )
-                        }
-                    }
-                }
+                // 网格不画行间横线：12 行背景横线在课程块之间反复穿插，视觉噪音大于引导，
+                // 行列定位改由左侧节次数字与星期条承担（docs/002 §5.3 tab1）。
                 val blocks = remember(day?.date, day?.entries) { layoutCourseBlocks(day?.entries.orEmpty()) }
                 DayColumn(day = day, blocks = blocks, rowHeight = RowHeight, onCourseClick = onCourseClick)
             }
