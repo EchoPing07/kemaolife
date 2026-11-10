@@ -261,21 +261,71 @@ func normalizePeriods(raw string) string {
 // NormalizePeriods 是对外暴露的节次归一化（协议层与测试共用）。
 func NormalizePeriods(raw string) string { return normalizePeriods(raw) }
 
-// slotTimeOf 由节次取大节时间；越界时返回空串（不影响课表正确性）。
+// slotTimeOf 由节次取覆盖整段课的时间；越界或无法解析时返回空串（不影响课表正确性）。
 //
-// 注意换算是「小节号 → 大节序号」，不是直接下标：教务只有 6 个大节，
-// 而 sktime 用的是小节号（1..12），映射为
-//
-//	1-2 → 第 1 大节, 3-4 → 第 2, 5-6 → 第 3, 7-8 → 第 4, 9-10 → 第 5, 11-12 → 第 6
-//
-// 直接用小节号当下标会让 7 节以后的课拿不到时间（实测存在的坑）。
+// 换算口径（api-docs/001 §5.5-5.6）：sktime 用小节号 1..12，作息表只有 6 个大节，
+// 小节号 → 大节序号 = ceil(n/2)：1-2→第 1 大节 … 11-12→第 6 大节。
+// 一节连上多个大节时（如 5-8 = 下午连上四小节），time 必须覆盖首尾大节：
+// 取起始大节的开始时间与结束大节的结束时间（5-8 → 14:00~16:50）。
+// 只给起始大节会把下课时间显示早；CLI 表格与 Android 详情页同源，改这里两端同时生效。
 func slotTimeOf(periods string) string {
-	slot := slotIndex(periods)
-	if slot < 1 || slot > len(SlotTimes) {
+	nums := reNumber.FindAllString(periods, -1)
+	if len(nums) == 0 {
 		return ""
 	}
-	return SlotTimes[slot-1]
+	first, err := strconv.Atoi(nums[0])
+	if err != nil {
+		return ""
+	}
+	last := first
+	for _, s := range nums[1:] {
+		n, err := strconv.Atoi(s)
+		if err != nil {
+			return ""
+		}
+		if n < first {
+			first = n
+		}
+		if n > last {
+			last = n
+		}
+	}
+	if first < 1 {
+		return ""
+	}
+	startSection := sectionIndex(first)
+	endSection := sectionIndex(last)
+	if endSection > len(SlotTimes) {
+		return ""
+	}
+	// 单个大节直接返回原值，保持既有两小节课的时间逐字节不变。
+	if startSection == endSection {
+		return SlotTimes[startSection-1]
+	}
+	start, _, ok := splitSlotTime(SlotTimes[startSection-1])
+	if !ok {
+		return ""
+	}
+	_, end, ok := splitSlotTime(SlotTimes[endSection-1])
+	if !ok {
+		return ""
+	}
+	return start + "~" + end
 }
+
+// splitSlotTime 把作息表的 "HH:MM~HH:MM" 拆成起止时间；兼容 "-" / "—" 分隔符。
+func splitSlotTime(s string) (string, string, bool) {
+	parts := strings.FieldsFunc(strings.TrimSpace(s), func(r rune) bool {
+		return r == '~' || r == '-' || r == '—'
+	})
+	if len(parts) != 2 {
+		return "", "", false
+	}
+	return strings.TrimSpace(parts[0]), strings.TrimSpace(parts[1]), true
+}
+
+// sectionIndex 把小节号换算成大节序号（1 起）：ceil(n/2)。
+func sectionIndex(sub int) int { return (sub + 1) / 2 }
 
 // slotIndex 把起始小节号换算成大节序号（1 起）。
 func slotIndex(periods string) int {
@@ -283,12 +333,10 @@ func slotIndex(periods string) int {
 	if first < 1 {
 		return 0
 	}
-	return (first + 1) / 2
+	return sectionIndex(first)
 }
 
-// SlotIndex 从节次文本取出起始小节号（1 起）；`1-2` / `1,2` / `5-8` 都取首个数。
-//
-// 对外暴露的是小节号（教务 sktime 的口径）；大节序号用 SlotIndexToSection。
+// SlotIndexToSection 把节次文本的起始小节号换算成大节序号（1 起）。
 func SlotIndexToSection(periods string) int { return slotIndex(periods) }
 
 // ExpandPeriods 把节次文本展开成具体节号，用于按大节逐节判断跨节。

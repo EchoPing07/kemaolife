@@ -75,6 +75,22 @@ func TestQueryWeek1MondayIsWeekOne(t *testing.T) {
 	}
 }
 
+// 下午连上四小节（5-8）的课，DTO 的 time 应覆盖第 3、4 大节。
+// CLI 表格与 Android 详情页都直接消费 Entry.Time（不自己算时间）。
+func TestQueryMultiSectionTime(t *testing.T) {
+	snap := testSnapshot()
+	snap.Lessons = []Lesson{
+		{Name: "实训课", Periods: "5-8", Weekday: 2, Weeks: seq(1, 16), WeeksText: "1-16周"},
+	}
+	day := Query(snap, snap.Week1Monday.AddDays(1)) // 周二
+	if len(day.Entries) != 1 {
+		t.Fatalf("entries = %+v", day.Entries)
+	}
+	if got, want := day.Entries[0].Time, "14:00~16:50"; got != want {
+		t.Errorf("time = %q, want %q", got, want)
+	}
+}
+
 // 早于第 1 周周一：不在学期内，不能算出 0 或负周次。
 func TestQueryBeforeSemester(t *testing.T) {
 	snap := testSnapshot()

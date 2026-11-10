@@ -1,6 +1,7 @@
 package timetable
 
 import (
+	"fmt"
 	"testing"
 )
 
@@ -116,6 +117,59 @@ func TestSlotTimeOf(t *testing.T) {
 	}
 	if got := slotTimeOf(""); got != "" {
 		t.Errorf("空 = %q, want empty", got)
+	}
+}
+
+// 连续上 4 小节 = 跨两个大节；time 必须覆盖整段，而不是只给起始大节。
+func TestSlotTimeOfSpansMultipleSections(t *testing.T) {
+	cases := map[string]string{
+		"5-8":  "14:00~16:50", // 第 3 + 第 4 大节（下午一下午）
+		"1-4":  "08:30~11:50", // 第 1 + 第 2 大节
+		"3-6":  "10:20~15:20",
+		"7-10": "15:30~19:50",
+		"9-12": "18:30~21:20", // 第 5 + 第 6 大节
+		"1-8":  "08:30~16:50",
+		"5-6":  "14:00~15:20", // 单个大节保持原样
+		"1-12": "08:30~21:20",
+		"1,3":  "08:30~11:50", // 不连续节次：取首尾覆盖区间
+		"5,11": "14:00~21:20",
+	}
+	for in, want := range cases {
+		if got := slotTimeOf(in); got != want {
+			t.Errorf("slotTimeOf(%q) = %q, want %q", in, got, want)
+		}
+	}
+}
+
+// 全量核对：1..12 小节的全部 78 个连续区间都必须覆盖首尾大节，
+// 防止以后只修某一段（如 5-8）而把别的连堂组合退回「只给起始大节」。
+// 期望值独立由协议实测的 6 大节时间推导，不调用被测实现的辅助函数。
+func TestSlotTimeOfAllContinuousRanges(t *testing.T) {
+	base := []struct{ start, end string }{
+		{"08:30", "10:00"}, {"10:20", "11:50"}, {"14:00", "15:20"},
+		{"15:30", "16:50"}, {"18:30", "19:50"}, {"20:00", "21:20"},
+	}
+	for a := 1; a <= 12; a++ {
+		for b := a; b <= 12; b++ {
+			first, last := (a+1)/2-1, (b+1)/2-1
+			want := base[first].start + "~" + base[last].end
+			got := slotTimeOf(fmt.Sprintf("%d-%d", a, b))
+			if got != want {
+				t.Errorf("slotTimeOf(%d-%d) = %q, want %q", a, b, got, want)
+			}
+		}
+	}
+}
+
+// 作息表条目格式异常时不能产出半段时间。
+func TestSplitSlotTimeRejectsMalformed(t *testing.T) {
+	for _, raw := range []string{"", "bad", "08:30", "08:30~10:00~11:00"} {
+		if _, _, ok := splitSlotTime(raw); ok {
+			t.Errorf("splitSlotTime(%q) 应当失败", raw)
+		}
+	}
+	if start, end, ok := splitSlotTime("14:00-15:20"); !ok || start != "14:00" || end != "15:20" {
+		t.Errorf("连字符分隔解析失败: %q %q %v", start, end, ok)
 	}
 }
 
