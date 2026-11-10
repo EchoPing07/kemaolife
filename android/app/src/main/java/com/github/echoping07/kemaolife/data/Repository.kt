@@ -21,11 +21,11 @@ class Repository(private val bridge: Bridge) {
 
     // ---- 课表 -------------------------------------------------------------
 
-    /** `timetable.sync`：联网刷新一次（打开 App 的后台动作、下拉刷新用）。 */
+    /** `timetable.sync`：联网刷新一次（打开 App 的后台动作、手动刷新用）。 */
     fun sync(): Result<SyncResult> =
         bridge.call("timetable.sync").toResult { SyncResult.from(it) }
 
-    /** `timetable.week`：纯读缓存，`week <= 0` 表示当周。 */
+    /** `timetable.week`：纯读缓存，`week == 0` 表示当周，负数也是显式周次。 */
     fun week(week: Int = 0): Result<WeekView> {
         val env = bridge.call("timetable.week", "week" to week)
         val data = env.data

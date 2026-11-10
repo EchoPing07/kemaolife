@@ -102,7 +102,7 @@ private fun AppRoot(viewModel: AppViewModel) {
         }
     }
 
-    // 设置页 / 更多页的「测试」都进同一个弹窗，避免两处各写一套展示。
+    // 设置页三个功能域详情页的「测试」都进同一个弹窗，避免各写一套展示。
     state.probe?.let { probe ->
         ProbeDialog(
             state = probe,

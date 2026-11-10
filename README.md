@@ -28,7 +28,7 @@
 
 每天上课前翻教务网页、想知道宿舍还剩多少电、校园网掉线后又得开浏览器重新认证——三件事各有各的入口，在手机上都不好用。kemaolife 把它们收进三个原生端，底层共用一份 Go `core`：数据怎么取、怎么解析、周次怎么算、告警怎么判，只写一次。
 
-- **课表查得慢？** CLI 每次查询先联网刷新一次，刷新成功直接给最新数据；断网时回落旧快照并标 `stale:true` + `syncedAt`，飞行模式也能查整学期。Android 缓存优先：打开先显示缓存课表与缓存电费（0 请求）再强制联网覆盖，查询 / 切周 / 选日期纯读缓存，失败沿用旧缓存且课表标离线 `stale`。
+- **课表查得慢？** CLI 每次查询先联网刷新一次，刷新成功直接给最新数据；断网时回落旧快照并标 `stale:true` + `syncedAt`，飞行模式也能查整学期。Android 缓存优先：首帧显示上次缓存的当周课表与电费（0 请求），门面就绪后读 Go 快照校正并尝试联网覆盖；切周 / 周次弹窗只读缓存，失败沿用旧缓存且只置 UI 离线标记。
 - **电费只看余额不够** 一条命令 / 一个 `op` 同时返回余额与每日用量，用来估算还能撑几天。电表数据约 1 天延迟，CLI 输出、告警通知与 Android 电费页都标注「数据截至」（Windows 托盘只显示当前值）。
 - **校园网** Portal 探测 302 判出「已在线 / 未认证 / 不在校园网」，Windows 默认手动、自动可选，Android 全手动，CLI 不碰校园网也不存凭据。
 - **三端不漂移** `internal/core` 只做领域逻辑，平台能力经端口注入；三端共享 DTO、错误码与告警判定，UI 只消费数据。单仓库、单 `go.mod`、多 `cmd`。
@@ -41,7 +41,7 @@
 |---|---|---|---|
 | **CLI** | 单二进制 `kemaolife` + 子命令 + Agent Skill，支持 linux / darwin（**macOS 预编译包（darwin amd64 / arm64，未签名未公证、未经过实机测试）**）；windows 后续计划 | agent | 配置、课表四维度查询（默认当日）、电费余额与每日用量一次查 |
 | **Windows** | `kemaolife-agent.exe` 原生托盘常驻（登录时自启一次，不保活） | 人 | 托盘看状态、电费轮询（默认 4 小时）、校园网判态轮询（默认 120 秒）、阈值提醒、托盘 `NIF_INFO` 通知、校园网默认手动 / 自动可选 |
-| **Android** | 原生 App（Kotlin / Compose），底栏三 tab | 人 | 课表、电费与校园网手动动作、设置；打开先读缓存 + 强制联网覆盖（其余自动按最小间隔节流） |
+| **Android** | 原生 App（Kotlin / Compose），底栏三 tab | 人 | 单页周视图 + 横向翻页、WakeUp CSV 导出、电费与校园网手动动作、多级设置 / 外观 / 关于；打开先读缓存，再按就绪状态尝试联网覆盖（其余自动按最小间隔节流） |
 
 桌面端仅 Windows、移动端仅 Android；CLI 与桌面端不共享配置与凭据存储。
 
@@ -52,7 +52,7 @@
 
 ```
 教务系统 ──CAS 登录──► 快照 ──本地计算──► 课表（CLI 每次查询先刷新，失败沿用旧快照）
-                              └─ Android：查询纯读缓存（0 请求）；打开先读缓存再强制同步覆盖
+                              └─ Android：查询纯读缓存（0 请求）；打开先读缓存，就绪后尝试同步覆盖
 水电后端 ──余额 + 每日用量──► 可用天数估算 ──►（Windows）阈值提醒（托盘 NIF_INFO 通知）
 Portal   ──探测 302──► 判态 ──► 登录 / 下线 / 重登（Windows M2 已实现）
                               ├─ Windows 自动模式：作为电费轮询前置
@@ -69,7 +69,7 @@ Portal   ──探测 302──► 判态 ──► 登录 / 下线 / 重登（W
 | M0 · 契约 + core | DTO、错误码、`core` / `ports`、单测、`kemaolife` 跑通 | 已实现 |
 | M1 · CLI + skill（linux / darwin） | 单二进制 `kemaolife` + 子命令、`config`、快照缓存、SKILL.md、刷新降级、电费合并查询 | 已实现（aarch64 Linux 真机验证；**本版起提供 macOS 预编译包**（darwin amd64 / arm64），darwin amd64/arm64 仅交叉编译 + 静态审查 + 自动化单测通过，**macOS CLI 未经过实机测试、未在真实 Mac 上运行**） |
 | M2 · Windows 托盘 | 托盘状态与按模式切换的按钮组、4 小时电费轮询（600s 硬下限）、120 秒判态轮询（30s 下限）、阈值去重与静默时段、失败退避、托盘通知、DPAPI 凭据、原生设置窗口、开机自启 | 已实现（本机 Win11 验证） |
-| M3 · Android App | `gomobile` 门面、三 tab、缓存优先 / 打开强制刷新、电费页、校园网手动动作、Keystore 设置页 | 已实现（Android 15 真机验证） |
+| M3 · Android App | `gomobile` 门面、三 tab、单页周视图与横向翻页、WakeUp CSV 导出、缓存优先 / 打开联网覆盖、电费页、校园网手动动作、Keystore 多级设置 / 外观 / 关于 | 已实现（Android 15 真机已验证基础三功能链路；本轮 UI / 导出增量由 CI 与本机静态自检覆盖，真机验证情况见 PR） |
 | M4 · 校园网自动登录复核 | Windows 自动模式已随 M2 实现，Android 手动适配器与平台网络配置已随 M3 落地；M4 仅按 D8 / D11 结论复核 Windows 链路 | 待 D8 / D11 定稿 |
 
 完整里程碑与验收见 [000 文档 §7](./docs/000-需求与产品定位.md#7-里程碑)。
@@ -120,7 +120,7 @@ xattr -d com.apple.quarantine kemaolife        # 解压后、首次运行前；�
 install -m 0755 kemaolife ~/.local/bin/kemaolife
 
 kemaolife config init                          # 交互录入学号与教务密码（0600）
-kemaolife --json timetable                     # 课表（每次查询先刷新）
+kemaolife --json timetable                     # 课表（CLI 每次查询先刷新）
 kemaolife --json electricity                   # 余额 + 每日用量
 ```
 
