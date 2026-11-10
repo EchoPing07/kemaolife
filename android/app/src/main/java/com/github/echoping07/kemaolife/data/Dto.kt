@@ -59,6 +59,23 @@ data class WeekSchedule(val week: Int, val days: List<DaySchedule>) {
     }
 }
 
+/** `timetable.export` 的 data：整学期 CSV + 文件名 + 数据时间（docs/002 §2.1）。 */
+data class TimetableExport(
+    val csv: String,
+    val filename: String,
+    val syncedAt: String,
+    val lessonCount: Int,
+) {
+    companion object {
+        fun from(obj: JSONObject): TimetableExport = TimetableExport(
+            csv = obj.optString("csv"),
+            filename = obj.optString("filename"),
+            syncedAt = obj.optString("syncedAt"),
+            lessonCount = obj.optInt("lessonCount"),
+        )
+    }
+}
+
 /** `timetable.sync` 的 data：同步结果摘要（不含 Cookie）。 */
 data class SyncResult(
     val syncedAt: String,
@@ -142,12 +159,22 @@ data class CampusStatus(
     val state: CampusState,
     val errorMsg: String,
     val checkedAt: String,
+    val brasName: String = "",
+    val brasAddress: String = "",
+    val vlan: String = "",
+    val deviceIp: String = "",
+    val mac: String = "",
 ) {
     companion object {
         fun from(obj: JSONObject): CampusStatus = CampusStatus(
             state = CampusState.from(obj.optString("state")),
             errorMsg = obj.optString("errorMsg"),
             checkedAt = obj.optString("checkedAt"),
+            brasName = obj.optString("brasName"),
+            brasAddress = obj.optString("brasAddress"),
+            vlan = obj.optString("vlan"),
+            deviceIp = obj.optString("deviceIp"),
+            mac = obj.optString("mac"),
         )
     }
 }
@@ -160,4 +187,51 @@ private inline fun <T> JSONArray?.mapObjects(block: (JSONObject) -> T): List<T> 
         optJSONObject(i)?.let { out.add(block(it)) }
     }
     return out
+}
+
+/**
+ * 设置页「测试」按钮的统一回报（`*.probe` 三个 op 同构）。
+ *
+ * `ok` 是测试动作本身的成败，外面那层信封恒为成功 —— 失败时也要能看到
+ * 耗时与脱敏后的原因，否则用户只知道「点了一下没反应」。
+ */
+data class ProbeResult(
+    val ok: Boolean,
+    val elapsedMs: Long,
+    val code: Int,
+    val message: String,
+    val detail: Map<String, String>,
+    /** `electricity.probe` 同一请求带回的完整报告，供 UI 直接刷新卡片（不再二次联网）。 */
+    val report: ElectricityReport? = null,
+    /** `campusnet.probe` 同一请求带回的完整判态，供 UI 直接刷新卡片。 */
+    val campusStatus: CampusStatus? = null,
+) {
+    companion object {
+        /** 可展示字段白名单：上游新增字段一律丢弃，不把未知内容原样摊给用户（P2）。 */
+        private val DETAIL_KEYS = listOf(
+            "state", "checkedAt",
+            "balance", "unit", "collectedAt", "estimatedDays", "monthUse", "dataUntil", "dayCount",
+            "syncedAt", "week1Monday", "lastWeek", "lessonCount",
+        )
+
+        fun from(obj: JSONObject): ProbeResult {
+            val detailObj = obj.optJSONObject("detail")
+            val detail = LinkedHashMap<String, String>()
+            DETAIL_KEYS.forEach { key ->
+                if (detailObj?.has(key) != true) return@forEach
+                // null / 空值保留为空串，交给 UI 显示占位符「—」；
+                // 既不跳过整个字段，也不把字面量 "null" 印到弹窗上。
+                detail[key] = if (detailObj.isNull(key)) "" else detailObj.opt(key)?.toString().orEmpty()
+            }
+            return ProbeResult(
+                ok = obj.optBoolean("ok", false),
+                elapsedMs = obj.optLong("elapsedMs", 0L),
+                code = obj.optInt("code", 0),
+                message = obj.optString("message"),
+                detail = detail,
+                report = obj.optJSONObject("report")?.let { ElectricityReport.from(it) },
+                campusStatus = obj.optJSONObject("campusStatus")?.let { CampusStatus.from(it) },
+            )
+        }
+    }
 }

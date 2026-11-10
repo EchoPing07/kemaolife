@@ -13,6 +13,12 @@ import (
 // SnapshotVersion 是快照格式版本；不匹配即丢弃重拉，不做兼容迁移（AGENTS §4.3）。
 const SnapshotVersion = 1
 
+// ErrSnapshotAbsent 是「从来没同步过」的哨兵，供 app 层把首次使用映射为 3001。
+//
+// 只有「文件不存在 / 无内容」才算真的没同步过；JSON 损坏、版本不匹配、内容
+// 不完整、IO 错误都不能压成配置问题，否则用户会被引导去改凭据而不是重新同步。
+var ErrSnapshotAbsent = errors.New("snapshot absent")
+
 // SnapshotStoreKey 是快照在 KVStore 中的键。
 const SnapshotStoreKey = "timetable/snapshot"
 
@@ -46,8 +52,13 @@ type Lesson struct {
 func LoadSnapshot(store core.KVStore) (*Snapshot, error) {
 	raw, err := store.Get(SnapshotStoreKey)
 	if err != nil || len(raw) == 0 {
+		// 只有「存储为空 / 键不存在」才可判定为首次使用；其它读取错误仍按 3003 交给上层。
+		if err == nil || errors.Is(err, core.ErrKeyNotFound) {
+			return nil, model.WrapError(model.CodeSnapshotMissing,
+				"本地无课表快照，请先执行 kemaolife timetable sync", ErrSnapshotAbsent)
+		}
 		return nil, model.WrapError(model.CodeSnapshotMissing,
-			"本地无课表快照，请先执行 kemaolife timetable sync", err)
+			"课表快照读取失败，请重新同步", err)
 	}
 
 	var snap Snapshot
@@ -79,5 +90,3 @@ func SaveSnapshot(store core.KVStore, snap *Snapshot) error {
 	}
 	return nil
 }
-
-var errEmptySnapshot = errors.New("empty snapshot")

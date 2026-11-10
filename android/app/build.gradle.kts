@@ -21,6 +21,8 @@ android {
 
     buildFeatures {
         compose = true
+        // AGP 8 起 BuildConfig 生成默认关闭；关于页要读 VERSION_NAME / VERSION_CODE（AboutScreen.kt）。
+        buildConfig = true
     }
 
     signingConfigs {
@@ -97,8 +99,6 @@ dependencies {
     implementation("androidx.lifecycle:lifecycle-viewmodel-compose:2.8.7")
     implementation("androidx.compose.material3:material3:1.3.1")
     implementation("androidx.compose.ui:ui:1.7.6")
-    implementation("androidx.compose.ui:ui-tooling-preview:1.7.6")
-    debugImplementation("androidx.compose.ui:ui-tooling:1.7.6")
 
     // 单元测试只碰「信封 → DTO 投影」这一段（不涉 Android framework）。
     // org.json 在 JVM 上需要单独的实现包（Android 里是系统自带）。

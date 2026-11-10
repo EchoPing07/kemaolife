@@ -112,8 +112,13 @@ func (p *PortalNetwork) Status(ctx context.Context) (model.CampusStatus, error) 
 		return model.CampusStatus{State: model.CampusOffline}, nil
 	}
 	return model.CampusStatus{
-		State:    probe.State,
-		ErrorMsg: probe.ErrorMsg,
+		State:       probe.State,
+		ErrorMsg:    probe.ErrorMsg,
+		BrasName:    probe.Params.WlanAcName,
+		BrasAddress: probe.Params.WlanAcIP,
+		Vlan:        probe.Params.Vlan,
+		DeviceIP:    probe.Params.WlanUserIP,
+		Mac:         probe.Params.Mac,
 	}, nil
 }
 

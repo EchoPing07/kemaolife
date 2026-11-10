@@ -44,7 +44,6 @@ const (
 	designFieldW  = 236
 	designNoteW   = 150
 	designRowH    = 22
-	designGroupH  = 26 // 分组框标题占用的高度
 )
 
 var (

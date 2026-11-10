@@ -62,7 +62,6 @@ const (
 	nifTip     = 0x00000004
 	nifInfo    = 0x00000010
 
-	niifNone = 0x0
 	niifInfo = 0x1
 )
 

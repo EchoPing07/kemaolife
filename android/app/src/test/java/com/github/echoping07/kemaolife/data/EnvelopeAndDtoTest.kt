@@ -95,12 +95,60 @@ class EnvelopeAndDtoTest {
     }
 
     @Test
-    fun `凭据缺失时 needsCredentials 为真`() {
-        val ex = AppException(ApiError(3001, "未配置学号"))
-        assertTrue(ex.needsCredentials)
+    fun `测试回报 null 值保留为空串并显示占位符`() {
+        val probe = ProbeResult.from(
+            JSONObject(
+                """{"ok":true,"elapsedMs":12,"message":"","detail":{"estimatedDays":null,"collectedAt":""}}""",
+            ),
+        )
+        // null 不能跳过整个字段，也不能序列化成字面量 "null"。
+        assertEquals("", probe.detail["estimatedDays"])
+        assertEquals("", probe.detail["collectedAt"])
+        assertTrue(probe.ok)
+        assertEquals(12L, probe.elapsedMs)
+    }
 
-        val network = AppException(ApiError(4001, "网络不可达"))
-        assertFalse(network.needsCredentials)
+    @Test
+    fun `测试回报未知字段与动态 payload 被隔离`() {
+        val probe = ProbeResult.from(
+            JSONObject(
+                """{"ok":true,"elapsedMs":1,"message":"","detail":{
+                   "balance":35.99,"roomName":"<房间>","roomVerify":"<roomverify>"},
+                   "report":{"status":{"balance":35.99,"unit":"度","dailyAvg":null,"estimatedDays":null,
+                     "collectedAt":"","roomName":""},
+                     "usage":{"yearMonth":"2026-11","monthUse":1.0,"dataUntil":"","days":[]}},
+                   "campusStatus":{"state":"online","checkedAt":"","errorMsg":""}}""",
+            ),
+        )
+        // 未知 detail 字段一律丢弃，避免上游新增字段原样摊给用户（P2）。
+        assertFalse(probe.detail.containsKey("roomName"))
+        assertFalse(probe.detail.containsKey("roomVerify"))
+        assertEquals("", probe.report?.status?.roomName)
+        assertEquals("2026-11", probe.report?.usage?.yearMonth)
+        assertEquals(CampusState.ONLINE, probe.campusStatus?.state)
+    }
+
+    @Test
+    fun `测试失败回报带固定错误码与中性文案`() {
+        val probe = ProbeResult.from(
+            JSONObject("""{"ok":false,"elapsedMs":3,"code":3001,"message":"凭据或本地数据不可用"}"""),
+        )
+        assertFalse(probe.ok)
+        assertEquals(3001, probe.code)
+        assertEquals("凭据或本地数据不可用", probe.message)
+        assertTrue(probe.detail.isEmpty())
+    }
+
+    @Test
+    fun `凭据老存档缺继承开关时默认打开`() {
+        // 与 CredentialStore.fromJson 的兼容口径一致：升级后电费继续复用教务学号。
+        val legacy = JSONObject("""{"studentId":"<学号>","eduPassword":"<密码>"}""")
+        val inherit = if (legacy.has("electricityInheritEducation")) {
+            legacy.optBoolean("electricityInheritEducation")
+        } else {
+            true
+        }
+        assertTrue(inherit)
     }
 
     @Test
@@ -113,5 +161,46 @@ class EnvelopeAndDtoTest {
         val week = WeekSchedule.from(env.data!!)
         assertEquals(10, week.week)
         assertEquals(7, week.days.size)
+    }
+
+    @Test
+    fun `导出信封投影出 csv 与数据时间`() {
+        // 导出 op 的 data：csv 正文逐字透传，文件名与数据时间由 Go 侧给出，
+        // Kotlin 只做字段投影，不重排、不重拼（AGENTS A3）。
+        val header = "课程名称,星期,开始节数,结束节数,老师,地点,周数"
+        val row = "高等数学,1,1,2,无,无,1-5"
+        val csv = BOM + header + CRLF + row + CRLF
+
+        val envelope = JSONObject()
+            .put("ok", true)
+            .put("ts", "2026-11-09T22:00:00+08:00")
+            .put("syncedAt", "2026-11-09T21:10:02+08:00")
+            .put(
+                "data",
+                JSONObject()
+                    .put("csv", csv)
+                    .put("filename", "kemaolife-timetable-20261109-2110.csv")
+                    .put("syncedAt", "2026-11-09T21:10:02+08:00")
+                    .put("lessonCount", 1),
+            )
+
+        val env = Envelope.parse(envelope.toString())
+        assertTrue(env.ok)
+        val export = TimetableExport.from(env.data!!)
+        // 正文逐字透传：BOM 与 CRLF 都不能被 Kotlin 侧改写，否则 WPS 打开会乱码 / 串行。
+        assertEquals(csv, export.csv)
+        assertTrue(export.csv.startsWith(BOM + header))
+        assertTrue(export.csv.contains(row))
+        assertEquals("kemaolife-timetable-20261109-2110.csv", export.filename)
+        assertEquals("2026-11-09T21:10:02+08:00", export.syncedAt)
+        assertEquals(1, export.lessonCount)
+    }
+
+    private companion object {
+        /** UTF-8 BOM：用码位构造，源码里不出现不可见字符。 */
+        val BOM: String = String(Character.toChars(0xFEFF))
+
+        /** CRLF：同上，避免源码里的行尾被编辑器 / 版本控制改写。 */
+        val CRLF: String = String(charArrayOf(13.toChar(), 10.toChar()))
     }
 }

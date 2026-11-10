@@ -10,6 +10,8 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+
+	"github.com/EchoPing07/kemaolife/internal/core"
 )
 
 // FileStore 是基于文件的 KVStore：每个键一个文件，放在 root 目录下。
@@ -39,6 +41,9 @@ func (s *FileStore) Get(key string) ([]byte, error) {
 	}
 	data, err := os.ReadFile(path)
 	if err != nil {
+		if os.IsNotExist(err) {
+			return nil, fmt.Errorf("%w: %s", core.ErrKeyNotFound, key)
+		}
 		return nil, err
 	}
 	return data, nil

@@ -64,7 +64,9 @@ class CredentialStore(private val context: Context) {
         val cipher = Cipher.getInstance(TRANSFORMATION)
         cipher.init(Cipher.ENCRYPT_MODE, secretKey())
         val data = cipher.doFinal(credentials.toJson().toString().toByteArray(Charsets.UTF_8))
-        prefs.edit().putString(KEY_CIPHERTEXT, Blob(cipher.iv, data).encode()).apply()
+        // 凭据密文必须同步落盘：apply() 异步写，进程被杀会让用户以为已保存实际回退。
+        // save() 由 ViewModel 在 IO 调度器上调用，不会阻塞主线程。
+        prefs.edit().putString(KEY_CIPHERTEXT, Blob(cipher.iv, data).encode()).commit()
     }
 
     private fun secretKey(): SecretKey {
@@ -89,14 +91,24 @@ class CredentialStore(private val context: Context) {
     private fun Credentials.toJson() = JSONObject()
         .put("studentId", studentId)
         .put("eduPassword", eduPassword)
+        .put("electricityInheritEducation", electricityInheritEducation)
+        .put("electricityStudentId", electricityStudentId)
         .put("customerCode", customerCode)
         .put("campusUser", campusUser)
         .put("campusPassword", campusPassword)
         .put("campusFingerprint", campusFingerprint)
 
+    // 老存档没有电费字段：缺 `electricityInheritEducation` 时按「继承」处理，
+    // 与设置页默认值一致，保证老用户升级后行为不变。
     private fun fromJson(obj: JSONObject) = Credentials(
         studentId = obj.optString("studentId"),
         eduPassword = obj.optString("eduPassword"),
+        electricityInheritEducation = if (obj.has("electricityInheritEducation")) {
+            obj.optBoolean("electricityInheritEducation")
+        } else {
+            true
+        },
+        electricityStudentId = obj.optString("electricityStudentId"),
         customerCode = obj.optString("customerCode").ifBlank { Credentials.DEFAULT_CUSTOMER_CODE },
         campusUser = obj.optString("campusUser"),
         campusPassword = obj.optString("campusPassword"),

@@ -4,15 +4,11 @@
 package porttest
 
 import (
-	"bytes"
-	"errors"
 	"fmt"
-	"io"
-	"net/http"
-	"sort"
-	"strings"
 	"sync"
 	"time"
+
+	"github.com/EchoPing07/kemaolife/internal/core"
 )
 
 // MemStore 是 KVStore 的 map 实现。
@@ -25,14 +21,12 @@ func NewMemStore() *MemStore {
 	return &MemStore{data: make(map[string][]byte)}
 }
 
-var ErrKeyNotFound = errors.New("key not found")
-
 func (s *MemStore) Get(key string) ([]byte, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	v, ok := s.data[key]
 	if !ok {
-		return nil, fmt.Errorf("%w: %s", ErrKeyNotFound, key)
+		return nil, fmt.Errorf("%w: %s", core.ErrKeyNotFound, key)
 	}
 	out := make([]byte, len(v))
 	copy(out, v)
@@ -58,18 +52,6 @@ func (s *MemStore) Delete(key string) error {
 	return nil
 }
 
-// Keys 返回已排序的键，便于断言。
-func (s *MemStore) Keys() []string {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	keys := make([]string, 0, len(s.data))
-	for k := range s.data {
-		keys = append(keys, k)
-	}
-	sort.Strings(keys)
-	return keys
-}
-
 // FakeClock 是可手动拨动的时钟。
 type FakeClock struct {
 	mu sync.Mutex
@@ -82,18 +64,6 @@ func (c *FakeClock) Now() time.Time {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	return c.t
-}
-
-func (c *FakeClock) Set(t time.Time) {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	c.t = t
-}
-
-func (c *FakeClock) Advance(d time.Duration) {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	c.t = c.t.Add(d)
 }
 
 // Recorder 记录通知，用于断言「只提醒一次」之类的行为。
@@ -128,46 +98,3 @@ func (r *Recorder) Last() (Notification, bool) {
 	}
 	return r.Items[len(r.Items)-1], true
 }
-
-// HTTPDoerFunc 是 HTTPDoer / NoRedirectDoer 的内存 fake。
-//
-// 单测只需给一个函数，不必起 httptest；请求体与响应体都被复制，
-// 避免调用方复用 Reader / Body 时产生隐式耦合。
-type HTTPDoerFunc func(*http.Request) (*http.Response, error)
-
-func (f HTTPDoerFunc) Do(req *http.Request) (*http.Response, error) {
-	return f(cloneRequest(req))
-}
-
-func (f HTTPDoerFunc) DoNoRedirect(req *http.Request) (*http.Response, error) {
-	return f(cloneRequest(req))
-}
-
-func cloneRequest(req *http.Request) *http.Request {
-	if req == nil {
-		return nil
-	}
-	out := req.Clone(req.Context())
-	if req.Body != nil {
-		b, _ := io.ReadAll(req.Body)
-		_ = req.Body.Close()
-		out.Body = io.NopCloser(bytes.NewReader(b))
-		req.Body = io.NopCloser(bytes.NewReader(b))
-	}
-	return out
-}
-
-// HTTPResponse 构造一个带字节响应体的 *http.Response。
-func HTTPResponse(status int, body string) *http.Response {
-	return &http.Response{
-		StatusCode: status,
-		Status:     fmt.Sprintf("%d %s", status, http.StatusText(status)),
-		Header:     make(http.Header),
-		Body:       io.NopCloser(strings.NewReader(body)),
-	}
-}
-
-var _ interface {
-	Do(*http.Request) (*http.Response, error)
-	DoNoRedirect(*http.Request) (*http.Response, error)
-} = HTTPDoerFunc(nil)

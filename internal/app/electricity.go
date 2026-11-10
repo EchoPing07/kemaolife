@@ -29,7 +29,9 @@ func CheckElectricity(ctx context.Context, d Deps, cfg model.Config, yearMonth s
 		return model.ElectricityReport{}, err
 	}
 
-	if cfg.StudentID == "" {
+	// 电费学号可以独立于教务学号（docs/002 §5.3 tab3「继承教务信息」开关）。
+	studentID := cfg.ElectricityStudent()
+	if studentID == "" {
 		return model.ElectricityReport{}, model.NewError(model.CodeCredentialMissing,
 			"未配置学号，请先填写学号")
 	}
@@ -44,12 +46,12 @@ func CheckElectricity(ctx context.Context, d Deps, cfg model.Config, yearMonth s
 
 	client := electricity.NewClient(d.HTTP, d.ElectricityEndpoint)
 
-	status, roomVerify, err := client.GetBindRoom(ctx, cfg.StudentID, schoolCode)
+	status, roomVerify, err := client.GetBindRoom(ctx, studentID, schoolCode)
 	if err != nil {
 		return model.ElectricityReport{}, err
 	}
 
-	usage, err := client.GetUseDetail(ctx, cfg.StudentID, schoolCode, roomVerify, normalized)
+	usage, err := client.GetUseDetail(ctx, studentID, schoolCode, roomVerify, normalized)
 	if err != nil {
 		// 主请求任一失败整体报错，不返回半份数据。
 		return model.ElectricityReport{}, err
@@ -62,7 +64,7 @@ func CheckElectricity(ctx context.Context, d Deps, cfg model.Config, yearMonth s
 	//
 	// 为什么值得多发这一条请求：`opdtdate` 只到日，补成 00:00:00 会让用户看到
 	// 「数据截至 00:00」这种明显不是采集时刻的值；而 collecdate 是 22:24:52 这类真时刻。
-	if collectedAt, err := client.GetIndexPage(ctx, cfg.StudentID, schoolCode); err == nil && collectedAt != "" {
+	if collectedAt, err := client.GetIndexPage(ctx, studentID, schoolCode); err == nil && collectedAt != "" {
 		if normalizedAt, ok := normalizeTimestamp(collectedAt); ok {
 			status.CollectedAt = normalizedAt
 		}

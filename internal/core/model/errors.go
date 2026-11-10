@@ -79,14 +79,44 @@ func ExitCode(err error) int {
 	}
 }
 
-// MessageOf 取领域错误的展示文案；未知错误用 errors 的原始消息。
+// MessageOf 取领域错误的展示文案；非领域错误（含裸 err、context.Canceled、
+// 反射 / JSON 内部错误）一律回落按码映射的固定中性文案，绝不把 err.Error()
+// 原样透出去 —— 上游原始文案可能夹带学号 / 房间号 / 内网地址（P2 / docs/002 §2.1 规则 8）。
 func MessageOf(err error) string {
-	if err == nil {
+	code := CodeOf(err)
+	if code == CodeOK {
 		return ""
 	}
 	var e *Error
-	if errors.As(err, &e) {
+	if errors.As(err, &e) && e.Message != "" {
 		return e.Message
 	}
-	return err.Error()
+	return CodeMessage(code)
+}
+
+// CodeMessage 是错误码 → 固定中性文案的兜底表；不带任何上游原文。
+//
+// 门面的 `*.probe` 也直接用它：测试按钮失败时不展示领域错误自带的动态文案
+// （例如非法月份里夹着用户输入），只展示按码映射的固定中性原因（P2 / docs/002 §2.1 规则 8）。
+func CodeMessage(code ErrorCode) string {
+	switch code {
+	case CodeBusinessFailed:
+		return "业务处理失败，请稍后重试"
+	case CodeNotInSemester:
+		return "不在本学期范围"
+	case CodeInvalidArgument:
+		return "参数错误，请检查输入"
+	case CodeCredentialMissing, CodeSessionExpired, CodeSnapshotMissing:
+		return "凭据或本地数据不可用，请重新配置或同步"
+	case CodeNetworkDown:
+		return "网络不可达，请检查连接后重试"
+	case CodeMalformedResponse:
+		return "响应格式异常，请稍后重试"
+	case CodeUpstreamRejected:
+		return "请求被拒绝，请稍后重试"
+	case CodeRoomNotBound:
+		return "未绑定房间，请先在官方页面完成绑定"
+	default:
+		return "操作失败，请稍后重试"
+	}
 }

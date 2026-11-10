@@ -2,6 +2,7 @@ package app
 
 import (
 	"context"
+	"errors"
 	"time"
 
 	"github.com/EchoPing07/kemaolife/internal/core/model"
@@ -18,19 +19,53 @@ type ScheduleResult struct {
 	SyncedAt time.Time // 数据实际来自哪次同步
 }
 
-// GetSchedule 查询某一天课表：**先刷新，再计算**（docs/002 §1.3、D15）。
+// CacheOption 控制查询是否先联网刷新快照。
 //
-// 语义：
+// 为什么需要它：CLI 的查询动作是「先刷新再计算」（docs/002 §1.3，D15 已定稿），
+// 而 Android 每次打开、切周、选日期只要**直接读缓存**——联网刷新由 UI 另起的
+// 独立 `timetable.sync` 负责，成功后再重新读缓存（docs/002 §5.3）。
+// 两者是同一份快照、两条链路，不能混成一个「查询即刷新」。
+type CacheOption int
+
+const (
+	// RefreshFirst 是 CLI 口径：先刷新一次，失败回落旧快照并标 Stale。
+	RefreshFirst CacheOption = iota
+	// CacheOnly 是 Android 口径：只读本地快照，0 请求，不要求 HTTP 端口。
+	// 只有「从没同步过」才报 3001，快照损坏 / 版本不匹配仍保留 3003。
+	CacheOnly
+)
+
+// validCacheOption 拒绝非法枚举值：裸 int 传入时 if mode == RefreshFirst 与
+// if mode != CacheOnly 会给出不一致行为（docs/002 §2.1 规则 7）。
+func validCacheOption(mode CacheOption) error {
+	if mode != RefreshFirst && mode != CacheOnly {
+		return model.NewError(model.CodeInvalidArgument, "非法的课表查询模式")
+	}
+	return nil
+}
+
+// GetSchedule 查询某一天课表。
+//
+// RefreshFirst 语义（docs/002 §1.3、D15）：
 //   - 刷新成功 → 用最新快照计算，Stale=false，SyncedAt=本次同步时间；
 //   - 刷新失败但有旧快照 → 用旧快照计算，Stale=true，SyncedAt=旧快照时间，
 //     不返回错误（查询照常可用，让调用方通过 Stale 告知用户数据时间）；
 //   - 刷新失败且无旧快照 → 返回错误，由调用方映射退出码。
-func GetSchedule(ctx context.Context, d Deps, cfg model.Config, date model.Date) (ScheduleResult, error) {
-	if err := ensureDeps(d, true, true); err != nil {
+//
+// CacheOnly 语义（docs/002 §5.3）：不刷新，Stale 恒 false —
+// 「旧快照」这个概念属于刷新失败，纯读缓存没有「旧」可言。
+func GetSchedule(ctx context.Context, d Deps, cfg model.Config, date model.Date, mode CacheOption) (ScheduleResult, error) {
+	if err := validCacheOption(mode); err != nil {
+		return ScheduleResult{}, err
+	}
+	if err := ensureDeps(d, mode == RefreshFirst, true); err != nil {
 		return ScheduleResult{}, err
 	}
 
-	refreshErr := refreshSnapshot(ctx, d, cfg)
+	var refreshErr error
+	if mode == RefreshFirst {
+		refreshErr = refreshSnapshot(ctx, d, cfg)
+	}
 
 	snap, loadErr := timetable.LoadSnapshot(d.Store)
 	if loadErr != nil {
@@ -38,7 +73,7 @@ func GetSchedule(ctx context.Context, d Deps, cfg model.Config, date model.Date)
 		if refreshErr != nil {
 			return ScheduleResult{}, refreshErr
 		}
-		return ScheduleResult{}, loadErr
+		return ScheduleResult{}, cacheMiss(mode, loadErr)
 	}
 
 	return ScheduleResult{
@@ -46,6 +81,18 @@ func GetSchedule(ctx context.Context, d Deps, cfg model.Config, date model.Date)
 		Stale:    refreshErr != nil,
 		SyncedAt: snap.SyncedAt,
 	}, nil
+}
+
+// cacheMiss 决定「没有快照」时报什么错（docs/002 §2.1 规则 7）。
+//
+// 只有哨兵 ErrSnapshotAbsent（存储里从来没写入过快照）才在 CacheOnly 下映射为
+// 3001「请刷新一次」；损坏 / 版本不匹配 / 内容不完整 / IO 错误一律保留 3003，
+// 让用户重新同步而不是被误导去改凭据。
+func cacheMiss(mode CacheOption, loadErr error) error {
+	if mode == CacheOnly && errors.Is(loadErr, timetable.ErrSnapshotAbsent) {
+		return model.NewError(model.CodeCredentialMissing, "本地还没有课表，请先刷新一次")
+	}
+	return loadErr
 }
 
 // refreshSnapshot 尝试刷新快照，返回刷新是否失败。
@@ -61,44 +108,53 @@ func refreshSnapshot(ctx context.Context, d Deps, cfg model.Config) error {
 }
 
 // WeekResult 是某周查询结果。
+//
+// LastWeek 是快照推断出的学期最后一周，供 Android 翻页容器确定翻页边界
+// （docs/002 §3.1 的可选字段）；快照缺失时为 0 = 未知，调用方不得据此拦截翻页。
 type WeekResult struct {
 	Week     int
 	Days     []model.DaySchedule
+	LastWeek int
 	Stale    bool
 	SyncedAt time.Time
 }
 
-// GetWeekSchedule 查询第 week 周（先刷新，语义同 GetSchedule）。
-// week <= 0 表示当周；当前日期不在学期内时返回 7 天 InSemester:false 的成功结果（不产生 1002）。
-func GetWeekSchedule(ctx context.Context, d Deps, cfg model.Config, week int) (WeekResult, error) {
-	if err := ensureDeps(d, true, true); err != nil {
+// GetWeekSchedule 查询第 week 周（语义同 GetSchedule，含 CacheOnly）。
+// week == 0 表示当周；其余值（含负数，用于学期开始前的周）都是显式周次。
+// 当前日期不在学期内时返回「今天所在周」的 7 天 InSemester:false 成功结果（不产生 1002）。
+func GetWeekSchedule(ctx context.Context, d Deps, cfg model.Config, week int, mode CacheOption) (WeekResult, error) {
+	if err := validCacheOption(mode); err != nil {
+		return WeekResult{}, err
+	}
+	if err := ensureDeps(d, mode == RefreshFirst, true); err != nil {
 		return WeekResult{}, err
 	}
 
-	refreshErr := refreshSnapshot(ctx, d, cfg)
+	var refreshErr error
+	if mode == RefreshFirst {
+		refreshErr = refreshSnapshot(ctx, d, cfg)
+	}
 
 	snap, loadErr := timetable.LoadSnapshot(d.Store)
 	if loadErr != nil {
 		if refreshErr != nil {
 			return WeekResult{}, refreshErr
 		}
-		return WeekResult{}, loadErr
+		return WeekResult{}, cacheMiss(mode, loadErr)
 	}
 
 	resolved := week
 	outsideSemester := false
-	if resolved <= 0 {
+	if resolved == 0 {
 		if w := timetable.CurrentWeek(snap, model.NewDate(d.Clock.Now())); w > 0 {
 			resolved = w
 		} else {
-			// 假期 / 学期外：不猜周次、不报错；按「今天所在周」取 7 天，
-			// 但统一标记 InSemester:false（docs/002 §1.1）。
+			// 假期 / 学期外：按「今天所在周」取 7 天并统一标 InSemester:false。
+			// 必须用向下取整：Go 的 / 对负数向零截断，学期前会算出第 1 周而不是
+			// 今天所在的那一周，把用户直接扔到开学第一周（docs/002 §1.1）。
 			outsideSemester = true
 			today := model.NewDate(d.Clock.Now())
-			resolved = today.DaysSince(snap.Week1Monday)/7 + 1
-			if resolved < 1 {
-				resolved = 1
-			}
+			resolved = floorDiv(today.DaysSince(snap.Week1Monday), 7) + 1
 		}
 	}
 
@@ -113,7 +169,17 @@ func GetWeekSchedule(ctx context.Context, d Deps, cfg model.Config, week int) (W
 	return WeekResult{
 		Week:     resolved,
 		Days:     days,
+		LastWeek: snap.LastWeek,
 		Stale:    refreshErr != nil,
 		SyncedAt: snap.SyncedAt,
 	}, nil
+}
+
+// floorDiv 是数学意义上的整除（向负无穷取整），Go 的 / 对负数向零截断。
+func floorDiv(a, b int) int {
+	q := a / b
+	if a%b != 0 && (a < 0) != (b < 0) {
+		q--
+	}
+	return q
 }

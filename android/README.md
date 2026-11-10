@@ -1,8 +1,8 @@
 # Android 构建说明
 
-> 状态：M3 已落地并在 Android 15 真机跑通课表、电费与校园网手动动作；
+> 状态：M3 已在 Android 15 真机跑通课表、电费与校园网手动动作的基础链路；单页周视图 / 横向翻页、WakeUp 课程表 CSV 导出、多级设置与外观页由 Go 单测、Kotlin 纯函数单测及构建流程覆盖，增量未在真机复验。
 > `v0.3.0` 起 `release.yml` 自动产出四个已签名 APK；当前源码版本为 `v0.4.1`（见 `../internal/version/version.go`）。同版 Release 另新增 macOS 预编译 CLI 两个包（darwin amd64 / arm64，未经 Apple 签名 / 公证、未经过实机测试），本文件只说明 Android APK 的构建。
-> 契约以 `docs/002` 为准，本文件只说「怎么把 APK 造出来」。
+> 契约以 `docs/002` 为准，本文件只说「怎么把 APK 造出来」；呈现层行为详见 `docs/002 §5.3`。
 
 ## 1. 前置工具
 
@@ -50,6 +50,9 @@ gomobile bind -target=android -androidapi 24 \
 
 > `libs/*.aar` 是构建产物，**不入版本库**（见 `.gitignore`）；
 > 新克隆仓库后先跑一次上面的命令。
+>
+> 改动 `cmd/kemaolife-mobile/bridge.go` 里的门面 `op` 后，必须先重新执行本节命令生成 AAR，
+> 再跑 `:app:assembleDebug`；否则 Kotlin 侧仍链接旧的 AAR。
 
 ## 3. 本地构建 APK
 
@@ -57,7 +60,7 @@ gomobile bind -target=android -androidapi 24 \
 cd android
 ./gradlew :app:assembleDebug        # 4 个 ABI 的 debug APK
 ./gradlew :app:assembleRelease      # 未注入发布密钥时回落 debug 签名，仅供自测
-./gradlew :app:testDebugUnitTest    # 信封 → DTO 投影单测
+./gradlew :app:testDebugUnitTest    # 信封 / DTO / probe、查询间隔、镜像、启动时序、课程布局与翻页纯函数单测
 ```
 
 产物在 `app/build/outputs/apk/<变体>/app-<ABI>-<变体>.apk`。装到真机：
@@ -118,27 +121,27 @@ adb shell am start -n com.github.echoping07.kemaolife/.MainActivity
 
 ## 7. 应用图标
 
-图标资源在 `res/mipmap-*/`，由同一张正方形原图派生，**不做裁切、不做放大**。
-真正决定观感的是自适应图标的可见区规则，不是 PNG 本身。
+图标资源在 `res/mipmap-*/`：三份启动图标 PNG 都是同一张正方形原图的等比缩放，
+不裁切、不扩边、不加光晕、不画遮罩；`ic_about_logo.png` 是同一张插画在关于页的独立资源。
+形状与安全区由 launcher 决定。
 
 | 资源 | 做法 | 谁在用 |
 |---|---|---|
-| `ic_launcher.xml`（`mipmap-anydpi-v26`） | 自适应图标：背景纯色 + 前景 | Android 8.0+ |
-| `ic_launcher_foreground.png` | 原图缩到 **72/108** 的可见区居中，**不画任何遮罩** | 同上 |
-| `ic_launcher.png` | 整张原图方形 | API 24/25、不支持自适应图标时 |
-| `ic_launcher_round.png` | 整张原图 + 内切圆 | 仅类原生 / 圆形屏 launcher |
+| `ic_launcher.xml`（`mipmap-anydpi-v26`） | 自适应图标：四象限背景 + 前景 | Android 8.0+ |
+| `ic_launcher_foreground.png` | 整张原图缩放到 **108dp 画布** | 同上 |
+| `ic_launcher.png` | 整张原图缩放到 **48dp** | API 24/25、不支持自适应图标时 |
+| `ic_launcher_round.png` | 同 `ic_launcher.png`（不预裁圆） | 类原生 / 圆形屏 launcher |
+| `ic_about_logo.png` | 关于页插画，连续曲率裁切展示 | 设置 → 关于 |
 
-三条容易踩的规则：
+两条容易踩的规则：
 
-1. **前景不要自己画遮罩**。画了圆形，落到圆角方形桌面（MIUI / 多数国产 ROM）上就会变成
+1. **不要自己画遮罩**。画了圆形，落到圆角方形桌面（MIUI / 多数国产 ROM）上就会变成
    「圆图套方框」。形状一律交给系统：「圆角方形还是圆形」由 launcher 决定。
-2. **前景只占中间 72/108**。自适应图标的安全区就是中间 72dp（四边各留 18dp），
-   把整张图铺满 108dp 会让主体落到可见区之外，桌面上只剩一小团。
-3. **改图标后必须卸载重装**。多数 launcher（含 MIUI）会按包名缓存图标，
+2. **改图标后必须卸载重装**。多数 launcher（含 MIUI）会按包名缓存图标，
    `adb install -r` 不会刷新缓存，看着像「没生效」。
 
-> `ic_launcher_round.png` 只服务圆形屏 / 类原生桌面；方形桌面不会读它，
-> 所以它里面画内切圆是安全的，不会影响 MIUI 上的显示。
+> 自适应图标下 launcher 只显示画布中间 72/108 的可见区，这是平台行为；
+> 因此原图外圈会被 launcher 遮掉一部分，PNG 本身不做任何裁切。
 
 ## 8. 明文与证书
 
@@ -149,3 +152,8 @@ adb shell am start -n com.github.echoping07.kemaolife/.MainActivity
 
 其余域名仍走系统默认策略；不设全局 `usesCleartextTraffic`，
 也不全局关闭 TLS 校验（001 §6.2、AGENTS §5.4）。
+
+Android 12+ 另有 `app/src/main/res/xml/data_extraction_rules.xml`：云备份与设备迁移
+排除 `root` / `database` / `sharedpref` / `external` 全部私有数据；
+配合 `AndroidManifest.xml` 的 `allowBackup=false`，凭据密文、Go 快照（含 Cookie）、
+课表展示镜像与电费缓存都不参与备份 / 迁移（002 §5.3）。

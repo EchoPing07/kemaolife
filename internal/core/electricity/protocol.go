@@ -20,12 +20,6 @@ const (
 	// BusinessTypeElectric 是电；水为 1（api-docs/002 §7）。
 	BusinessTypeElectric = "0"
 
-	// 外层字段名（api-docs/002 §4）。
-	outerFieldCode    = "code_"
-	outerFieldResult  = "result_"
-	outerFieldBody    = "body"
-	outerFieldMessage = "message_"
-
 	// 内层 body 字段（api-docs/002 §6.1、§6.2）。
 	bodyFieldResult     = "result"
 	bodyFieldMessage    = "message"

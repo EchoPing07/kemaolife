@@ -9,7 +9,6 @@ import (
 	"net/url"
 	"regexp"
 	"strings"
-	"time"
 
 	"github.com/EchoPing07/kemaolife/internal/core"
 	"github.com/EchoPing07/kemaolife/internal/core/model"
@@ -614,6 +613,3 @@ func sortInts(a []int) {
 		}
 	}
 }
-
-// DefaultTimeout 是单次网络请求的建议上限（docs/002 §1.1 --timeout 默认值）。
-const DefaultTimeout = 30 * time.Second

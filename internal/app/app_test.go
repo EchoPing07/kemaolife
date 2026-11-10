@@ -76,7 +76,7 @@ func TestGetScheduleFallsBackToOldSnapshot(t *testing.T) {
 	seedSnapshot(t, store)
 
 	result, err := app.GetSchedule(context.Background(), deps, testConfig(),
-		model.Date{Year: 2026, Month: 11, Day: 5})
+		model.Date{Year: 2026, Month: 11, Day: 5}, app.RefreshFirst)
 	if err != nil {
 		t.Fatalf("有旧快照时不应报错: %v", err)
 	}
@@ -102,7 +102,7 @@ func TestGetScheduleWithoutAnySnapshotFails(t *testing.T) {
 	deps.HTTP = failingHTTP{}
 
 	_, err := app.GetSchedule(context.Background(), deps, testConfig(),
-		model.Date{Year: 2026, Month: 11, Day: 5})
+		model.Date{Year: 2026, Month: 11, Day: 5}, app.RefreshFirst)
 	if err == nil {
 		t.Fatal("无快照且刷新失败应报错")
 	}
@@ -119,7 +119,7 @@ func TestGetScheduleWithoutCredentialsUsesSnapshot(t *testing.T) {
 	seedSnapshot(t, store)
 
 	result, err := app.GetSchedule(context.Background(), deps, model.Config{},
-		model.Date{Year: 2026, Month: 11, Day: 5})
+		model.Date{Year: 2026, Month: 11, Day: 5}, app.RefreshFirst)
 	if err != nil {
 		t.Fatalf("有快照时应可查: %v", err)
 	}
@@ -136,7 +136,7 @@ func TestGetScheduleOutOfSemester(t *testing.T) {
 	seedSnapshot(t, store)
 
 	result, err := app.GetSchedule(context.Background(), deps, testConfig(),
-		model.Date{Year: 2026, Month: 7, Day: 15})
+		model.Date{Year: 2026, Month: 7, Day: 15}, app.RefreshFirst)
 	if err != nil {
 		t.Fatalf("非学期内不应报错: %v", err)
 	}
@@ -155,7 +155,7 @@ func TestGetWeekSchedule(t *testing.T) {
 	deps.HTTP = failingHTTP{}
 	seedSnapshot(t, store)
 
-	result, err := app.GetWeekSchedule(context.Background(), deps, testConfig(), 0)
+	result, err := app.GetWeekSchedule(context.Background(), deps, testConfig(), 0, app.RefreshFirst)
 	if err != nil {
 		t.Fatalf("当周查询: %v", err)
 	}
@@ -165,9 +165,13 @@ func TestGetWeekSchedule(t *testing.T) {
 	if len(result.Days) != 7 {
 		t.Fatalf("days = %d, want 7", len(result.Days))
 	}
+	// LastWeek 是 Android 翻页容器的边界（docs/002 §3.1 可选字段）。
+	if result.LastWeek != 16 {
+		t.Errorf("lastWeek = %d, want 16（快照推断的学期最后一周）", result.LastWeek)
+	}
 
 	// 越界周次：7 天全部 inSemester:false，不报错。
-	out, err := app.GetWeekSchedule(context.Background(), deps, testConfig(), 30)
+	out, err := app.GetWeekSchedule(context.Background(), deps, testConfig(), 30, app.RefreshFirst)
 	if err != nil {
 		t.Fatalf("越界周次不应报错: %v", err)
 	}
@@ -185,7 +189,7 @@ func TestGetWeekScheduleOutsideSemesterIsSuccess(t *testing.T) {
 	deps.HTTP = failingHTTP{}
 	seedSnapshot(t, store)
 
-	result, err := app.GetWeekSchedule(context.Background(), deps, testConfig(), 0)
+	result, err := app.GetWeekSchedule(context.Background(), deps, testConfig(), 0, app.RefreshFirst)
 	if err != nil {
 		t.Fatalf("非学期内不应报错: %v", err)
 	}
@@ -196,6 +200,10 @@ func TestGetWeekScheduleOutsideSemesterIsSuccess(t *testing.T) {
 		if d.InSemester || len(d.Entries) != 0 {
 			t.Errorf("day = %+v, want InSemester:false / 空 entries", d)
 		}
+	}
+	// 学期开始前也必须按「今天所在周」返回 7 天；Go 整除向零截断会错给第 1 周。
+	if got := result.Days[0].Date; got.String() != "2026-06-29" {
+		t.Errorf("学期前的当周 = %s, want 2026-06-29（今天所在周）", got)
 	}
 }
 
@@ -211,7 +219,7 @@ func TestGetScheduleRefreshSuccessReplacesSnapshot(t *testing.T) {
 	deps.JSBBaseURL = fake.jsbURL
 
 	result, err := app.GetSchedule(context.Background(), deps, testConfig(),
-		model.Date{Year: 2026, Month: 11, Day: 5})
+		model.Date{Year: 2026, Month: 11, Day: 5}, app.RefreshFirst)
 	if err != nil {
 		t.Fatalf("刷新成功应可查: %v", err)
 	}
@@ -390,3 +398,284 @@ func writeOuter(w http.ResponseWriter, body string) {
 }
 
 var _ = strings.TrimSpace
+
+// 纯读缓存：即使 HTTP 完全不可用也照常出数据，且不发任何请求（docs/002 §5.3）。
+func TestGetScheduleCacheOnlyReadsLocalSnapshot(t *testing.T) {
+	clock := testClock()
+	deps, store, _ := testDeps(clock)
+	spy := &countingFailHTTP{}
+	deps.HTTP = spy
+	seedSnapshot(t, store)
+
+	result, err := app.GetSchedule(context.Background(), deps, testConfig(),
+		model.Date{Year: 2026, Month: 11, Day: 5}, app.CacheOnly)
+	if err != nil {
+		t.Fatalf("纯读缓存不应触发网络: %v", err)
+	}
+	if result.Stale {
+		t.Error("纯读缓存没有「刷新失败」这回事，Stale 必须为 false")
+	}
+	if spy.calls != 0 {
+		t.Errorf("CacheOnly 不应发请求, got %d", spy.calls)
+	}
+	if len(result.Day.Entries) != 1 {
+		t.Errorf("应返回快照里的课程, got %+v", result.Day)
+	}
+}
+
+// CacheOnly 连 HTTP 端口都不需要：纯本地查询不该被缺端口拦住。
+func TestGetScheduleCacheOnlyDoesNotRequireHTTP(t *testing.T) {
+	deps, store, _ := testDeps(testClock())
+	deps.HTTP = nil
+	seedSnapshot(t, store)
+
+	if _, err := app.GetSchedule(context.Background(), deps, testConfig(),
+		model.Date{Year: 2026, Month: 11, Day: 5}, app.CacheOnly); err != nil {
+		t.Fatalf("CacheOnly 不应要求 HTTP 端口: %v", err)
+	}
+	if _, err := app.GetWeekSchedule(context.Background(), deps, testConfig(), 10, app.CacheOnly); err != nil {
+		t.Fatalf("CacheOnly 不应要求 HTTP 端口: %v", err)
+	}
+}
+
+// 纯读缓存且没有快照：回 3001 引导「先刷新一次」，而不是无法处理的 3003。
+func TestGetWeekScheduleCacheOnlyWithoutSnapshot(t *testing.T) {
+	deps, _, _ := testDeps(testClock())
+	spy := &countingFailHTTP{}
+	deps.HTTP = spy
+
+	_, err := app.GetWeekSchedule(context.Background(), deps, testConfig(), 0, app.CacheOnly)
+	if model.CodeOf(err) != model.CodeCredentialMissing {
+		t.Errorf("code = %d, want %d", model.CodeOf(err), model.CodeCredentialMissing)
+	}
+	if spy.calls != 0 {
+		t.Errorf("CacheOnly 不应发请求, got %d", spy.calls)
+	}
+}
+
+// 快照损坏 / 版本不匹配是「重新同步」而不是「没配置凭据」：不能压成 3001。
+func TestCacheOnlyKeepsSnapshotErrors(t *testing.T) {
+	deps, store, _ := testDeps(testClock())
+	deps.HTTP = &countingFailHTTP{}
+	if err := store.Put(timetable.SnapshotStoreKey, []byte("not json")); err != nil {
+		t.Fatal(err)
+	}
+	_, err := app.GetWeekSchedule(context.Background(), deps, testConfig(), 0, app.CacheOnly)
+	if model.CodeOf(err) != model.CodeSnapshotMissing {
+		t.Errorf("损坏快照 code = %d, want %d", model.CodeOf(err), model.CodeSnapshotMissing)
+	}
+	if !strings.Contains(model.MessageOf(err), "重新同步") {
+		t.Errorf("应提示重新同步: %q", model.MessageOf(err))
+	}
+
+	snap := &timetable.Snapshot{
+		Version:     timetable.SnapshotVersion + 1,
+		Week1Monday: model.Date{Year: 2026, Month: 8, Day: 31},
+		SlotTimes:   []string{"08:30~10:00"},
+		LastWeek:    16,
+	}
+	if err := timetable.SaveSnapshot(store, snap); err != nil {
+		t.Fatal(err)
+	}
+	_, err = app.GetWeekSchedule(context.Background(), deps, testConfig(), 0, app.CacheOnly)
+	if model.CodeOf(err) != model.CodeSnapshotMissing {
+		t.Errorf("版本不匹配 code = %d, want %d", model.CodeOf(err), model.CodeSnapshotMissing)
+	}
+}
+
+// 非法 CacheOption 一律拒绝：裸 int 不得绕过刷新判断或错误映射。
+func TestInvalidCacheOptionRejected(t *testing.T) {
+	deps, store, _ := testDeps(testClock())
+	seedSnapshot(t, store)
+	if _, err := app.GetSchedule(context.Background(), deps, testConfig(),
+		model.Date{Year: 2026, Month: 11, Day: 5}, app.CacheOption(42)); model.CodeOf(err) != model.CodeInvalidArgument {
+		t.Errorf("GetSchedule code = %d, want 2001", model.CodeOf(err))
+	}
+	if _, err := app.GetWeekSchedule(context.Background(), deps, testConfig(), 0, app.CacheOption(42)); model.CodeOf(err) != model.CodeInvalidArgument {
+		t.Errorf("GetWeekSchedule code = %d, want 2001", model.CodeOf(err))
+	}
+}
+
+// 学期开始前按负数周次取「上上周」时必须真的返回那一周，而不是跳回当周。
+func TestGetWeekScheduleHonorsNegativeWeek(t *testing.T) {
+	deps, store, _ := testDeps(testClock())
+	deps.HTTP = &countingFailHTTP{}
+	seedSnapshot(t, store)
+
+	got, err := app.GetWeekSchedule(context.Background(), deps, testConfig(), -2, app.CacheOnly)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.Week != -2 {
+		t.Errorf("week = %d, want -2", got.Week)
+	}
+	if len(got.Days) != 7 || got.Days[0].Date.String() != "2026-08-10" {
+		t.Errorf("days = %+v, want 2026-08-10 起 7 天", got.Days)
+	}
+}
+
+// 空白独立学号必须回落教务学号，不能把一串空格送进电费接口。
+func TestElectricityStudentTrimsAndFallsBack(t *testing.T) {
+	cfg := testConfig()
+	cfg.ElectricityStudentID = "   "
+	if got := cfg.ElectricityStudent(); got != testAccount {
+		t.Errorf("空白独立学号应回落教务学号, got %q", got)
+	}
+	cfg.ElectricityStudentID = "  <电费学号>  "
+	if got := cfg.ElectricityStudent(); got != "<电费学号>" {
+		t.Errorf("独立学号应去空白, got %q", got)
+	}
+}
+
+// 只配电费独立学号、不填教务凭据也必须能查电费（docs/002 §5.3 tab3）。
+func TestCheckElectricityOnlyWithOwnStudentID(t *testing.T) {
+	var seen []string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_ = r.ParseForm()
+		var param struct {
+			Cmd     string `json:"cmd"`
+			Account string `json:"account"`
+		}
+		_ = json.Unmarshal([]byte(r.Form.Get("param")), &param)
+		seen = append(seen, param.Cmd+":"+param.Account)
+		switch param.Cmd {
+		case "getbindroom":
+			writeOuter(w, `{"result":"0","existflag":"1","roomverify":"<roomverify>","detaillist":[{"businesstype":"0","odd":"10.00","status":"1"}]}`)
+		case "getusedetail":
+			writeOuter(w, `{"result":"0","yearmonth":"2026-11","monthuse":"5.00","opdtdate":"2026-11-04","dayuselist":[]}`)
+		case "getstuindexpage":
+			writeOuter(w, `{"result":"0","modlist":[{"collecdate":"2026-11-04 22:41:37"}]}`)
+		}
+	}))
+	defer srv.Close()
+
+	deps, _, _ := testDeps(testClock())
+	deps.HTTP = srv.Client()
+	deps.ElectricityEndpoint = srv.URL
+	cfg := model.Config{ElectricityStudentID: "<电费学号>", CustomerCode: testSchool}
+	if _, err := app.CheckElectricity(context.Background(), deps, cfg, "2026-11"); err != nil {
+		t.Fatalf("只配电费学号也应能查询: %v", err)
+	}
+	if len(seen) != 3 {
+		t.Fatalf("应发 3 个请求, got %v", seen)
+	}
+	for _, got := range seen {
+		if !strings.HasSuffix(got, ":"+"<电费学号>") {
+			t.Errorf("请求 %q 未使用电费独立学号", got)
+		}
+	}
+}
+
+// 电费独立学号：配置了就优先于教务学号（docs/002 §5.3 tab3 的「继承」开关）。
+func TestCheckElectricityUsesOwnStudentID(t *testing.T) {
+	clock := testClock()
+	var seen []string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_ = r.ParseForm()
+		var param struct {
+			Cmd     string `json:"cmd"`
+			Account string `json:"account"`
+		}
+		_ = json.Unmarshal([]byte(r.Form.Get("param")), &param)
+		seen = append(seen, param.Cmd+":"+param.Account)
+		switch param.Cmd {
+		case "getbindroom":
+			writeOuter(w, `{"result":"0","existflag":"1","roomverify":"<roomverify>","detaillist":[{"businesstype":"0","odd":"10.00","status":"1"}]}`)
+		case "getusedetail":
+			writeOuter(w, `{"result":"0","yearmonth":"2026-11","monthuse":"5.00","opdtdate":"2026-11-04","dayuselist":[]}`)
+		case "getstuindexpage":
+			writeOuter(w, `{"result":"0","modlist":[{"collecdate":"2026-11-04 22:41:37"}]}`)
+		}
+	}))
+	defer srv.Close()
+
+	deps, _, _ := testDeps(clock)
+	deps.HTTP = srv.Client()
+	deps.ElectricityEndpoint = srv.URL
+
+	cfg := testConfig()
+	cfg.ElectricityStudentID = "<电费学号>"
+	if _, err := app.CheckElectricity(context.Background(), deps, cfg, "2026-11"); err != nil {
+		t.Fatalf("CheckElectricity: %v", err)
+	}
+	for _, got := range seen {
+		if !strings.HasSuffix(got, ":"+"<电费学号>") {
+			t.Errorf("请求 %q 未使用电费独立学号", got)
+		}
+	}
+	if len(seen) != 3 {
+		t.Errorf("应发 3 个请求, got %v", seen)
+	}
+}
+
+// countingFailHTTP 记录调用次数并一律失败：用于断言「这条路径根本不联网」。
+type countingFailHTTP struct{ calls int }
+
+func (c *countingFailHTTP) Do(*http.Request) (*http.Response, error) {
+	c.calls++
+	return nil, fmt.Errorf("network unreachable")
+}
+
+// 导出只读缓存：即使 HTTP 完全不可用也照常出 CSV，且不发任何请求（docs/002 §5.3）。
+func TestExportTimetableCSVReadsLocalSnapshot(t *testing.T) {
+	clock := testClock()
+	deps, store, _ := testDeps(clock)
+	spy := &countingFailHTTP{}
+	deps.HTTP = spy
+	seedSnapshot(t, store)
+
+	result, err := app.ExportTimetableCSV(context.Background(), deps, testConfig())
+	if err != nil {
+		t.Fatalf("导出应只读缓存: %v", err)
+	}
+	if spy.calls != 0 {
+		t.Errorf("导出不应发请求, got %d", spy.calls)
+	}
+	if !strings.HasSuffix(result.CSV, "\r\n") || !strings.Contains(result.CSV, "旧课程,4,1,2,教师甲,教室A,1-10") {
+		t.Errorf("CSV 内容不符预期:\n%q", result.CSV)
+	}
+	// 数据时间取自快照，UI 必须一并展示。
+	want := time.Date(2026, 10, 29, 21, 10, 2, 0, time.Local).Format(time.RFC3339)
+	if result.SyncedAt != want {
+		t.Errorf("syncedAt = %q, want %q", result.SyncedAt, want)
+	}
+	if result.Filename == "" || !strings.HasSuffix(result.Filename, ".csv") {
+		t.Errorf("filename = %q", result.Filename)
+	}
+	if result.LessonCount != 1 {
+		t.Errorf("lessonCount = %d, want 1", result.LessonCount)
+	}
+}
+
+// 从没同步过：回 3001 引导「先刷新一次」，与课表查询同一口径。
+func TestExportTimetableCSVWithoutSnapshot(t *testing.T) {
+	deps, _, _ := testDeps(testClock())
+	deps.HTTP = &countingFailHTTP{}
+
+	_, err := app.ExportTimetableCSV(context.Background(), deps, testConfig())
+	if model.CodeOf(err) != model.CodeCredentialMissing {
+		t.Errorf("code = %d, want %d", model.CodeOf(err), model.CodeCredentialMissing)
+	}
+}
+
+// 快照损坏是「重新同步」而不是「没配置凭据」：保留 3003。
+func TestExportTimetableCSVKeepsSnapshotErrors(t *testing.T) {
+	deps, store, _ := testDeps(testClock())
+	if err := store.Put(timetable.SnapshotStoreKey, []byte("not json")); err != nil {
+		t.Fatal(err)
+	}
+	_, err := app.ExportTimetableCSV(context.Background(), deps, testConfig())
+	if model.CodeOf(err) != model.CodeSnapshotMissing {
+		t.Errorf("code = %d, want %d", model.CodeOf(err), model.CodeSnapshotMissing)
+	}
+}
+
+// 导出不需要 HTTP 端口：纯本地动作不该被缺端口拦住。
+func TestExportTimetableCSVDoesNotRequireHTTP(t *testing.T) {
+	deps, store, _ := testDeps(testClock())
+	deps.HTTP = nil
+	seedSnapshot(t, store)
+	if _, err := app.ExportTimetableCSV(context.Background(), deps, testConfig()); err != nil {
+		t.Fatalf("导出不应要求 HTTP 端口: %v", err)
+	}
+}

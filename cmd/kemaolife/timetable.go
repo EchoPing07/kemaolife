@@ -89,7 +89,7 @@ func timetableDay(ctx context.Context, opts options, rt *session, date model.Dat
 	if err != nil {
 		return err
 	}
-	result, err := app.GetSchedule(ctx, rt.deps, cfg, date)
+	result, err := app.GetSchedule(ctx, rt.deps, cfg, date, app.RefreshFirst)
 	if err != nil {
 		return err
 	}
@@ -107,9 +107,13 @@ func timetableDay(ctx context.Context, opts options, rt *session, date model.Dat
 }
 
 // weekSchema 是 timetable week 的 data。
+//
+// LastWeek 是可选字段（0 = 未知）：Android 翻页容器用它确定翻页边界，
+// 老客户端忽略即可（docs/002 §3.1）。
 type weekSchema struct {
-	Week int                 `json:"week"`
-	Days []model.DaySchedule `json:"days"`
+	Week     int                 `json:"week"`
+	Days     []model.DaySchedule `json:"days"`
+	LastWeek int                 `json:"lastWeek,omitempty"`
 }
 
 func timetableWeek(ctx context.Context, opts options, rt *session, week int) error {
@@ -117,11 +121,11 @@ func timetableWeek(ctx context.Context, opts options, rt *session, week int) err
 	if err != nil {
 		return err
 	}
-	result, err := app.GetWeekSchedule(ctx, rt.deps, cfg, week)
+	result, err := app.GetWeekSchedule(ctx, rt.deps, cfg, week, app.RefreshFirst)
 	if err != nil {
 		return err
 	}
-	data := weekSchema{Week: result.Week, Days: result.Days}
+	data := weekSchema{Week: result.Week, Days: result.Days, LastWeek: result.LastWeek}
 	env := model.Envelope{
 		OK:       true,
 		Data:     data,
