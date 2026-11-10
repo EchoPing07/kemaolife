@@ -63,9 +63,6 @@ const (
 	fieldCourseTime    = "sktime"   // 上课安排：`周三第1、2节{2,4,7-10}全周`
 	fieldCourseTeacher = "jg0101mc" // 教师
 	fieldCourseRoom    = "skddmc"   // 地点（多个用 ; 分隔）
-	fieldCourseCampus  = "skxqmc"   // 校区
-	fieldCourseCode    = "kch"      // 课程号
-	fieldCourseClass   = "kt_mc"    // 教学班
 )
 
 // CourseListKeys 是可能承载课程行的顶层数组键。

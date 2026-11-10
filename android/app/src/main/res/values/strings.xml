@@ -40,7 +40,6 @@
 
     <!-- 数据时间提示：所有课表 / 电费输出都必须能说明数据来自何时。 -->
     <string name="data_synced_at">同步于 %1$s</string>
-    <string name="data_stale">离线数据（同步于 %1$s）</string>
     <string name="data_stale_short">离线 · %1$s</string>
     <string name="data_collected_at">数据截至 %1$s</string>
     <string name="data_collected_at_plain">数据截至</string>
@@ -49,10 +48,6 @@
     <string name="section_today">今日课表</string>
     <string name="section_electricity">电费</string>
     <string name="section_campusnet">校园网</string>
-    <string name="balance_unit">%1$s %2$s</string>
-    <string name="estimated_days">约可用 %1$d 天</string>
-    <string name="estimated_days_unknown">可用天数无法估算</string>
-    <string name="month_usage">本月已用 %1$s %2$s</string>
     <string name="electricity_not_queried">尚未查询</string>
     <string name="metric_estimated_days">可用天数</string>
     <string name="metric_month_usage">本月已用</string>
@@ -98,8 +93,6 @@
     <string name="about_system">系统</string>
     <string name="about_license">开源许可</string>
     <string name="about_license_value">MIT License</string>
-    <string name="about_description">课表、宿舍电费与校园网认证，数据只在本机处理。</string>
-    <string name="action_confirm">确定</string>
     <string name="campus_access_details">接入详情</string>
     <string name="campus_bras_name">接入设备</string>
     <string name="campus_bras_address">设备地址</string>
@@ -156,11 +149,8 @@
     <string name="probe_skipped_wifi">当前不在 WiFi 下，已跳过探测（可在校园网设置里关闭此限制）</string>
 
     <!-- 通用。 -->
-    <string name="action_retry">重试</string>
     <string name="action_ok">知道了</string>
     <string name="loading">加载中…</string>
-    <string name="empty_placeholder">—</string>
-    <string name="bridge_not_ready">桥接尚未初始化</string>
     <!-- 课表空态：不把内部初始化状态摊到课表位，只给可操作的引导。 -->
     <string name="timetable_cache_missing">本机还没有课表，点「同步」获取一次</string>
 </resources>

@@ -33,7 +33,9 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
-import java.time.LocalDate
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 
 /**
  * 单例式的应用状态容器：三个 tab 共用一个 ViewModel（`MainActivity` 持有）。
@@ -60,7 +62,8 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     private val preferences = AppPreferences(app)
     private val networkState = NetworkState(app)
 
-    private val today: String = LocalDate.now().toString()
+    // API 24 无 java.time，且未启用 desugaring；用平台格式化取本地日期，不自行算时区（A3）。
+    private val today: String = SimpleDateFormat("yyyy-MM-dd", Locale.US).format(Date())
 
     // 每个链路只保留一个在途 Job：用 Job.isActive 判重入，比普通 Boolean 更可靠
     // ——协程被取消时 Job 自然完成，不会留下永远为 true 的标志。
@@ -114,8 +117,6 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
             timetableInterval = preferences.timetableIntervalMinutes,
             electricityInterval = preferences.electricityIntervalMinutes,
             campusWifiOnly = preferences.campusWifiOnly,
-            lastTimetableSyncAt = preferences.lastTimetableSyncAt,
-            lastElectricityAt = preferences.lastElectricityAt,
         ),
     )
     val state: StateFlow<AppState> = _state.asStateFlow()
@@ -126,8 +127,6 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
             it.copy(
                 credentials = credentials,
                 themeColor = themePreferences.load(),
-                // 只配电费也算「可用」：课表缺失由课表页自己提示。
-                needsSetup = credentials.studentId.isBlank() && credentials.electricityAccount.isBlank(),
             )
         }
         // 老版本用 wall-clock 存时间戳，升到单调时钟后那些值全部失效，重查一次即可。
@@ -151,12 +150,6 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         val now = preferences.nowElapsed()
         if (preferences.lastTimetableSyncAt > now) preferences.lastTimetableSyncAt = 0L
         if (preferences.lastElectricityAt > now) preferences.lastElectricityAt = 0L
-        _state.update {
-            it.copy(
-                lastTimetableSyncAt = preferences.lastTimetableSyncAt,
-                lastElectricityAt = preferences.lastElectricityAt,
-            )
-        }
     }
 
     /** 打开 App（冷启动或从后台回到前台）：课表与电费都无条件尝试获取一次。 */
@@ -243,7 +236,6 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                         else (ex as? AppException)?.displayMessage ?: "课表读取失败",
                         // 同步成功但回读失败：旧课表不能冒充本次新数据。
                         weekStale = if (fromSync && s.week != null) true else s.weekStale,
-                        needsSetup = s.needsSetup || (ex as? AppException)?.needsCredentials == true,
                     )
                 }
                 false
@@ -304,19 +296,14 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                         // 回读当前用户正在看的那一周，并用 generation 防止旧结果覆盖新选择。
                         val desired = _state.value.week?.week ?: 0
                         fetchWeek(desired, fromSync = true)
-                        _state.update {
-                            it.copy(timetableSyncing = false, lastTimetableSyncAt = attemptedAt)
-                        }
+                        _state.update { it.copy(timetableSyncing = false) }
                     },
                     onFailure = { ex ->
                         _state.update { s ->
                             s.copy(
                                 timetableSyncing = false,
-                                lastTimetableSyncAt = attemptedAt,
                                 // 只标离线，不弹错误、不清缓存、不改数据时间。
                                 weekStale = s.week != null,
-                                needsSetup = s.needsSetup ||
-                                    (ex as? AppException)?.needsCredentials == true,
                             )
                         }
                         if (_state.value.week == null) pushError(ex)
@@ -397,18 +384,12 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                     onSuccess = { report ->
                         withContext(Dispatchers.IO) { cacheElectricityReport(report) }
                         _state.update {
-                            it.copy(
-                                electricity = report,
-                                electricityLoading = false,
-                                lastElectricityAt = attemptedAt,
-                            )
+                            it.copy(electricity = report, electricityLoading = false)
                         }
                     },
                     onFailure = { ex ->
                         // 失败不清缓存：旧电费照常可看。
-                        _state.update {
-                            it.copy(electricityLoading = false, lastElectricityAt = attemptedAt)
-                        }
+                        _state.update { it.copy(electricityLoading = false) }
                         pushError(ex)
                     },
                 )
@@ -611,11 +592,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         }
         _state.update { s ->
             if (!probeActive(id, target, s)) return@update s
-            s.copy(
-                probe = ProbeState(id, target, running = false, result = probe),
-                lastTimetableSyncAt = preferences.lastTimetableSyncAt,
-                lastElectricityAt = preferences.lastElectricityAt,
-            )
+            s.copy(probe = ProbeState(id, target, running = false, result = probe))
         }
         if (!probe.ok || !probeActive(id, target, _state.value)) return
 
@@ -671,7 +648,6 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                     _state.update {
                         it.copy(
                             electricity = null,
-                            lastElectricityAt = 0L,
                             week = null,
                             currentWeek = null,
                             lastWeek = 0,
@@ -689,7 +665,6 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                         credentials = merged,
                         bridgeReady = repo.isReady(),
                         bridgeError = repo.readyError(),
-                        needsSetup = !env.ok,
                         settingsSaved = env.ok,
                     )
                 }
@@ -789,9 +764,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                 weekStale = if (fromSync) false else s.weekStale,
                 weekSyncedAt = syncedAt,
                 weekLoading = false,
-                needsSetup = false,
                 timetableError = null,
-                lastTimetableSyncAt = preferences.lastTimetableSyncAt,
             )
         }
     }
@@ -801,13 +774,8 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         // 挂起补跑，这一层只是兜底，避免再把「桥接尚未初始化」弹成 snackbar。
         if (t is AppException && t.code == 2001 && !repo.isReady()) return
         val message = (t as? AppException)?.displayMessage ?: "操作失败，请稍后重试"
-        val needsSetup = (t as? AppException)?.needsCredentials == true
         _state.update { s ->
-            s.copy(
-                error = message,
-                needsSetup = needsSetup || s.needsSetup,
-                weekLoading = false,
-            )
+            s.copy(error = message, weekLoading = false)
         }
     }
 }
@@ -831,7 +799,6 @@ data class ProbeState(
 data class AppState(
     val bridgeReady: Boolean = false,
     val bridgeError: String? = null,
-    val needsSetup: Boolean = false,
 
     val credentials: Credentials = Credentials(),
 
@@ -847,16 +814,12 @@ data class AppState(
     val weekLoading: Boolean = false,
     val timetableSyncing: Boolean = false,
     val timetableError: String? = null,
-    /** 上次课表同步尝试时刻（单调时钟 millis），0 表示从未同步。 */
-    val lastTimetableSyncAt: Long = 0L,
 
     val todayDate: String = "",
     val todayDay: DaySchedule? = null,
 
     val electricity: ElectricityReport? = null,
     val electricityLoading: Boolean = false,
-    /** 上次电费查询时刻（单调时钟 millis），0 表示从未查询。 */
-    val lastElectricityAt: Long = 0L,
 
     val campus: CampusStatus? = null,
     val campusLoading: Boolean = false,

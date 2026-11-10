@@ -28,7 +28,6 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Refresh
 import androidx.compose.material3.Button
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -343,9 +342,9 @@ private fun CampusCard(state: AppState, viewModel: AppViewModel) {
             }
             StatusDot(color = tint)
             Spacer(Modifier.width(8.dp))
-            Crossfade(targetState = campus?.state, animationSpec = tween(240), label = "campusState") {
+            Crossfade(targetState = campus?.state, animationSpec = tween(240), label = "campusState") { state ->
                 Text(
-                    text = campus?.let { campusStateLabel(it.state) }
+                    text = state?.let { campusStateLabel(it) }
                         ?: stringResource(R.string.loading),
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.SemiBold,

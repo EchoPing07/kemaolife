@@ -36,13 +36,6 @@ func BindTray(hwnd uintptr, h TrayHandler) {
 	trayHandler = h
 }
 
-// TrayWindow 返回托盘窗口句柄（后台线程 PostMessage 用）。
-func TrayWindow() uintptr {
-	trayMu.Lock()
-	defer trayMu.Unlock()
-	return trayHwnd
-}
-
 // handleTrayMessage 是托盘窗口的消息处理核心。
 func handleTrayMessage(hwnd uintptr, msg uint32, wParam, lParam uintptr) (uintptr, bool) {
 	switch msg {

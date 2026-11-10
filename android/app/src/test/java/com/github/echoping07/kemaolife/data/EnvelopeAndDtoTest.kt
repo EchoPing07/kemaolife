@@ -95,15 +95,6 @@ class EnvelopeAndDtoTest {
     }
 
     @Test
-    fun `凭据缺失时 needsCredentials 为真`() {
-        val ex = AppException(ApiError(3001, "未配置学号"))
-        assertTrue(ex.needsCredentials)
-
-        val network = AppException(ApiError(4001, "网络不可达"))
-        assertFalse(network.needsCredentials)
-    }
-
-    @Test
     fun `测试回报 null 值保留为空串并显示占位符`() {
         val probe = ProbeResult.from(
             JSONObject(

@@ -35,11 +35,6 @@ func (d Date) Time() time.Time {
 	return time.Date(d.Year, time.Month(d.Month), d.Day, 0, 0, 0, 0, time.Local)
 }
 
-// Midday 返回该日本地时间 12:00:00，用于需要稳定时间戳（避开夏令时边界）的场景。
-func (d Date) Midday() time.Time {
-	return time.Date(d.Year, time.Month(d.Month), d.Day, 12, 0, 0, 0, time.Local)
-}
-
 func (d Date) IsZero() bool { return d.Year == 0 && d.Month == 0 && d.Day == 0 }
 
 func (d Date) String() string {

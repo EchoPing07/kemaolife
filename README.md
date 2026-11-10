@@ -69,7 +69,7 @@ Portal   ──探测 302──► 判态 ──► 登录 / 下线 / 重登（W
 | M0 · 契约 + core | DTO、错误码、`core` / `ports`、单测、`kemaolife` 跑通 | 已实现 |
 | M1 · CLI + skill（linux / darwin） | 单二进制 `kemaolife` + 子命令、`config`、快照缓存、SKILL.md、刷新降级、电费合并查询 | 已实现（aarch64 Linux 真机验证；**本版起提供 macOS 预编译包**（darwin amd64 / arm64），darwin amd64/arm64 仅交叉编译 + 静态审查 + 自动化单测通过，**macOS CLI 未经过实机测试、未在真实 Mac 上运行**） |
 | M2 · Windows 托盘 | 托盘状态与按模式切换的按钮组、4 小时电费轮询（600s 硬下限）、120 秒判态轮询（30s 下限）、阈值去重与静默时段、失败退避、托盘通知、DPAPI 凭据、原生设置窗口、开机自启 | 已实现（本机 Win11 验证） |
-| M3 · Android App | `gomobile` 门面、三 tab、单页周视图与横向翻页、WakeUp CSV 导出、缓存优先 / 打开联网覆盖、电费页、校园网手动动作、Keystore 多级设置 / 外观 / 关于 | 已实现（Android 15 真机已验证基础三功能链路；本轮 UI / 导出增量由 CI 与本机静态自检覆盖，真机验证情况见 PR） |
+| M3 · Android App | `gomobile` 门面、三 tab、单页周视图与横向翻页、WakeUp CSV 导出、缓存优先 / 打开联网覆盖、电费页、校园网手动动作、Keystore 多级设置 / 外观 / 关于 | 已实现（Android 15 真机已验证基础三功能链路；单页周视图 / 横向翻页 / CSV 导出增量由 CI 与本机静态自检覆盖，增量未在真机复验） |
 | M4 · 校园网自动登录复核 | Windows 自动模式已随 M2 实现，Android 手动适配器与平台网络配置已随 M3 落地；M4 仅按 D8 / D11 结论复核 Windows 链路 | 待 D8 / D11 定稿 |
 
 完整里程碑与验收见 [000 文档 §7](./docs/000-需求与产品定位.md#7-里程碑)。

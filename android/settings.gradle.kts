@@ -18,7 +18,6 @@ dependencyResolutionManagement {
         google()
         mavenCentral()
         // gomobile 产出的 AAR 以本地文件形式引用，不走仓库。
-        flatDir { dirs("app/libs") }
     }
 }
 

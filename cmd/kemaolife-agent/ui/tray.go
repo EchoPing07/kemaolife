@@ -12,17 +12,14 @@ import (
 const (
 	IDStatusCampus = 1001 // 只读：校园网状态
 	IDStatusPower  = 1002 // 只读：剩余电费（仅余额与单位）
-	IDSep1         = 1003
 
 	IDLogin   = 1101 // 手动模式：登录
 	IDLogout  = 1102 // 手动模式：下线
 	IDRelogin = 1103 // 两种模式都有：重登
 	IDProbe   = 1104 // 立即探测一次校园网状态（不登录）
 
-	IDSep2     = 1200
 	IDRefresh  = 1201 // 立即查询一次电费
 	IDSettings = 1301
-	IDSep3     = 1302
 	IDExit     = 1401
 )
 
@@ -97,10 +94,4 @@ func (m *Menu) PopupAtCursor(owner uintptr) int {
 		0, owner, 0,
 	)
 	return int(r)
-}
-
-// LoadIconByID 加载系统预定义图标（窗口类注册用，失败时兜底）。
-func LoadIconByID(id uintptr) uintptr {
-	h, _, _ := procLoadIconChecked.Call(0, id)
-	return h
 }

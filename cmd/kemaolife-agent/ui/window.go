@@ -16,7 +16,6 @@ type WndProc func(hwnd uintptr, msg uint32, wParam, lParam uintptr) uintptr
 // 窗口类名（注册一次，多窗口复用同一过程）。
 const (
 	TrayClass   = "KemaolifeTrayWindow"
-	MainClass   = "KemaolifeMainWindow"
 	SettingsCls = "KemaolifeSettingsWindow"
 )
 
@@ -26,7 +25,6 @@ const (
 // 不能直接改控件文本 —— 否则表现为「界面卡死」或「文本不刷新」。
 const (
 	WM_STATUS_UPDATE = WM_APP + 1 // 状态文本变了
-	WM_TRAY_ICON     = WM_APP + 2 // 托盘图标回调（WM_TRAY_CALLBACK 的实际承载）
 	WM_QUERY_DONE    = WM_APP + 3 // 一次轮询结束（触发菜单重建）
 	WM_OPEN_SETTINGS = WM_APP + 4 // 请求打开设置窗口
 )
@@ -193,9 +191,6 @@ func Show(hwnd uintptr, show bool) {
 	procInvalidateRect.Call(hwnd, 0, 1) // TRUE = 擦除背景后重绘
 }
 
-// Destroy 销毁窗口。
-func Destroy(hwnd uintptr) { procDestroyWindow.Call(hwnd) }
-
 // pendingTexts 是「后台线程 → UI 线程」的文本投递箱。
 //
 // 为什么不用 PostMessage + LocalAlloc 传字符串指针：
@@ -266,11 +261,6 @@ func MessageBox(title, text string, flags uint32) {
 		uintptr(flags))
 }
 
-// InvokeOnUI 是 PostMessage 的语义化包装：请求 UI 线程执行某个已注册的自定义消息。
-func InvokeOnUI(hwnd uintptr, msg uint32, wParam uintptr) {
-	procPostMessage.Call(hwnd, uintptr(msg), wParam, 0)
-}
-
 func strPtr(s string) *uint16 {
 	p, err := syscall.UTF16PtrFromString(s)
 	if err != nil {
@@ -278,20 +268,6 @@ func strPtr(s string) *uint16 {
 		return &z
 	}
 	return p
-}
-
-func utf16PtrToString(p *uint16) string {
-	if p == nil {
-		return ""
-	}
-	var n int
-	for ptr := unsafe.Pointer(p); *(*uint16)(ptr) != 0; ptr = unsafe.Add(ptr, 2) {
-		n++
-	}
-	if n == 0 {
-		return ""
-	}
-	return syscall.UTF16ToString(unsafe.Slice(p, n))
 }
 
 // RECT 对应 Win32 RECT。

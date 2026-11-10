@@ -34,7 +34,6 @@ class Repository(private val bridge: Bridge) {
             Result.success(
                 WeekView(
                     schedule = WeekSchedule.from(data),
-                    stale = env.stale,
                     syncedAt = env.syncedAt,
                     // 可选字段：缺省 0 = 未知，翻页容器不得据此拦截翻页（docs/002 §3.1）。
                     lastWeek = data.optInt("lastWeek"),
@@ -102,12 +101,11 @@ class Repository(private val bridge: Bridge) {
 /**
  * 课表响应：DTO + 数据时间。
  *
- * `stale` / `syncedAt` 是查询语义的一部分（docs/002 §2），必须和 DTO 一起传给 UI，
- * 不能由展示层猜。
+ * `syncedAt` 是查询语义的一部分（docs/002 §2），必须和 DTO 一起传给 UI；
+ * 离线标记只由 `timetable.sync` 的事务维护，纯读缓存不覆写它（docs/002 §5.3）。
  */
 data class WeekView(
     val schedule: WeekSchedule,
-    val stale: Boolean,
     val syncedAt: String,
     /** 学期最后一周（`timetable.week` 的可选 `lastWeek`）；0 = 未知。 */
     val lastWeek: Int = 0,
@@ -122,7 +120,4 @@ data class WeekView(
 class AppException(val error: ApiError?) : Exception(error?.message ?: "未知错误") {
     val code: Int get() = error?.code ?: 4001
     val displayMessage: String get() = error?.message ?: "未知错误"
-
-    /** 3001 = 凭据缺失 / 本地还没同步过，需要引导用户去设置页或先刷新（docs/002 §4）。 */
-    val needsCredentials: Boolean get() = code == 3001
 }

@@ -27,7 +27,6 @@ var (
 	reWeeksBody = regexp.MustCompile(`\{([^}]*)\}`)
 	// 单双周标记：`全周` / `单周` / `双周`。
 	reParity = regexp.MustCompile(`(\{|\})(单|双)周`)
-	reAnchor = regexp.MustCompile(`(\d{1,2})-(\d{1,2})`)
 	reRange  = regexp.MustCompile(`^(\d+)\s*[-~—]\s*(\d+)$`)
 	reNumber = regexp.MustCompile(`\d+`)
 )

@@ -1,7 +1,6 @@
 package timetable
 
 import (
-	"fmt"
 	"sort"
 
 	"github.com/EchoPing07/kemaolife/internal/core/model"
@@ -109,19 +108,6 @@ func CurrentWeek(snap *Snapshot, today model.Date) int {
 		return 0
 	}
 	return week
-}
-
-// SemesterRange 返回学期起止日（第 1 周周一 ~ 最后一周周日），用于错误提示。
-func SemesterRange(snap *Snapshot) string {
-	if snap == nil || snap.Week1Monday.IsZero() {
-		return ""
-	}
-	last := snap.LastWeek
-	if last < 1 {
-		last = 1
-	}
-	end := snap.Week1Monday.AddDays(last*7 - 1)
-	return fmt.Sprintf("%s ~ %s", snap.Week1Monday, end)
 }
 
 func containsInt(list []int, want int) bool {

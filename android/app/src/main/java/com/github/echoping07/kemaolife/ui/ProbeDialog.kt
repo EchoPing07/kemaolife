@@ -189,8 +189,8 @@ private fun probeName(target: ProbeTarget): String = stringResource(
 /**
  * 字段展示顺序：已知字段按「先结论、后细节」排，未知字段排最后并按名字排序。
  *
- * `detail` 来自 `org.json.JSONObject.keys()`，顺序不保证；不定序会让同一份结果
- * 每次打开弹窗的排版都不一样。
+ * `detail` 由 `ProbeResult.from` 按白名单构造，这里再按固定顺序呈现，
+ * 避免上游字段顺序变化让同一份结果每次打开弹窗的排版都不一样。
  */
 private fun orderedDetails(detail: Map<String, String>): List<Pair<String, String>> {
     val order = listOf(

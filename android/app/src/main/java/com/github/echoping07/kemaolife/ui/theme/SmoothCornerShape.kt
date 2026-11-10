@@ -9,7 +9,6 @@ import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.LayoutDirection
-import androidx.compose.ui.unit.dp
 import kotlin.math.abs
 import kotlin.math.cos
 import kotlin.math.min
@@ -33,10 +32,6 @@ internal class SmoothCornerShape(
 
     constructor(radius: Dp) : this(
         CornerSize(radius), CornerSize(radius), CornerSize(radius), CornerSize(radius),
-    )
-
-    constructor(top: Dp, bottom: Dp) : this(
-        CornerSize(top), CornerSize(top), CornerSize(bottom), CornerSize(bottom),
     )
 
     override fun createOutline(

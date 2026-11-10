@@ -36,7 +36,6 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import com.github.echoping07.kemaolife.R
 import com.github.echoping07.kemaolife.ui.theme.AppThemeColor
 import com.github.echoping07.kemaolife.ui.theme.palettePreview
