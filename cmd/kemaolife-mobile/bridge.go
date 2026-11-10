@@ -269,6 +269,9 @@ func Call(reqJSON string) string {
 		return s.timetableDate(date)
 	case "timetable.week":
 		return s.timetableWeek(req.Week)
+	case "timetable.export":
+		// 导出整学期课表（WakeUp 课程表 CSV）：只读缓存，0 请求（docs/002 §2.1）。
+		return s.timetableExport()
 	case "timetable.probe":
 		// 设置页测试按钮：同步一次并回报耗时与课时数（docs/002 §5.3）。
 		return s.timetableProbe()
@@ -338,6 +341,22 @@ func (s *session) timetableWeek(week int) string {
 		data["lastWeek"] = result.LastWeek
 	}
 	return envelopeWithStale(s.clock.Now(), data, result.Stale, result.SyncedAt)
+}
+
+// timetableExport 导出整学期课表为 WakeUp 课程表可导入的 CSV。
+//
+// 与 timetable.week 同属 CacheOnly：导出的是「本机已有的课表」，不联网；
+// 数据时间由信封 syncedAt 给出，UI 必须一并展示——不能让用户误以为
+// 导出的是刚从教务拉下来的数据（docs/002 §5.3）。
+func (s *session) timetableExport() string {
+	result, err := app.ExportTimetableCSV(s.ctx, s.deps, s.cfg)
+	if err != nil {
+		return failure(err)
+	}
+	// 文件名与数据时间一并回带：三端不再各自拼文件名，避免出现三种命名。
+	env := model.Success(s.clock.Now(), result)
+	env.SyncedAt = result.SyncedAt
+	return encode(env)
 }
 
 // electricityReport 对应 `kemaolife electricity`（ElectricityReport）。

@@ -18,6 +18,7 @@ import com.github.echoping07.kemaolife.data.ProbeResult
 import com.github.echoping07.kemaolife.data.Repository
 import com.github.echoping07.kemaolife.data.ThemePreferences
 import com.github.echoping07.kemaolife.data.TimetableCache
+import com.github.echoping07.kemaolife.data.TimetableExport
 import com.github.echoping07.kemaolife.data.WeekSchedule
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -68,6 +69,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     private var campusJob: Job? = null
     private var campusActionJob: Job? = null
     private var probeJob: Job? = null
+    private var exportJob: Job? = null
 
     // 课表读取代次：切周 / 同步回读都可能并发，只允许最新一次写 state。
     @Volatile
@@ -343,6 +345,42 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
 
     /** 头部刷新按钮：手动动作，不受最小间隔约束。 */
     fun refreshWeek() = syncTimetable()
+
+    // ---- 导出 -------------------------------------------------------------
+
+    /**
+     * 导出整学期课表为 WakeUp 课程表 CSV（只读缓存，0 请求）。
+     *
+     * 为什么不在导出前顺手同步一次：导出是「把本机已有的课表带走」，
+     * 用户要的是现在这份数据；顺带联网会让一次手动点按变成一次可能失败的请求，
+     * 还要重新处理离线标记。数据时间随 [AppState.exportSheet] 一并展示，
+     * 用户能自己看到这份 CSV 对应哪次同步（docs/002 §5.3）。
+     */
+    fun exportTimetable() {
+        if (exportJob?.isActive == true) return
+        exportJob = viewModelScope.launch {
+            _state.update { it.copy(exportLoading = true) }
+            try {
+                val result = withContext(Dispatchers.IO) { repo.exportTimetable() }
+                result.fold(
+                    onSuccess = { export ->
+                        _state.update {
+                            it.copy(exportLoading = false, exportSheet = ExportState(export = export))
+                        }
+                    },
+                    onFailure = { ex ->
+                        _state.update { it.copy(exportLoading = false) }
+                        pushError(ex)
+                    },
+                )
+            } finally {
+                _state.update { it.copy(exportLoading = false) }
+            }
+        }
+    }
+
+    /** 用户保存完或关掉弹层：清掉手里的 CSV 正文，不长期驻留内存。 */
+    fun closeExport() = _state.update { it.copy(exportSheet = null) }
 
     // ---- 电费 -------------------------------------------------------------
 
@@ -779,6 +817,9 @@ enum class CampusAction { LOGIN, LOGOUT, RELOGIN }
 /** 设置页「测试」覆盖的功能域。 */
 enum class ProbeTarget { TIMETABLE, ELECTRICITY, CAMPUS }
 
+/** 导出弹层的瞬时状态：CSV 正文 + 文件名 + 数据时间；关掉即丢弃。 */
+data class ExportState(val export: TimetableExport)
+
 /** 一次测试的瞬时状态（弹窗打开期间有效）；id 用于淘汰过期结果。 */
 data class ProbeState(
     val id: Long = 0L,
@@ -832,6 +873,10 @@ data class AppState(
     val error: String? = null,
 
     val probe: ProbeState? = null,
+
+    /** 导出弹层：非 null 时展示文件名 / 课节数 / 数据时间与「保存」。 */
+    val exportSheet: ExportState? = null,
+    val exportLoading: Boolean = false,
 ) {
     /** 校园网动作用：offline / 已跳过探测时不允许登录 / 下线 / 重登。 */
     val campusActionsEnabled: Boolean

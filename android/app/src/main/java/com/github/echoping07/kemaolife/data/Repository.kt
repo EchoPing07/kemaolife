@@ -49,6 +49,15 @@ class Repository(private val bridge: Bridge) {
     fun testTimetable(): Result<ProbeResult> =
         bridge.call("timetable.probe").toResult { ProbeResult.from(it) }
 
+    /**
+     * `timetable.export`：导出整学期课表（WakeUp 课程表 CSV）。
+     *
+     * 只读本地快照（0 请求），与 [week] 同一条链路：导出的是本机已有的课表，
+     * 不联网、不触发刷新；数据时间由返回的 `syncedAt` 给出。
+     */
+    fun exportTimetable(): Result<TimetableExport> =
+        bridge.call("timetable.export").toResult { TimetableExport.from(it) }
+
     // ---- 电费 -------------------------------------------------------------
 
     /** `electricity.report`：一次拿余额 + 每日用量，任一失败整体报错。 */

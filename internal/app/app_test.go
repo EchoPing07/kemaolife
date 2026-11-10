@@ -615,3 +615,67 @@ func (c *countingFailHTTP) Do(*http.Request) (*http.Response, error) {
 	c.calls++
 	return nil, fmt.Errorf("network unreachable")
 }
+
+// 导出只读缓存：即使 HTTP 完全不可用也照常出 CSV，且不发任何请求（docs/002 §5.3）。
+func TestExportTimetableCSVReadsLocalSnapshot(t *testing.T) {
+	clock := testClock()
+	deps, store, _ := testDeps(clock)
+	spy := &countingFailHTTP{}
+	deps.HTTP = spy
+	seedSnapshot(t, store)
+
+	result, err := app.ExportTimetableCSV(context.Background(), deps, testConfig())
+	if err != nil {
+		t.Fatalf("导出应只读缓存: %v", err)
+	}
+	if spy.calls != 0 {
+		t.Errorf("导出不应发请求, got %d", spy.calls)
+	}
+	if !strings.HasSuffix(result.CSV, "\r\n") || !strings.Contains(result.CSV, "旧课程,4,1,2,教师甲,教室A,1-10") {
+		t.Errorf("CSV 内容不符预期:\n%q", result.CSV)
+	}
+	// 数据时间取自快照，UI 必须一并展示。
+	want := time.Date(2026, 10, 29, 21, 10, 2, 0, time.Local).Format(time.RFC3339)
+	if result.SyncedAt != want {
+		t.Errorf("syncedAt = %q, want %q", result.SyncedAt, want)
+	}
+	if result.Filename == "" || !strings.HasSuffix(result.Filename, ".csv") {
+		t.Errorf("filename = %q", result.Filename)
+	}
+	if result.LessonCount != 1 {
+		t.Errorf("lessonCount = %d, want 1", result.LessonCount)
+	}
+}
+
+// 从没同步过：回 3001 引导「先刷新一次」，与课表查询同一口径。
+func TestExportTimetableCSVWithoutSnapshot(t *testing.T) {
+	deps, _, _ := testDeps(testClock())
+	deps.HTTP = &countingFailHTTP{}
+
+	_, err := app.ExportTimetableCSV(context.Background(), deps, testConfig())
+	if model.CodeOf(err) != model.CodeCredentialMissing {
+		t.Errorf("code = %d, want %d", model.CodeOf(err), model.CodeCredentialMissing)
+	}
+}
+
+// 快照损坏是「重新同步」而不是「没配置凭据」：保留 3003。
+func TestExportTimetableCSVKeepsSnapshotErrors(t *testing.T) {
+	deps, store, _ := testDeps(testClock())
+	if err := store.Put(timetable.SnapshotStoreKey, []byte("not json")); err != nil {
+		t.Fatal(err)
+	}
+	_, err := app.ExportTimetableCSV(context.Background(), deps, testConfig())
+	if model.CodeOf(err) != model.CodeSnapshotMissing {
+		t.Errorf("code = %d, want %d", model.CodeOf(err), model.CodeSnapshotMissing)
+	}
+}
+
+// 导出不需要 HTTP 端口：纯本地动作不该被缺端口拦住。
+func TestExportTimetableCSVDoesNotRequireHTTP(t *testing.T) {
+	deps, store, _ := testDeps(testClock())
+	deps.HTTP = nil
+	seedSnapshot(t, store)
+	if _, err := app.ExportTimetableCSV(context.Background(), deps, testConfig()); err != nil {
+		t.Fatalf("导出不应要求 HTTP 端口: %v", err)
+	}
+}

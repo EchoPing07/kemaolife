@@ -472,3 +472,59 @@ func TestInitResetSnapshotClearsOldData(t *testing.T) {
 		t.Errorf("code = %v, want 3001", errObj["code"])
 	}
 }
+
+// timetable.export：只读缓存的导出 op，回带 CSV 正文 + 文件名 + 数据时间（docs/002 §2.1）。
+func TestTimetableExportReturnsCSVAndDataTime(t *testing.T) {
+	s := testSession(t, initConfig{})
+	syncedAt := time.Date(2026, 11, 9, 21, 10, 2, 0, time.Local)
+	snap := &timetable.Snapshot{
+		Version:     timetable.SnapshotVersion,
+		SyncedAt:    syncedAt,
+		Week1Monday: model.Date{Year: 2026, Month: 8, Day: 31},
+		SlotTimes:   []string{"08:30~10:00"},
+		LastWeek:    16,
+		Lessons: []timetable.Lesson{
+			{Name: "高等数学", Periods: "1-2", Weekday: 1, Weeks: []int{1, 2, 3},
+				Teacher: "张三", Location: "逸夫楼101", WeeksText: "1-3周"},
+		},
+	}
+	if err := timetable.SaveSnapshot(s.deps.Store, snap); err != nil {
+		t.Fatal(err)
+	}
+
+	env := decode(t, Call(`{"op":"timetable.export"}`))
+	if env["ok"] != true {
+		t.Fatalf("timetable.export 失败: %v", env)
+	}
+	data, _ := env["data"].(map[string]any)
+	csvText, _ := data["csv"].(string)
+	if !strings.Contains(csvText, "高等数学,1,1,2,张三,逸夫楼101,1-3") {
+		t.Errorf("csv 内容不符预期:\n%q", csvText)
+	}
+	if name, _ := data["filename"].(string); !strings.HasSuffix(name, ".csv") {
+		t.Errorf("filename = %v", data["filename"])
+	}
+	// 信封与 data 都给出数据时间：UI 要显示「导出的是哪次同步的课表」。
+	if env["syncedAt"] != formatRFC3339(syncedAt) || data["syncedAt"] != formatRFC3339(syncedAt) {
+		t.Errorf("syncedAt 口径不一致: env=%v data=%v", env["syncedAt"], data["syncedAt"])
+	}
+	if count, _ := data["lessonCount"].(float64); int(count) != 1 {
+		t.Errorf("lessonCount = %v, want 1", data["lessonCount"])
+	}
+}
+
+// 没有快照时导出回 3001（与课表查询同口径），不返回空 CSV 骗「导出成功」。
+func TestTimetableExportWithoutSnapshotReturns3001(t *testing.T) {
+	testSession(t, initConfig{})
+	env := decode(t, Call(`{"op":"timetable.export"}`))
+	if env["ok"] != false {
+		t.Fatalf("无快照必须失败: %v", env)
+	}
+	errObj, _ := env["error"].(map[string]any)
+	if code, _ := errObj["code"].(float64); int(code) != 3001 {
+		t.Errorf("code = %v, want 3001", errObj["code"])
+	}
+	if _, has := env["data"]; has {
+		t.Error("失败信封不应出现 data")
+	}
+}

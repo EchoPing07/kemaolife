@@ -59,6 +59,23 @@ data class WeekSchedule(val week: Int, val days: List<DaySchedule>) {
     }
 }
 
+/** `timetable.export` 的 data：整学期 CSV + 文件名 + 数据时间（docs/002 §2.1）。 */
+data class TimetableExport(
+    val csv: String,
+    val filename: String,
+    val syncedAt: String,
+    val lessonCount: Int,
+) {
+    companion object {
+        fun from(obj: JSONObject): TimetableExport = TimetableExport(
+            csv = obj.optString("csv"),
+            filename = obj.optString("filename"),
+            syncedAt = obj.optString("syncedAt"),
+            lessonCount = obj.optInt("lessonCount"),
+        )
+    }
+}
+
 /** `timetable.sync` 的 data：同步结果摘要（不含 Cookie）。 */
 data class SyncResult(
     val syncedAt: String,

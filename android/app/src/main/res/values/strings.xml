@@ -26,6 +26,18 @@
     <string name="detail_weeks">周次</string>
     <string name="detail_periods">第 %1$s 节</string>
 
+    <!-- 导出课表（WakeUp 课程表 CSV）。 -->
+    <string name="action_export">导出课表</string>
+    <string name="export_title">导出课表</string>
+    <string name="export_filename">文件名</string>
+    <string name="export_lessons">课节数</string>
+    <string name="export_lessons_value">%1$d 条</string>
+    <string name="export_synced_at">数据时间</string>
+    <string name="export_hint">CSV 采用 WakeUp 课程表的导入格式，保存后可在 WakeUp 里用「excel 导入」选择该文件。课表数据来自本机快照，导出不会联网。</string>
+    <string name="export_saving">保存中…</string>
+    <string name="export_saved">已保存</string>
+    <string name="export_failed">保存失败，请换一个位置再试</string>
+
     <!-- 数据时间提示：所有课表 / 电费输出都必须能说明数据来自何时。 -->
     <string name="data_synced_at">同步于 %1$s</string>
     <string name="data_stale">离线数据（同步于 %1$s）</string>

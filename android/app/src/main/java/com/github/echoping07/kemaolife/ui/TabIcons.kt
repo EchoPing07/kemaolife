@@ -146,4 +146,11 @@ internal object TabIcons {
         "M18 6l-12 12",
         "M6 6l12 12",
     ))
+
+    // Tabler `download`：导出课表（导出到用户选定的文件位置）。
+    val Export = icon("Download", listOf(
+        "M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2 -2v-2",
+        "M7 11l5 5l5 -5",
+        "M12 4l0 12",
+    ))
 }

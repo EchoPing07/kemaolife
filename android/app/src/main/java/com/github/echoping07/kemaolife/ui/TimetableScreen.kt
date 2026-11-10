@@ -16,6 +16,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -49,6 +50,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.Layout
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
@@ -150,6 +152,8 @@ internal fun TimetableScreen(state: AppState, viewModel: AppViewModel) {
             syncedAt = state.weekSyncedAt,
             onOpenWeekPicker = { showWeekPicker = true },
             onRefresh = { viewModel.refreshWeek() },
+            exporting = state.exportLoading,
+            onExport = { viewModel.exportTimetable() },
         )
 
         // 星期日期行在翻页容器**内部**：它与下面的网格属于同一周，
@@ -232,6 +236,11 @@ internal fun TimetableScreen(state: AppState, viewModel: AppViewModel) {
             text = { CourseDetail(entry = target.entry, day = target.day) },
         )
     }
+
+    // 导出弹层：确认文件名与数据时间后再落到用户选的位置（SAF，不需要存储权限）。
+    state.exportSheet?.let { sheet ->
+        TimetableExportDialog(state = sheet, onDismiss = { viewModel.closeExport() })
+    }
 }
 
 /**
@@ -303,9 +312,11 @@ private fun TimetableHeader(
     syncedAt: String,
     onOpenWeekPicker: () -> Unit,
     onRefresh: () -> Unit,
+    exporting: Boolean,
+    onExport: () -> Unit,
 ) {
-    Column(modifier = Modifier.padding(start = 16.dp, end = 6.dp, top = 2.dp)) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
+    Column(modifier = Modifier.padding(start = 16.dp, end = 6.dp)) {
+        Row(verticalAlignment = Alignment.Top) {
             Column(
                 modifier = Modifier
                     .weight(1f)
@@ -319,67 +330,104 @@ private fun TimetableHeader(
                     maxLines = 1,
                 )
                 if (week != null) {
-                    // 周次与同步时间同属可点击区，避免右侧重复一小块元信息。
-                    Row(
-                        modifier = Modifier.padding(top = 3.dp, bottom = 4.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        Text(
-                            text = buildString {
-                                if (week > 0) append(stringResource(R.string.week_only, week))
-                                if (isCurrentWeek) {
-                                    // 本周：周次右侧并排今天周几（第 5 周 周一），
-                                    // 不再重复「当前为第 N 周」——浏览周就是当前周。
-                                    if (todayWeekday.isNotBlank()) {
-                                        if (isNotEmpty()) append("  ")
-                                        append(stringResource(R.string.weekday_with_prefix, todayWeekday))
-                                    }
-                                } else {
+                    Text(
+                        text = buildString {
+                            if (week > 0) append(stringResource(R.string.week_only, week))
+                            if (isCurrentWeek) {
+                                // 本周：周次右侧并排今天周几（第 5 周 周一），
+                                // 不再重复「当前为第 N 周」——浏览周就是当前周。
+                                if (todayWeekday.isNotBlank()) {
                                     if (isNotEmpty()) append("  ")
-                                    append(
-                                        currentWeek?.let { stringResource(R.string.week_actual_current, it) }
-                                            ?: stringResource(R.string.week_not_current),
-                                    )
+                                    append(stringResource(R.string.weekday_with_prefix, todayWeekday))
                                 }
-                            },
-                            style = MaterialTheme.typography.labelLarge,
-                            // 周次与周几都用正文色：主题色在这行偏弱，容易只看见数字。
-                            color = MaterialTheme.colorScheme.onSurface,
-                            fontWeight = FontWeight.Medium,
-                            maxLines = 1,
-                        )
-                        Spacer(Modifier.weight(1f))
-                        when {
-                            stale -> MetaText(
-                                text = stringResource(R.string.data_stale_short, shortStamp(syncedAt)),
-                                emphasize = true,
-                            )
-                            syncedAt.isNotBlank() -> MetaText(
-                                stringResource(R.string.data_synced_at, shortStamp(syncedAt)),
-                            )
-                        }
-                    }
+                            } else {
+                                if (isNotEmpty()) append("  ")
+                                append(
+                                    currentWeek?.let { stringResource(R.string.week_actual_current, it) }
+                                        ?: stringResource(R.string.week_not_current),
+                                )
+                            }
+                        },
+                        style = MaterialTheme.typography.labelLarge,
+                        // 周次与周几都用正文色：主题色在这行偏弱，容易只看见数字。
+                        color = MaterialTheme.colorScheme.onSurface,
+                        fontWeight = FontWeight.Medium,
+                        maxLines = 1,
+                        modifier = Modifier.padding(top = 3.dp, bottom = 4.dp),
+                    )
                 }
             }
-            val rotation by animateFloatAsState(
-                targetValue = if (loading) 360f else 0f,
-                animationSpec = tween(500, easing = FastOutSlowInEasing),
-                label = "refreshRotation",
-            )
-            IconButton(onClick = onRefresh, enabled = !loading, modifier = Modifier.size(40.dp)) {
-                if (loading) {
-                    ExpressiveLoadingIndicator(size = 20.dp)
-                } else {
-                    Icon(
-                        imageVector = Icons.Rounded.Refresh,
+
+            // 右侧一列：图标按钮在上（导出在刷新左边），数据时间紧跟按钮下方右对齐。
+            // 按钮不参与左侧两行的高度居中：它要贴顶，时间才会落在按钮下面，
+            // 而不是被挤到日期那一行的右侧。
+            Column(horizontalAlignment = Alignment.End) {
+                val rotation by animateFloatAsState(
+                    targetValue = if (loading) 360f else 0f,
+                    animationSpec = tween(500, easing = FastOutSlowInEasing),
+                    label = "refreshRotation",
+                )
+                Row {
+                    HeaderActionButton(
+                        enabled = !exporting,
+                        loading = exporting,
+                        icon = TabIcons.Export,
+                        contentDescription = stringResource(R.string.action_export),
+                        onClick = onExport,
+                    )
+                    HeaderActionButton(
+                        enabled = !loading,
+                        loading = loading,
+                        icon = Icons.Rounded.Refresh,
                         contentDescription = stringResource(R.string.action_refresh),
-                        modifier = Modifier.size(21.dp).rotate(rotation),
+                        rotation = rotation,
+                        onClick = onRefresh,
+                    )
+                }
+                when {
+                    stale -> MetaText(
+                        text = stringResource(R.string.data_stale_short, shortStamp(syncedAt)),
+                        emphasize = true,
+                    )
+                    syncedAt.isNotBlank() -> MetaText(
+                        stringResource(R.string.data_synced_at, shortStamp(syncedAt)),
                     )
                 }
             }
         }
     }
 }
+
+/** 头部图标按钮：导出 / 刷新同构，只差图标、状态与回调。 */
+@Composable
+private fun HeaderActionButton(
+    enabled: Boolean,
+    loading: Boolean,
+    icon: ImageVector,
+    contentDescription: String,
+    onClick: () -> Unit,
+    rotation: Float = 0f,
+) {
+    IconButton(onClick = onClick, enabled = enabled, modifier = Modifier.size(40.dp)) {
+        // 40dp 的点击框内图标是垂直居中的；整列已贴顶，再抬 5dp 才与日期那一行对齐，
+        // 否则图标会明显低于日期字。
+        if (loading) {
+            ExpressiveLoadingIndicator(size = 20.dp, modifier = Modifier.offset(y = HeaderIconLift))
+        } else {
+            Icon(
+                imageVector = icon,
+                contentDescription = contentDescription,
+                modifier = Modifier
+                    .size(21.dp)
+                    .offset(y = HeaderIconLift)
+                    .rotate(rotation),
+            )
+        }
+    }
+}
+
+/** 头部图标在 40dp 点击框内的上抬量，让图标与日期那一行视觉对齐。 */
+private val HeaderIconLift = (-5).dp
 
 /** 周次与手势翻页共用同一个页码序列，弹窗不再引入另一套日期选择状态。 */
 @Composable

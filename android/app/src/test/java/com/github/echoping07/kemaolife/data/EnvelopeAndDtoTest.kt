@@ -171,4 +171,45 @@ class EnvelopeAndDtoTest {
         assertEquals(10, week.week)
         assertEquals(7, week.days.size)
     }
+
+    @Test
+    fun `导出信封投影出 csv 与数据时间`() {
+        // 导出 op 的 data：csv 正文逐字透传，文件名与数据时间由 Go 侧给出，
+        // Kotlin 只做字段投影，不重排、不重拼（AGENTS A3）。
+        val header = "课程名称,星期,开始节数,结束节数,老师,地点,周数"
+        val row = "高等数学,1,1,2,无,无,1-5"
+        val csv = BOM + header + CRLF + row + CRLF
+
+        val envelope = JSONObject()
+            .put("ok", true)
+            .put("ts", "2026-11-09T22:00:00+08:00")
+            .put("syncedAt", "2026-11-09T21:10:02+08:00")
+            .put(
+                "data",
+                JSONObject()
+                    .put("csv", csv)
+                    .put("filename", "kemaolife-timetable-20261109-2110.csv")
+                    .put("syncedAt", "2026-11-09T21:10:02+08:00")
+                    .put("lessonCount", 1),
+            )
+
+        val env = Envelope.parse(envelope.toString())
+        assertTrue(env.ok)
+        val export = TimetableExport.from(env.data!!)
+        // 正文逐字透传：BOM 与 CRLF 都不能被 Kotlin 侧改写，否则 WPS 打开会乱码 / 串行。
+        assertEquals(csv, export.csv)
+        assertTrue(export.csv.startsWith(BOM + header))
+        assertTrue(export.csv.contains(row))
+        assertEquals("kemaolife-timetable-20261109-2110.csv", export.filename)
+        assertEquals("2026-11-09T21:10:02+08:00", export.syncedAt)
+        assertEquals(1, export.lessonCount)
+    }
+
+    private companion object {
+        /** UTF-8 BOM：用码位构造，源码里不出现不可见字符。 */
+        val BOM: String = String(Character.toChars(0xFEFF))
+
+        /** CRLF：同上，避免源码里的行尾被编辑器 / 版本控制改写。 */
+        val CRLF: String = String(charArrayOf(13.toChar(), 10.toChar()))
+    }
 }
