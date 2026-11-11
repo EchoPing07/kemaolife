@@ -2,14 +2,14 @@ package com.github.echoping07.kemaolife.ui
 
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedContent
-import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.spring
+import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.togetherWith
-import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -22,25 +22,18 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import com.github.echoping07.kemaolife.ui.theme.smoothShape
 import androidx.compose.foundation.text.KeyboardOptions
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.rounded.ArrowBack
 import androidx.compose.material.icons.automirrored.rounded.KeyboardArrowRight
 import androidx.compose.material.icons.rounded.CheckCircle
 import androidx.compose.material.icons.rounded.DateRange
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
-import androidx.compose.material3.TextButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -72,100 +65,81 @@ private enum class SettingsPage { ROOT, EDUCATION, ELECTRICITY, CAMPUS, APPEARAN
 internal fun SettingsScreen(state: AppState, viewModel: AppViewModel) {
     var pageName by rememberSaveable { mutableStateOf(SettingsPage.ROOT.name) }
     val page = SettingsPage.valueOf(pageName)
+    val motionEnabled = animationsEnabled()
     BackHandler(enabled = page != SettingsPage.ROOT) { pageName = SettingsPage.ROOT.name }
 
-    Column(modifier = Modifier.fillMaxSize()) {
-        Row(
-            modifier = Modifier.padding(start = 12.dp, end = 16.dp, top = 8.dp, bottom = 4.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            if (page != SettingsPage.ROOT) {
-                IconButton(
-                    onClick = { pageName = SettingsPage.ROOT.name },
-                    modifier = Modifier
-                        .size(40.dp)
-                        .clip(CircleShape)
-                        .background(MaterialTheme.colorScheme.surfaceContainerHigh),
-                ) {
-                    Icon(
-                        imageVector = Icons.AutoMirrored.Rounded.ArrowBack,
-                        contentDescription = stringResource(R.string.action_back),
-                        tint = MaterialTheme.colorScheme.onSurface,
-                        modifier = Modifier.size(20.dp),
-                    )
-                }
-                Spacer(Modifier.width(8.dp))
-            } else {
-                Spacer(Modifier.width(4.dp))
-            }
-            Text(
-                text = stringResource(
-                    when (page) {
-                        SettingsPage.ROOT -> R.string.tab_settings
-                        SettingsPage.EDUCATION -> R.string.section_edu
-                        SettingsPage.ELECTRICITY -> R.string.section_power
-                        SettingsPage.CAMPUS -> R.string.section_portal
-                        SettingsPage.APPEARANCE -> R.string.settings_appearance
-                        SettingsPage.ABOUT -> R.string.settings_about
-                    },
-                ),
-                style = MaterialTheme.typography.headlineMedium,
-                fontWeight = FontWeight.Bold,
-                modifier = Modifier
-                    .weight(1f)
-                    .padding(horizontal = 6.dp, vertical = 8.dp),
-            )
-            // 教务 / 电费 / 校园网页右上角都给一个「测试」，点击即开弹窗跑对应链路。
-            val testTarget = when (page) {
-                SettingsPage.EDUCATION -> ProbeTarget.TIMETABLE
-                SettingsPage.ELECTRICITY -> ProbeTarget.ELECTRICITY
-                SettingsPage.CAMPUS -> ProbeTarget.CAMPUS
-                else -> null
-            }
-            if (testTarget != null) {
-                IconButton(onClick = { viewModel.runProbe(testTarget) }) {
-                    Icon(
-                        imageVector = TabIcons.Flask,
-                        contentDescription = stringResource(R.string.action_test),
-                        tint = MaterialTheme.colorScheme.primary,
-                        modifier = Modifier.size(22.dp),
-                    )
-                }
-            }
-        }
+    Box(modifier = Modifier.fillMaxSize()) {
 
-        AnimatedContent(
-            targetState = page,
-            transitionSpec = {
-                if (targetState != SettingsPage.ROOT) {
-                    slideInHorizontally(tween(280, easing = FastOutSlowInEasing)) { it / 3 } +
-                        fadeIn(tween(220)) togetherWith
-                        slideOutHorizontally(tween(280, easing = FastOutSlowInEasing)) { -it / 5 } +
-                        fadeOut(tween(160))
-                } else {
-                    slideInHorizontally(tween(280, easing = FastOutSlowInEasing)) { -it / 3 } +
-                        fadeIn(tween(220)) togetherWith
-                        slideOutHorizontally(tween(280, easing = FastOutSlowInEasing)) { it / 5 } +
-                        fadeOut(tween(160))
-                }
+        val title = stringResource(
+            when (page) {
+                SettingsPage.ROOT -> R.string.tab_settings
+                SettingsPage.EDUCATION -> R.string.section_edu
+                SettingsPage.ELECTRICITY -> R.string.section_power
+                SettingsPage.CAMPUS -> R.string.section_portal
+                SettingsPage.APPEARANCE -> R.string.settings_appearance
+                SettingsPage.ABOUT -> R.string.settings_about
             },
-            label = "settingsNavigation",
-            modifier = Modifier.weight(1f),
-        ) { currentPage ->
-            when (currentPage) {
-                SettingsPage.ROOT -> SettingsOverview(
-                    state = state,
-                    onEducation = { pageName = SettingsPage.EDUCATION.name },
-                    onElectricity = { pageName = SettingsPage.ELECTRICITY.name },
-                    onCampus = { pageName = SettingsPage.CAMPUS.name },
-                    onAppearance = { pageName = SettingsPage.APPEARANCE.name },
-                    onAbout = { pageName = SettingsPage.ABOUT.name },
-                )
-                SettingsPage.EDUCATION -> EducationSettings(state, viewModel)
-                SettingsPage.ELECTRICITY -> ElectricitySettings(state, viewModel)
-                SettingsPage.CAMPUS -> CampusSettings(state, viewModel)
-                SettingsPage.APPEARANCE -> AppearanceScreen(state, viewModel)
-                SettingsPage.ABOUT -> AboutScreen()
+        )
+        val testTarget = when (page) {
+            SettingsPage.EDUCATION -> ProbeTarget.TIMETABLE
+            SettingsPage.ELECTRICITY -> ProbeTarget.ELECTRICITY
+            SettingsPage.CAMPUS -> ProbeTarget.CAMPUS
+            else -> null
+        }
+        // 进入 / 返回都使用新的顶栏与滚动状态，不继承上一页的折叠高度。
+        androidx.compose.runtime.key(page) {
+            CollapsingScreen(
+                title = title,
+                onBack = if (page == SettingsPage.ROOT) null else ({ pageName = SettingsPage.ROOT.name }),
+                actions = {
+                    if (testTarget != null) {
+                        IconButton(onClick = { viewModel.runProbe(testTarget) }, modifier = Modifier.size(40.dp)) {
+                            Icon(
+                                imageVector = TabIcons.PlugConnected,
+                                contentDescription = stringResource(R.string.action_test),
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.size(23.dp),
+                            )
+                        }
+                    }
+                },
+                modifier = Modifier.fillMaxSize(),
+            ) {
+                AnimatedContent(
+                    targetState = page,
+                    transitionSpec = {
+                        if (!motionEnabled) {
+                            androidx.compose.animation.EnterTransition.None togetherWith
+                                androidx.compose.animation.ExitTransition.None
+                        } else {
+                            val direction = if (targetState != SettingsPage.ROOT) 1 else -1
+                            slideInHorizontally(
+                                animationSpec = spring(dampingRatio = 0.86f, stiffness = Spring.StiffnessMediumLow),
+                            ) { direction * it / 4 } + fadeIn(tween(180)) togetherWith
+                                slideOutHorizontally(
+                                    animationSpec = spring(dampingRatio = 1f, stiffness = Spring.StiffnessMedium),
+                                ) { -direction * it / 6 } + fadeOut(tween(120))
+                        }
+                    },
+                    label = "settingsNavigation",
+                    modifier = Modifier.fillMaxSize(),
+                ) { currentPage ->
+                    when (currentPage) {
+                        SettingsPage.ROOT -> SettingsOverview(
+                            state = state,
+                            onEducation = { pageName = SettingsPage.EDUCATION.name },
+                            onElectricity = { pageName = SettingsPage.ELECTRICITY.name },
+                            onCampus = { pageName = SettingsPage.CAMPUS.name },
+                            onAppearance = { pageName = SettingsPage.APPEARANCE.name },
+                            onAbout = { pageName = SettingsPage.ABOUT.name },
+                        )
+                        SettingsPage.EDUCATION -> EducationSettings(state, viewModel)
+                        SettingsPage.ELECTRICITY -> ElectricitySettings(state, viewModel)
+                        SettingsPage.CAMPUS -> CampusSettings(state, viewModel)
+                        SettingsPage.APPEARANCE -> AppearanceScreen(state, viewModel)
+                        SettingsPage.ABOUT -> AboutScreen()
+                    }
+                }
             }
         }
     }
@@ -180,114 +154,62 @@ private fun SettingsOverview(
     onAppearance: () -> Unit,
     onAbout: () -> Unit,
 ) {
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .verticalScroll(rememberScrollState())
-            .padding(horizontal = 16.dp),
-    ) {
-        Surface(
-            color = MaterialTheme.colorScheme.surfaceContainerLow,
-            shape = MaterialTheme.shapes.extraLarge,
-            modifier = Modifier.fillMaxWidth().padding(top = 4.dp),
-        ) {
-            Row(
-                modifier = Modifier.padding(18.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Box(
-                    modifier = Modifier
-                        .size(42.dp)
-                        .clip(CircleShape)
-                        .background(MaterialTheme.colorScheme.primaryContainer),
-                    contentAlignment = Alignment.Center,
-                ) {
-                    Icon(
-                        imageVector = TabIcons.Lock,
-                        contentDescription = null,
-                        tint = MaterialTheme.colorScheme.primary,
-                        modifier = Modifier.size(20.dp),
-                    )
-                }
-                Spacer(Modifier.width(14.dp))
-                Column {
-                    Text(
-                        text = "硬件级加密存储",
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.Bold,
-                    )
-                    Text(
-                        text = stringResource(R.string.credentials_keystore_hint),
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.padding(top = 2.dp),
-                    )
-                }
-            }
-        }
-
+    Column(modifier = Modifier.fillMaxWidth()) {
         SettingsGroupLabel(stringResource(R.string.settings_accounts))
-        Card(
-            modifier = Modifier.fillMaxWidth(),
-            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow),
-            shape = MaterialTheme.shapes.extraLarge,
-        ) {
-            SettingsDestination(
-                icon = Icons.Rounded.DateRange,
-                title = stringResource(R.string.section_edu),
-                supporting = if (state.credentials.studentId.isBlank()) {
-                    stringResource(R.string.settings_not_configured)
-                } else {
-                    stringResource(R.string.settings_edu_configured)
-                },
-                onClick = onEducation,
-            )
-            ThinDivider(modifier = Modifier.padding(horizontal = 18.dp))
-            SettingsDestination(
-                icon = TabIcons.Bolt,
-                title = stringResource(R.string.section_power),
-                supporting = if (state.credentials.electricityAccount.isBlank()) {
-                    stringResource(R.string.settings_not_configured)
-                } else if (state.credentials.electricityInheritEducation) {
-                    stringResource(R.string.settings_electricity_inherited)
-                } else {
-                    stringResource(R.string.settings_electricity_own_account)
-                },
-                onClick = onElectricity,
-            )
-            ThinDivider(modifier = Modifier.padding(horizontal = 18.dp))
-            SettingsDestination(
-                icon = TabIcons.Campus,
-                title = stringResource(R.string.section_portal),
-                supporting = if (state.credentials.campusUser.isBlank()) {
-                    stringResource(R.string.settings_not_configured)
-                } else {
-                    stringResource(R.string.settings_campus_configured)
-                },
-                onClick = onCampus,
-            )
-        }
+        SettingsDestination(
+            icon = Icons.Rounded.DateRange,
+            title = stringResource(R.string.section_edu),
+            supporting = if (state.credentials.studentId.isBlank()) {
+                stringResource(R.string.settings_not_configured)
+            } else {
+                stringResource(R.string.settings_edu_configured)
+            },
+            onClick = onEducation,
+            position = GroupPosition.FIRST,
+        )
+        GroupGap()
+        SettingsDestination(
+            icon = TabIcons.Bolt,
+            title = stringResource(R.string.section_power),
+            supporting = if (state.credentials.electricityAccount.isBlank()) {
+                stringResource(R.string.settings_not_configured)
+            } else if (state.credentials.electricityInheritEducation) {
+                stringResource(R.string.settings_electricity_inherited)
+            } else {
+                stringResource(R.string.settings_electricity_own_account)
+            },
+            onClick = onElectricity,
+            position = GroupPosition.MIDDLE,
+        )
+        GroupGap()
+        SettingsDestination(
+            icon = TabIcons.Campus,
+            title = stringResource(R.string.section_portal),
+            supporting = if (state.credentials.campusUser.isBlank()) {
+                stringResource(R.string.settings_not_configured)
+            } else {
+                stringResource(R.string.settings_campus_configured)
+            },
+            onClick = onCampus,
+            position = GroupPosition.LAST,
+        )
 
         SettingsGroupLabel(stringResource(R.string.settings_personalization))
-        Card(
-            modifier = Modifier.fillMaxWidth(),
-            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow),
-            shape = MaterialTheme.shapes.extraLarge,
-        ) {
-            SettingsDestination(
-                icon = TabIcons.Appearance,
-                title = stringResource(R.string.settings_appearance),
-                supporting = stringResource(R.string.settings_theme_color),
-                onClick = onAppearance,
-            )
-            ThinDivider(modifier = Modifier.padding(horizontal = 18.dp))
-            SettingsDestination(
-                icon = TabIcons.Info,
-                title = stringResource(R.string.settings_about),
-                supporting = stringResource(R.string.settings_about_hint),
-                onClick = onAbout,
-            )
-        }
+        SettingsDestination(
+            icon = TabIcons.Appearance,
+            title = stringResource(R.string.settings_appearance),
+            supporting = stringResource(R.string.settings_theme_hint),
+            onClick = onAppearance,
+            position = GroupPosition.FIRST,
+        )
+        GroupGap()
+        SettingsDestination(
+            icon = TabIcons.Info,
+            title = stringResource(R.string.settings_about),
+            supporting = stringResource(R.string.settings_about_hint),
+            onClick = onAbout,
+            position = GroupPosition.LAST,
+        )
 
         if (!state.bridgeReady && state.bridgeError != null) {
             Text(
@@ -312,60 +234,43 @@ private fun SettingsGroupLabel(text: String) {
     )
 }
 
-/** MD3 Expressive list 项：整洁卡片内部条目。 */
+/** MD3 Expressive list 项：无圆形图标底，以 3dp 缝隙区分条目。 */
 @Composable
-private fun SettingsDestination(
+internal fun SettingsDestination(
     icon: ImageVector,
     title: String,
     supporting: String,
     onClick: () -> Unit,
+    position: GroupPosition = GroupPosition.ONLY,
 ) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clickable(onClick = onClick)
-            .padding(horizontal = 18.dp, vertical = 16.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        BoxIcon(icon)
-        Spacer(Modifier.width(16.dp))
-        Column(modifier = Modifier.weight(1f)) {
-            Text(
-                text = title,
-                style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.SemiBold,
+    GroupSurface(position = position, onClick = onClick, modifier = Modifier.fillMaxWidth()) {
+        Row(
+            modifier = Modifier.padding(start = 20.dp, end = 16.dp, top = 17.dp, bottom = 17.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Icon(
+                imageVector = icon,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.size(25.dp),
             )
-            Text(
-                text = supporting,
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.padding(top = 2.dp),
+            Spacer(Modifier.width(18.dp))
+            Column(modifier = Modifier.weight(1f)) {
+                Text(text = title, style = MaterialTheme.typography.titleMedium)
+                Text(
+                    text = supporting,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(top = 3.dp),
+                )
+            }
+            Icon(
+                imageVector = Icons.AutoMirrored.Rounded.KeyboardArrowRight,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.size(21.dp),
             )
         }
-        Icon(
-            imageVector = Icons.AutoMirrored.Rounded.KeyboardArrowRight,
-            contentDescription = null,
-            tint = MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier.size(20.dp),
-        )
-    }
-}
-
-@Composable
-private fun BoxIcon(icon: ImageVector) {
-    Box(
-        modifier = Modifier
-            .size(40.dp)
-            .clip(CircleShape)
-            .background(MaterialTheme.colorScheme.surfaceContainerHigh),
-        contentAlignment = Alignment.Center,
-    ) {
-        Icon(
-            imageVector = icon,
-            contentDescription = null,
-            tint = MaterialTheme.colorScheme.primary,
-            modifier = Modifier.size(20.dp),
-        )
     }
 }
 
@@ -375,15 +280,13 @@ private fun EducationSettings(state: AppState, viewModel: AppViewModel) {
     var password by remember { mutableStateOf("") }
     var interval by remember(state.timetableInterval) { mutableStateOf(state.timetableInterval.toString()) }
     LaunchedEffect(state.settingsSaved) {
-        if (state.settingsSaved) {
-            password = ""
-            viewModel.consumeSettingsSaved()
-        }
+        if (state.settingsSaved) password = ""
     }
     CredentialForm(
         title = stringResource(R.string.section_edu),
         note = stringResource(R.string.edu_note),
         saved = state.settingsSaved,
+        onSavedShown = viewModel::consumeSettingsSaved,
         onSave = {
             // 增量提交：基于 ViewModel 里的最新凭据合并，不拿组合时的快照覆盖其它域。
             val student = studentId.trim()
@@ -391,7 +294,7 @@ private fun EducationSettings(state: AppState, viewModel: AppViewModel) {
             viewModel.updateCredentials {
                 it.copy(studentId = student, eduPassword = pwd)
             }
-            // 间隔先落到偏好，保证「保存」与「应用间隔」两条路径结果一致（含钳制）。
+            // 间隔与本页凭据一起保存；保存按钮负责钳制并回填实际值。
             viewModel.setTimetableInterval(
                 interval.toIntOrNull() ?: AppPreferences.DEFAULT_TIMETABLE_INTERVAL,
             )
@@ -425,10 +328,6 @@ private fun EducationSettings(state: AppState, viewModel: AppViewModel) {
                 AppPreferences.MIN_TIMETABLE_INTERVAL,
             ),
             minimum = AppPreferences.MIN_TIMETABLE_INTERVAL,
-            onCommit = { minutes ->
-                viewModel.setTimetableInterval(minutes)
-                interval = viewModel.state.value.timetableInterval.toString()
-            },
         )
     }
 }
@@ -458,6 +357,7 @@ private fun ElectricitySettings(state: AppState, viewModel: AppViewModel) {
         title = stringResource(R.string.section_power),
         note = stringResource(R.string.power_no_password_hint),
         saved = state.settingsSaved,
+        onSavedShown = viewModel::consumeSettingsSaved,
         onSave = {
             val useInherit = inherit
             val own = if (useInherit) "" else ownAccount.trim()
@@ -517,10 +417,6 @@ private fun ElectricitySettings(state: AppState, viewModel: AppViewModel) {
                 AppPreferences.MIN_ELECTRICITY_INTERVAL,
             ),
             minimum = AppPreferences.MIN_ELECTRICITY_INTERVAL,
-            onCommit = { minutes ->
-                viewModel.setElectricityInterval(minutes)
-                interval = viewModel.state.value.electricityInterval.toString()
-            },
         )
     }
 }
@@ -533,15 +429,13 @@ private fun CampusSettings(state: AppState, viewModel: AppViewModel) {
         mutableStateOf(state.credentials.campusFingerprint)
     }
     LaunchedEffect(state.settingsSaved) {
-        if (state.settingsSaved) {
-            password = ""
-            viewModel.consumeSettingsSaved()
-        }
+        if (state.settingsSaved) password = ""
     }
     CredentialForm(
         title = stringResource(R.string.section_portal),
         note = stringResource(R.string.campus_independent_hint),
         saved = state.settingsSaved,
+        onSavedShown = viewModel::consumeSettingsSaved,
         onSave = {
             val account = user.trim()
             val pwd = password
@@ -591,60 +485,22 @@ private fun CredentialForm(
     title: String,
     note: String,
     saved: Boolean,
+    onSavedShown: () -> Unit,
     onSave: () -> Unit,
     content: @Composable ColumnScope.() -> Unit,
 ) {
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .verticalScroll(rememberScrollState())
-            .padding(horizontal = 16.dp),
-    ) {
-        // 安全提示横幅卡片
-        Surface(
-            color = MaterialTheme.colorScheme.surfaceContainerLow,
-            shape = MaterialTheme.shapes.extraLarge,
-            modifier = Modifier.fillMaxWidth().padding(top = 4.dp),
-        ) {
-            Row(
-                modifier = Modifier.padding(18.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Box(
-                    modifier = Modifier
-                        .size(38.dp)
-                        .clip(CircleShape)
-                        .background(MaterialTheme.colorScheme.primaryContainer),
-                    contentAlignment = Alignment.Center,
-                ) {
-                    Icon(
-                        imageVector = TabIcons.Lock,
-                        contentDescription = null,
-                        tint = MaterialTheme.colorScheme.primary,
-                        modifier = Modifier.size(18.dp),
-                    )
-                }
-                Spacer(Modifier.width(14.dp))
-                Text(
-                    text = note,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    lineHeight = 18.sp,
-                    modifier = Modifier.weight(1f),
-                )
-            }
-        }
+    Column(modifier = Modifier.fillMaxWidth()) {
+        Text(
+            text = note,
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            lineHeight = 18.sp,
+            modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+        )
 
-        Spacer(Modifier.height(16.dp))
+        Spacer(Modifier.height(12.dp))
 
-        // 表单卡片容器
-        Card(
-            modifier = Modifier.fillMaxWidth(),
-            colors = androidx.compose.material3.CardDefaults.cardColors(
-                containerColor = MaterialTheme.colorScheme.surfaceContainerLow,
-            ),
-            shape = MaterialTheme.shapes.extraLarge,
-        ) {
+        GroupSurface(position = GroupPosition.ONLY, modifier = Modifier.fillMaxWidth()) {
             Column(modifier = Modifier.padding(horizontal = 20.dp, vertical = 22.dp)) {
                 Text(
                     text = title,
@@ -656,6 +512,12 @@ private fun CredentialForm(
             }
         }
 
+        LaunchedEffect(saved) {
+            if (saved) {
+                kotlinx.coroutines.delay(1800)
+                onSavedShown()
+            }
+        }
         if (saved) {
             Row(
                 modifier = Modifier.padding(top = 16.dp, start = 8.dp),
@@ -698,7 +560,7 @@ private fun CredentialForm(
  * 最小值约束的间隔输入框。
  *
  * 键入过程中不做钳制（否则输入「50」会在敲 5 时被改成下限），
- * 失焦 / 完成时提交，由 ViewModel 按上下限钳制并回填实际生效值。
+ * 与本页凭据一起点击「保存」时钳制并回填实际生效值。
  */
 @Composable
 private fun IntervalField(
@@ -707,7 +569,6 @@ private fun IntervalField(
     label: String,
     supporting: String,
     minimum: Int,
-    onCommit: (Int) -> Unit,
 ) {
     val parsed = value.toIntOrNull()
     val invalid = parsed != null && parsed < minimum
@@ -724,16 +585,6 @@ private fun IntervalField(
             supporting
         },
     )
-    // 键盘「完成」不会触发焦点变化，所以再加一个显式的提交按钮，
-    // 保证改完立刻生效、并且能看到被钳制后的实际值。
-    Row(
-        modifier = Modifier.fillMaxWidth().padding(top = 6.dp),
-        horizontalArrangement = androidx.compose.foundation.layout.Arrangement.End,
-    ) {
-        TextButton(onClick = { onCommit(parsed ?: minimum) }) {
-            Text(stringResource(R.string.action_apply_interval))
-        }
-    }
 }
 
 /** 设置页开关行：标题 + 说明 + Switch，整行可点。 */

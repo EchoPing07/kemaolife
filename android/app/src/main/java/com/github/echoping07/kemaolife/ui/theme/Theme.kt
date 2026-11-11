@@ -1,5 +1,6 @@
 package com.github.echoping07.kemaolife.ui.theme
 
+import android.os.Build
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.isSystemInDarkTheme
@@ -8,18 +9,23 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Shapes
 import androidx.compose.material3.Typography
 import androidx.compose.material3.darkColorScheme
+import androidx.compose.material3.dynamicDarkColorScheme
+import androidx.compose.material3.dynamicLightColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.toArgb
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.github.echoping07.kemaolife.ui.animationsEnabled
 import androidx.core.graphics.ColorUtils
+import com.github.echoping07.kemaolife.data.THEME_MODE_DARK
+import com.github.echoping07.kemaolife.data.THEME_MODE_LIGHT
+import com.github.echoping07.kemaolife.data.isDarkTheme
+import com.github.echoping07.kemaolife.data.normalizeThemeColor
 
-/**
- * 公开的 Material Design 3 基础种子色彩体系。
- * 不照搬特定第三方应用的私有配色，采用公开规范的色阶与通用命名。
- */
+/** 公开的 Material Design 3 基础种子色彩体系。 */
 internal enum class AppThemeColor(
     val label: String,
     val color: Color,
@@ -35,70 +41,28 @@ internal enum class AppThemeColor(
     MONOCHROME("板岩灰", Color(0xFF545F71), Color(0xFF5C5F62), Color(0xFF685B58)),
 }
 
-/** 为色盘轮盘提供的四象限预览配色 (主色、主容器、次容器、三级容器)。 */
-internal data class PalettePreview(
-    val primary: Color,
-    val primaryContainer: Color,
-    val secondaryContainer: Color,
-    val tertiaryContainer: Color,
-)
+/** 预览与实际主题共用生成逻辑，确保容器色和深色色阶一致。 */
+internal fun AppThemeColor.previewColorScheme(dark: Boolean, amoled: Boolean = false): ColorScheme =
+    presetColorScheme(this, dark, amoled)
 
-internal fun AppThemeColor.palettePreview(dark: Boolean): PalettePreview {
-    val pArgb = color.toArgb()
-    val sArgb = secondarySeed.toArgb()
-    val tArgb = tertiarySeed.toArgb()
-
-    val p = if (dark) ColorUtils.blendARGB(pArgb, android.graphics.Color.WHITE, 0.42f)
-    else ColorUtils.blendARGB(pArgb, android.graphics.Color.BLACK, 0.08f)
-
-    val pContainer = if (dark) ColorUtils.blendARGB(pArgb, android.graphics.Color.BLACK, 0.48f)
-    else ColorUtils.blendARGB(pArgb, android.graphics.Color.WHITE, 0.82f)
-
-    val sContainer = if (dark) ColorUtils.blendARGB(sArgb, android.graphics.Color.BLACK, 0.45f)
-    else ColorUtils.blendARGB(sArgb, android.graphics.Color.WHITE, 0.84f)
-
-    val tContainer = if (dark) ColorUtils.blendARGB(tArgb, android.graphics.Color.BLACK, 0.45f)
-    else ColorUtils.blendARGB(tArgb, android.graphics.Color.WHITE, 0.85f)
-
-    return PalettePreview(
-        primary = Color(p),
-        primaryContainer = Color(pContainer),
-        secondaryContainer = Color(sContainer),
-        tertiaryContainer = Color(tContainer),
-    )
-}
-
-@Composable
-private fun animatedColor(target: Color): Color =
-    animateColorAsState(target, tween(260), label = "themeColor").value
-
-@Composable
-private fun appColorScheme(theme: AppThemeColor, dark: Boolean): ColorScheme {
+private fun presetColorScheme(theme: AppThemeColor, dark: Boolean, amoled: Boolean): ColorScheme {
     val argb = theme.color.toArgb()
     val secArgb = theme.secondarySeed.toArgb()
     val tertArgb = theme.tertiarySeed.toArgb()
 
     val primary = if (dark) ColorUtils.blendARGB(argb, android.graphics.Color.WHITE, 0.42f)
     else ColorUtils.blendARGB(argb, android.graphics.Color.BLACK, 0.08f)
-
     val container = if (dark) ColorUtils.blendARGB(argb, android.graphics.Color.BLACK, 0.48f)
     else ColorUtils.blendARGB(argb, android.graphics.Color.WHITE, 0.82f)
-
     val secondary = if (dark) ColorUtils.blendARGB(secArgb, android.graphics.Color.WHITE, 0.38f)
     else ColorUtils.blendARGB(secArgb, android.graphics.Color.BLACK, 0.06f)
-
     val secContainer = if (dark) ColorUtils.blendARGB(secArgb, android.graphics.Color.BLACK, 0.45f)
     else ColorUtils.blendARGB(secArgb, android.graphics.Color.WHITE, 0.84f)
-
     val tertiary = if (dark) ColorUtils.blendARGB(tertArgb, android.graphics.Color.WHITE, 0.38f)
     else ColorUtils.blendARGB(tertArgb, android.graphics.Color.BLACK, 0.06f)
-
     val tertContainer = if (dark) ColorUtils.blendARGB(tertArgb, android.graphics.Color.BLACK, 0.45f)
     else ColorUtils.blendARGB(tertArgb, android.graphics.Color.WHITE, 0.85f)
 
-    // MD3 Expressive 规范中，浅色模式下页面背景使用柔和低饱和度的浅灰底色 (F3F4F6)，
-    // 而卡片与组件提升到纯白 (FFFFFF，surfaceContainerLow)，从而让内容从底色上自然脱颖而出，
-    // 消除“背景亮白刺眼、组件反而灰暗凹陷”的明度倒置问题。
     val base = if (dark) {
         darkColorScheme(
             background = Color(0xFF0F1113),
@@ -128,22 +92,87 @@ private fun appColorScheme(theme: AppThemeColor, dark: Boolean): ColorScheme {
             outlineVariant = Color(0xFFC4C7CC),
         )
     }
-    return base.copy(
-        primary = animatedColor(Color(primary)),
-        onPrimary = animatedColor(if (dark) Color(0xFF101418) else Color.White),
-        primaryContainer = animatedColor(Color(container)),
-        onPrimaryContainer = animatedColor(if (dark) Color(0xFFEAF2F8) else Color(primary).darken(0.38f)),
-        secondary = animatedColor(Color(secondary)),
-        onSecondary = animatedColor(if (dark) Color(0xFF101418) else Color.White),
-        secondaryContainer = animatedColor(Color(secContainer)),
-        onSecondaryContainer = animatedColor(if (dark) Color(0xFFEAF2F8) else Color(secondary).darken(0.38f)),
-        tertiary = animatedColor(Color(tertiary)),
-        tertiaryContainer = animatedColor(Color(tertContainer)),
-        onTertiaryContainer = animatedColor(if (dark) Color(0xFFFFE9BD) else Color(tertiary).darken(0.38f)),
+    val colored = base.copy(
+        primary = Color(primary),
+        onPrimary = if (dark) Color(0xFF101418) else Color.White,
+        primaryContainer = Color(container),
+        onPrimaryContainer = if (dark) Color(0xFFEAF2F8) else Color(primary).darken(0.38f),
+        secondary = Color(secondary),
+        onSecondary = if (dark) Color(0xFF101418) else Color.White,
+        secondaryContainer = Color(secContainer),
+        onSecondaryContainer = if (dark) Color(0xFFEAF2F8) else Color(secondary).darken(0.38f),
+        tertiary = Color(tertiary),
+        tertiaryContainer = Color(tertContainer),
+        onTertiaryContainer = if (dark) Color(0xFFFFE9BD) else Color(tertiary).darken(0.38f),
     )
+    return if (dark && amoled) colored.withAmoledSurfaces() else colored
 }
 
+/** 只覆盖深色背景与表面层级；动态主色、内容色和其它角色保持原样。 */
+private fun ColorScheme.withAmoledSurfaces(): ColorScheme = copy(
+    background = Color.Black,
+    surface = Color.Black,
+    surfaceDim = Color.Black,
+    surfaceContainerLowest = Color.Black,
+    surfaceContainerLow = Color(0xFF080808),
+    surfaceContainer = Color(0xFF101010),
+    surfaceContainerHigh = Color(0xFF181818),
+    surfaceContainerHighest = Color(0xFF202020),
+)
+
 private fun Color.darken(amount: Float) = Color(ColorUtils.blendARGB(toArgb(), android.graphics.Color.BLACK, amount))
+
+@Composable
+private fun animatedColor(target: Color, enabled: Boolean): Color =
+    animateColorAsState(
+        targetValue = target,
+        animationSpec = if (enabled) tween(260) else tween(0),
+        label = "themeColor",
+    ).value
+
+/** 整个色板一起过渡，包括动态取色、深浅色和 AMOLED 表面层级。 */
+@Composable
+private fun animatedColorScheme(target: ColorScheme): ColorScheme {
+    val enabled = animationsEnabled()
+    return target.copy(
+        primary = animatedColor(target.primary, enabled),
+        onPrimary = animatedColor(target.onPrimary, enabled),
+        primaryContainer = animatedColor(target.primaryContainer, enabled),
+        onPrimaryContainer = animatedColor(target.onPrimaryContainer, enabled),
+        inversePrimary = animatedColor(target.inversePrimary, enabled),
+        secondary = animatedColor(target.secondary, enabled),
+        onSecondary = animatedColor(target.onSecondary, enabled),
+        secondaryContainer = animatedColor(target.secondaryContainer, enabled),
+        onSecondaryContainer = animatedColor(target.onSecondaryContainer, enabled),
+        tertiary = animatedColor(target.tertiary, enabled),
+        onTertiary = animatedColor(target.onTertiary, enabled),
+        tertiaryContainer = animatedColor(target.tertiaryContainer, enabled),
+        onTertiaryContainer = animatedColor(target.onTertiaryContainer, enabled),
+        background = animatedColor(target.background, enabled),
+        onBackground = animatedColor(target.onBackground, enabled),
+        surface = animatedColor(target.surface, enabled),
+        onSurface = animatedColor(target.onSurface, enabled),
+        surfaceVariant = animatedColor(target.surfaceVariant, enabled),
+        onSurfaceVariant = animatedColor(target.onSurfaceVariant, enabled),
+        surfaceTint = animatedColor(target.surfaceTint, enabled),
+        inverseSurface = animatedColor(target.inverseSurface, enabled),
+        inverseOnSurface = animatedColor(target.inverseOnSurface, enabled),
+        error = animatedColor(target.error, enabled),
+        onError = animatedColor(target.onError, enabled),
+        errorContainer = animatedColor(target.errorContainer, enabled),
+        onErrorContainer = animatedColor(target.onErrorContainer, enabled),
+        outline = animatedColor(target.outline, enabled),
+        outlineVariant = animatedColor(target.outlineVariant, enabled),
+        scrim = animatedColor(target.scrim, enabled),
+        surfaceBright = animatedColor(target.surfaceBright, enabled),
+        surfaceDim = animatedColor(target.surfaceDim, enabled),
+        surfaceContainer = animatedColor(target.surfaceContainer, enabled),
+        surfaceContainerHigh = animatedColor(target.surfaceContainerHigh, enabled),
+        surfaceContainerHighest = animatedColor(target.surfaceContainerHighest, enabled),
+        surfaceContainerLow = animatedColor(target.surfaceContainerLow, enabled),
+        surfaceContainerLowest = animatedColor(target.surfaceContainerLowest, enabled),
+    )
+}
 
 private val AppTypography = Typography().let { base ->
     Typography(
@@ -157,7 +186,6 @@ private val AppTypography = Typography().let { base ->
     )
 }
 
-// 全面升级 MD3 Expressive 圆角规格，卡片升级至 28dp 超大连续圆角
 private val AppShapes = Shapes(
     extraSmall = smoothShape(8.dp),
     small = smoothShape(12.dp),
@@ -169,12 +197,26 @@ private val AppShapes = Shapes(
 @Composable
 fun KemaolifeTheme(
     themeColor: String = AppThemeColor.BLUE.name,
+    /** 兼容旧调用；新的 themeMode 未显式传入时沿用这个有效深色值。 */
     darkTheme: Boolean = isSystemInDarkTheme(),
+    themeMode: String = if (darkTheme) THEME_MODE_DARK else THEME_MODE_LIGHT,
+    dynamicColor: Boolean = false,
+    amoled: Boolean = false,
     content: @Composable () -> Unit,
 ) {
-    val theme = AppThemeColor.entries.firstOrNull { it.name == themeColor } ?: AppThemeColor.BLUE
+    val dark = isDarkTheme(themeMode, darkTheme)
+    val theme = AppThemeColor.entries.firstOrNull { it.name == normalizeThemeColor(themeColor) }
+        ?: AppThemeColor.BLUE
+    val context = LocalContext.current
+    val target = when {
+        dynamicColor && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S -> {
+            val dynamic = if (dark) dynamicDarkColorScheme(context) else dynamicLightColorScheme(context)
+            if (dark && amoled) dynamic.withAmoledSurfaces() else dynamic
+        }
+        else -> presetColorScheme(theme, dark, amoled)
+    }
     MaterialTheme(
-        colorScheme = appColorScheme(theme, darkTheme),
+        colorScheme = animatedColorScheme(target),
         typography = AppTypography,
         shapes = AppShapes,
         content = content,

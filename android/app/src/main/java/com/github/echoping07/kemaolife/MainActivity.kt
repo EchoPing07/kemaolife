@@ -11,7 +11,8 @@ import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.scaleIn
-import androidx.compose.animation.scaleOut
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.RowScope
@@ -42,6 +43,7 @@ import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.runtime.DisposableEffect
 import com.github.echoping07.kemaolife.ui.AppOpenGate
+import com.github.echoping07.kemaolife.ui.animationsEnabled
 import com.github.echoping07.kemaolife.ui.AppViewModel
 import com.github.echoping07.kemaolife.ui.MoreScreen
 import com.github.echoping07.kemaolife.ui.ProbeDialog
@@ -59,7 +61,12 @@ class MainActivity : ComponentActivity() {
         enableEdgeToEdge()
         setContent {
             val state by viewModel.state.collectAsStateWithLifecycle()
-            KemaolifeTheme(themeColor = state.themeColor) {
+            KemaolifeTheme(
+                themeColor = state.themeColor,
+                themeMode = state.themeMode,
+                dynamicColor = state.dynamicColor,
+                amoled = state.amoled,
+            ) {
                 AppRoot(viewModel)
             }
         }
@@ -73,6 +80,7 @@ private fun AppRoot(viewModel: AppViewModel) {
     val state by viewModel.state.collectAsStateWithLifecycle()
     var tab by rememberSaveable { mutableStateOf(Tab.TIMETABLE) }
     val snackbar = remember { SnackbarHostState() }
+    val motionEnabled = animationsEnabled()
 
     // 回到前台也算「每次打开」：首帧缓存由 ViewModel 构造函数同步给出，
     // 这里只负责触发那一轮无条件联网。注册 observer 时 Activity 可能已处于 RESUMED，
@@ -124,20 +132,26 @@ private fun AppRoot(viewModel: AppViewModel) {
                         // 切回课表时按最小间隔补一次同步（打开 App 本身是特殊自动，不受限）。
                         viewModel.maybeAutoSync()
                     },
+                    motionEnabled = motionEnabled,
                     label = stringResource(R.string.tab_timetable),
-                    icon = { Icon(TabIcons.Timetable, contentDescription = null) },
+                    icon = TabIcons.Timetable,
+                    selectedIcon = TabIcons.TimetableFilled,
                 )
                 NavItem(
                     selected = tab == Tab.MORE,
                     onClick = { tab = Tab.MORE },
+                    motionEnabled = motionEnabled,
                     label = stringResource(R.string.tab_more),
-                    icon = { Icon(TabIcons.More, contentDescription = null) },
+                    icon = TabIcons.More,
+                    selectedIcon = TabIcons.MoreFilled,
                 )
                 NavItem(
                     selected = tab == Tab.SETTINGS,
                     onClick = { tab = Tab.SETTINGS },
+                    motionEnabled = motionEnabled,
                     label = stringResource(R.string.tab_settings),
-                    icon = { Icon(TabIcons.Settings, contentDescription = null) },
+                    icon = TabIcons.Settings,
+                    selectedIcon = TabIcons.SettingsFilled,
                 )
             }
         },
@@ -150,9 +164,16 @@ private fun AppRoot(viewModel: AppViewModel) {
             AnimatedContent(
                 targetState = tab,
                 transitionSpec = {
-                    (fadeIn(tween(240, delayMillis = 40)) +
-                        scaleIn(tween(280, easing = FastOutSlowInEasing), initialScale = 0.985f)) togetherWith
-                        (fadeOut(tween(140)) + scaleOut(tween(180), targetScale = 0.99f))
+                    val direction = if (targetState.ordinal > initialState.ordinal) 1 else -1
+                    if (motionEnabled) {
+                        (fadeIn(tween(200, delayMillis = 30)) +
+                            slideInHorizontally(tween(300, easing = FastOutSlowInEasing)) { direction * it / 18 } +
+                            scaleIn(tween(300, easing = FastOutSlowInEasing), initialScale = 0.985f)) togetherWith
+                            (fadeOut(tween(120)) + slideOutHorizontally(tween(220)) { -direction * it / 28 })
+                    } else {
+                        androidx.compose.animation.EnterTransition.None togetherWith
+                            androidx.compose.animation.ExitTransition.None
+                    }
                 },
                 label = "tabTransition",
             ) { currentTab ->
@@ -170,13 +191,30 @@ private fun AppRoot(viewModel: AppViewModel) {
 private fun RowScope.NavItem(
     selected: Boolean,
     onClick: () -> Unit,
+    motionEnabled: Boolean,
     label: String,
-    icon: @Composable () -> Unit,
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    selectedIcon: androidx.compose.ui.graphics.vector.ImageVector,
 ) {
     NavigationBarItem(
         selected = selected,
         onClick = onClick,
-        icon = icon,
+        icon = {
+            AnimatedContent(
+                targetState = selected,
+                transitionSpec = {
+                    if (motionEnabled) {
+                        fadeIn(tween(180)) togetherWith fadeOut(tween(120))
+                    } else {
+                        androidx.compose.animation.EnterTransition.None togetherWith
+                            androidx.compose.animation.ExitTransition.None
+                    }
+                },
+                label = "navigationIcon",
+            ) { isSelected ->
+                Icon(if (isSelected) selectedIcon else icon, contentDescription = null)
+            }
+        },
         label = { Text(label) },
         colors = NavigationBarItemDefaults.colors(
             selectedIconColor = MaterialTheme.colorScheme.onSecondaryContainer,

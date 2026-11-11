@@ -1,5 +1,6 @@
 package com.github.echoping07.kemaolife.ui
 
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.PathFillType
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.StrokeCap
@@ -14,14 +15,14 @@ import androidx.compose.ui.unit.dp
  * https://github.com/tabler/tabler-icons/tree/main/icons/outline
  */
 internal object TabIcons {
-    private fun icon(name: String, paths: List<String>): ImageVector =
+    private fun icon(name: String, paths: List<String>, filled: Boolean = false): ImageVector =
         ImageVector.Builder(name, 24.dp, 24.dp, 24f, 24f).apply {
             paths.forEach { data ->
                 // addPath 需要 List<PathNode>；官方 SVG 路径串先由 addPathNodes 解析（VectorKt）。
                 addPath(
                     pathData = addPathNodes(data),
-                    fill = null,
-                    stroke = SolidColor(androidx.compose.ui.graphics.Color.Black),
+                    fill = if (filled) SolidColor(Color.Black) else null,
+                    stroke = if (filled) null else SolidColor(Color.Black),
                     strokeLineWidth = 2f,
                     strokeLineCap = StrokeCap.Round,
                     strokeLineJoin = StrokeJoin.Round,
@@ -44,11 +45,27 @@ internal object TabIcons {
         "M15 4h4a1 1 0 0 1 1 1v2a1 1 0 0 1 -1 1h-4a1 1 0 0 1 -1 -1v-2a1 1 0 0 1 1 -1",
     ))
 
-    val Settings = icon("AdjustmentsHorizontal", listOf(
-        "M12 6a2 2 0 1 0 4 0a2 2 0 1 0 -4 0", "M4 6h8", "M16 6h4",
-        "M6 12a2 2 0 1 0 4 0a2 2 0 1 0 -4 0", "M4 12h2", "M10 12h10",
-        "M15 18a2 2 0 1 0 4 0a2 2 0 1 0 -4 0", "M4 18h11", "M19 18h1",
+    val Settings = icon("Settings", listOf(
+        "M10.325 4.317c.426 -1.756 2.924 -1.756 3.35 0a1.724 1.724 0 0 0 2.573 1.066c1.543 -.94 3.31 .826 2.37 2.37a1.724 1.724 0 0 0 1.065 2.572c1.756 .426 1.756 2.924 0 3.35a1.724 1.724 0 0 0 -1.066 2.573c.94 1.543 -.826 3.31 -2.37 2.37a1.724 1.724 0 0 0 -2.572 1.065c-.426 1.756 -2.924 1.756 -3.35 0a1.724 1.724 0 0 0 -2.573 -1.066c-1.543 .94 -3.31 -.826 -2.37 -2.37a1.724 1.724 0 0 0 -1.065 -2.572c-1.756 -.426 -1.756 -2.924 0 -3.35a1.724 1.724 0 0 0 1.066 -2.573c-.94 -1.543 .826 -3.31 2.37 -2.37c1 .608 2.296 .07 2.572 -1.065z",
+        "M9 12a3 3 0 1 0 6 0a3 3 0 0 0 -6 0",
     ))
+
+    val TimetableFilled = icon("CalendarWeekFilled", listOf(
+        "M16 2c.183 0 .355 .05 .502 .135l.033 .02c.28 .177 .465 .49 .465 .845v1h1a3 3 0 0 1 2.995 2.824l.005 .176v12a3 3 0 0 1 -2.824 2.995l-.176 .005h-12a3 3 0 0 1 -2.995 -2.824l-.005 -.176v-12a3 3 0 0 1 2.824 -2.995l.176 -.005h1v-1a1 1 0 0 1 .514 -.874l.093 -.046l.066 -.025l.1 -.029l.107 -.019l.12 -.007q .083 0 .161 .013l.122 .029l.04 .012l.06 .023c.328 .135 .568 .44 .61 .806l.007 .117v1h6v-1a1 1 0 0 1 1 -1m3 7h-14v9.625c0 .705 .386 1.286 .883 1.366l.117 .009h12c.513 0 .936 -.53 .993 -1.215l.007 -.16z",
+        "M9.015 13a1 1 0 0 1 -1 1a1.001 1.001 0 1 1 -.005 -2c.557 0 1.005 .448 1.005 1",
+        "M13.015 13a1 1 0 0 1 -1 1a1.001 1.001 0 1 1 -.005 -2c.557 0 1.005 .448 1.005 1",
+        "M17.02 13a1 1 0 0 1 -1 1a1.001 1.001 0 1 1 -.005 -2c.557 0 1.005 .448 1.005 1",
+        "M12.02 15a1 1 0 0 1 0 2a1.001 1.001 0 1 1 -.005 -2z",
+        "M9.015 16a1 1 0 0 1 -1 1a1.001 1.001 0 1 1 -.005 -2c.557 0 1.005 .448 1.005 1",
+    ), filled = true)
+
+    val MoreFilled = icon("LayoutDashboardFilled", listOf(
+        "M9 3a2 2 0 0 1 2 2v6a2 2 0 0 1 -2 2h-4a2 2 0 0 1 -2 -2v-6a2 2 0 0 1 2 -2zm0 12a2 2 0 0 1 2 2v2a2 2 0 0 1 -2 2h-4a2 2 0 0 1 -2 -2v-2a2 2 0 0 1 2 -2zm10 -4a2 2 0 0 1 2 2v6a2 2 0 0 1 -2 2h-4a2 2 0 0 1 -2 -2v-6a2 2 0 0 1 2 -2zm0 -8a2 2 0 0 1 2 2v2a2 2 0 0 1 -2 2h-4a2 2 0 0 1 -2 -2v-2a2 2 0 0 1 2 -2z",
+    ), filled = true)
+
+    val SettingsFilled = icon("SettingsFilled", listOf(
+        "M14.647 4.081a.724 .724 0 0 0 1.08 .448c2.439 -1.485 5.23 1.305 3.745 3.744a.724 .724 0 0 0 .447 1.08c2.775 .673 2.775 4.62 0 5.294a.724 .724 0 0 0 -.448 1.08c1.485 2.439 -1.305 5.23 -3.744 3.745a.724 .724 0 0 0 -1.08 .447c-.673 2.775 -4.62 2.775 -5.294 0a.724 .724 0 0 0 -1.08 -.448c-2.439 1.485 -5.23 -1.305 -3.745 -3.744a.724 .724 0 0 0 -.447 -1.08c-2.775 -.673 -2.775 -4.62 0 -5.294a.724 .724 0 0 0 .448 -1.08c-1.485 -2.439 1.305 -5.23 3.744 -3.745a.722 .722 0 0 0 1.08 -.447c.673 -2.775 4.62 -2.775 5.294 0zm-2.647 4.919a3 3 0 1 0 0 6a3 3 0 0 0 0 -6",
+    ), filled = true)
 
     val Appearance = icon("Palette", listOf(
         "M12 21a9 9 0 0 1 0 -18c4.97 0 9 3.582 9 8c0 1.06 -.474 2.078 -1.318 2.828c-.844 .75 -1.989 1.172 -3.182 1.172h-2.5a2 2 0 0 0 -1 3.75a1.3 1.3 0 0 1 -1 2.25",
@@ -121,12 +138,6 @@ internal object TabIcons {
 
     // 图标集只装了 material-icons-core，没有 Science / Bolt / ErrorOutline；
     // 与其为此再引一个图标依赖（AGENTS A5），不如沿用这里的 Tabler 路径。
-    val Flask = icon("Flask", listOf(
-        "M9 3l6 0",
-        "M10 9l4 0",
-        "M9 3v6l-4.5 7.5a2 2 0 0 0 1.7 3h9.6a2 2 0 0 0 1.7 -3l-4.5 -7.5v-6",
-    ))
-
     val Bolt = icon("Bolt", listOf(
         "M13 3v7h6l-8 11v-7h-6l8 -11z",
     ))
@@ -145,6 +156,38 @@ internal object TabIcons {
     val Clear = icon("X", listOf(
         "M18 6l-12 12",
         "M6 6l12 12",
+    ))
+
+    val Refresh = icon("Refresh", listOf(
+        "M20 11a8.1 8.1 0 0 0 -15.5 -2m-.5 -4v4h4",
+        "M4 13a8.1 8.1 0 0 0 15.5 2m.5 4v-4h-4",
+    ))
+
+    val Check = icon("Check", listOf("M5 12l5 5l10 -10"))
+    val ExclamationMark = icon("ExclamationMark", listOf("M12 19v.01", "M12 15v-10"))
+    val PlugConnected = icon("PlugConnected", listOf(
+        "M7 12l5 5l-1.5 1.5a3.536 3.536 0 1 1 -5 -5l1.5 -1.5",
+        "M17 12l-5 -5l1.5 -1.5a3.536 3.536 0 1 1 5 5l-1.5 1.5",
+        "M3 21l2.5 -2.5", "M18.5 5.5l2.5 -2.5", "M10 11l-2 2", "M13 14l-2 2",
+    ))
+    val Login = icon("Login", listOf(
+        "M14 8v-2a2 2 0 0 0 -2 -2h-7a2 2 0 0 0 -2 2v12a2 2 0 0 0 2 2h7a2 2 0 0 0 2 -2v-2",
+        "M20 12h-13", "M18 9l3 3l-3 3",
+    ))
+    val Logout = icon("Logout", listOf(
+        "M14 8v-2a2 2 0 0 0 -2 -2h-7a2 2 0 0 0 -2 2v12a2 2 0 0 0 2 2h7a2 2 0 0 0 2 -2v-2",
+        "M7 12h14", "M18 9l3 3l-3 3",
+    ))
+    val Moon = icon("Moon", listOf(
+        "M12 3c.132 0 .263 0 .393 0a7.5 7.5 0 0 0 7.92 12.446a9 9 0 1 1 -8.313 -12.454z",
+    ))
+    val Contrast = icon("Contrast", listOf(
+        "M3 12a9 9 0 1 0 18 0a9 9 0 1 0 -18 0", "M12 3a9 9 0 0 1 0 18",
+    ))
+    val Sparkles = icon("Sparkles", listOf(
+        "M16 18a2 2 0 0 1 2 2a2 2 0 0 1 2 -2a2 2 0 0 1 -2 -2a2 2 0 0 1 -2 2",
+        "M8 18a2 2 0 0 1 2 2a2 2 0 0 1 2 -2a2 2 0 0 1 -2 -2a2 2 0 0 1 -2 2",
+        "M12 4l1.6 4.4l4.4 1.6l-4.4 1.6l-1.6 4.4l-1.6 -4.4l-4.4 -1.6l4.4 -1.6z",
     ))
 
     // Tabler `download`：导出课表（导出到用户选定的文件位置）。

@@ -74,6 +74,12 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     private var probeJob: Job? = null
     private var exportJob: Job? = null
 
+    // 图标结果态只跟随显式手动点击；自动查询共用 Job，但不能反复闪成功提示。
+    internal val timetableFeedback = ActionFeedbackController()
+    internal val electricityFeedback = ActionFeedbackController()
+    internal val campusFeedback = ActionFeedbackController()
+    internal val campusActionFeedback = ActionFeedbackController()
+
     // 课表读取代次：切周 / 同步回读都可能并发，只允许最新一次写 state。
     @Volatile
     private var weekSeq = 0L
@@ -127,6 +133,9 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
             it.copy(
                 credentials = credentials,
                 themeColor = themePreferences.load(),
+                themeMode = themePreferences.loadMode(),
+                dynamicColor = themePreferences.loadDynamicColor(),
+                amoled = themePreferences.loadAmoled(),
             )
         }
         // 老版本用 wall-clock 存时间戳，升到单调时钟后那些值全部失效，重查一次即可。
@@ -281,7 +290,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     /** 联网同步一次课表；成功后回读缓存覆盖界面。不做间隔判断。 */
-    fun syncTimetable() {
+    internal fun syncTimetable(feedbackId: Long? = null) {
         if (syncJob?.isActive == true) return
         syncJob = viewModelScope.launch {
             try {
@@ -295,10 +304,17 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                         // 用户在同步期间切了周也不跳过刷新：否则刚同步成功却不更新界面；
                         // 回读当前用户正在看的那一周，并用 generation 防止旧结果覆盖新选择。
                         val desired = _state.value.week?.week ?: 0
-                        fetchWeek(desired, fromSync = true)
+                        val refreshed = fetchWeek(desired, fromSync = true)
+                        feedbackId?.let {
+                            timetableFeedback.complete(
+                                it,
+                                if (refreshed) ActionFeedback.SUCCESS else ActionFeedback.FAILURE,
+                            )
+                        }
                         _state.update { it.copy(timetableSyncing = false) }
                     },
                     onFailure = { ex ->
+                        feedbackId?.let { timetableFeedback.complete(it, actionFeedbackFor(ex)) }
                         _state.update { s ->
                             s.copy(
                                 timetableSyncing = false,
@@ -331,7 +347,16 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     /** 头部刷新按钮：手动动作，不受最小间隔约束。 */
-    fun refreshWeek() = syncTimetable()
+    fun refreshWeek() {
+        if (syncJob?.isActive == true) return
+        val c = _state.value.credentials
+        if (c.studentId.isBlank() || c.eduPassword.isBlank()) {
+            timetableFeedback.begin()
+            timetableFeedback.complete(timetableFeedback.generation, ActionFeedback.UNAVAILABLE)
+            return
+        }
+        syncTimetable(timetableFeedback.begin())
+    }
 
     // ---- 导出 -------------------------------------------------------------
 
@@ -372,7 +397,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     // ---- 电费 -------------------------------------------------------------
 
     /** 电费查询并渲染；不做间隔判断（手动刷新与「测试」都走这里）。 */
-    fun refreshElectricity() {
+    private fun queryElectricity(feedbackId: Long? = null) {
         if (electricityJob?.isActive == true) return
         electricityJob = viewModelScope.launch {
             try {
@@ -382,12 +407,14 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                 preferences.lastElectricityAt = attemptedAt
                 result.fold(
                     onSuccess = { report ->
+                        feedbackId?.let { electricityFeedback.complete(it, ActionFeedback.SUCCESS) }
                         withContext(Dispatchers.IO) { cacheElectricityReport(report) }
                         _state.update {
                             it.copy(electricity = report, electricityLoading = false)
                         }
                     },
                     onFailure = { ex ->
+                        feedbackId?.let { electricityFeedback.complete(it, actionFeedbackFor(ex)) }
                         // 失败不清缓存：旧电费照常可看。
                         _state.update { it.copy(electricityLoading = false) }
                         pushError(ex)
@@ -410,7 +437,17 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
             return
         }
         if (_state.value.credentials.electricityAccount.isBlank()) return
-        refreshElectricity()
+        queryElectricity()
+    }
+
+    fun refreshElectricity() {
+        if (electricityJob?.isActive == true) return
+        if (_state.value.credentials.electricityAccount.isBlank()) {
+            electricityFeedback.begin()
+            electricityFeedback.complete(electricityFeedback.generation, ActionFeedback.UNAVAILABLE)
+            return
+        }
+        queryElectricity(electricityFeedback.begin())
     }
 
     // ---- 校园网 -----------------------------------------------------------
@@ -447,8 +484,13 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     fun refreshCampusStatus(manual: Boolean = true) {
         if (!campusAllowed()) {
             applyCampusOfflineSkipped()
+            if (manual) {
+                campusFeedback.begin()
+                campusFeedback.complete(campusFeedback.generation, ActionFeedback.UNAVAILABLE)
+            }
             return
         }
+        val feedbackId = if (manual) campusFeedback.begin() else null
         campusJob?.cancel()
         campusJob = viewModelScope.launch {
             try {
@@ -456,9 +498,11 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                 val result = withContext(Dispatchers.IO) { repo.campusStatus() }
                 result.fold(
                     onSuccess = { status ->
+                        feedbackId?.let { campusFeedback.complete(it, ActionFeedback.SUCCESS) }
                         _state.update { it.copy(campus = status, campusLoading = false) }
                     },
                     onFailure = { ex ->
+                        feedbackId?.let { campusFeedback.complete(it, actionFeedbackFor(ex)) }
                         applyCampusFailure(ex)
                         if (manual) pushError(ex)
                     },
@@ -471,10 +515,15 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
 
     /** 手动登录 / 下线 / 重登；不再失败后复探（会绕过 WiFi 门控且多一次请求）。 */
     fun campusAction(action: CampusAction) {
-        if (!campusAllowed()) {
-            applyCampusOfflineSkipped()
+        if (campusActionJob?.isActive == true) return
+        val c = _state.value.credentials
+        if (c.campusUser.isBlank() || c.campusPassword.isBlank() || !campusAllowed()) {
+            if (!campusAllowed()) applyCampusOfflineSkipped()
+            campusActionFeedback.begin()
+            campusActionFeedback.complete(campusActionFeedback.generation, ActionFeedback.UNAVAILABLE)
             return
         }
+        val feedbackId = campusActionFeedback.begin()
         campusActionJob?.cancel()
         campusActionJob = viewModelScope.launch {
             try {
@@ -488,9 +537,11 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                 }
                 result.fold(
                     onSuccess = { status ->
+                        campusActionFeedback.complete(feedbackId, ActionFeedback.SUCCESS)
                         _state.update { it.copy(campus = status, campusActing = null) }
                     },
                     onFailure = { ex ->
+                        campusActionFeedback.complete(feedbackId, actionFeedbackFor(ex))
                         pushError(ex)
                         applyCampusFailure(ex)
                         _state.update { it.copy(campusActing = null) }
@@ -700,6 +751,21 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         _state.update { it.copy(themeColor = value) }
     }
 
+    fun setThemeMode(value: String) {
+        themePreferences.saveMode(value)
+        _state.update { it.copy(themeMode = themePreferences.loadMode()) }
+    }
+
+    fun setDynamicColor(value: Boolean) {
+        themePreferences.saveDynamicColor(value)
+        _state.update { it.copy(dynamicColor = value) }
+    }
+
+    fun setAmoled(value: Boolean) {
+        themePreferences.saveAmoled(value)
+        _state.update { it.copy(amoled = value) }
+    }
+
     fun consumeSettingsSaved() = _state.update { it.copy(settingsSaved = false) }
 
     fun consumeError() = _state.update { it.copy(error = null) }
@@ -832,6 +898,9 @@ data class AppState(
     val campusWifiOnly: Boolean = true,
 
     val themeColor: String = "BLUE",
+    val themeMode: String = "SYSTEM",
+    val dynamicColor: Boolean = false,
+    val amoled: Boolean = false,
     val settingsSaved: Boolean = false,
     val error: String? = null,
 

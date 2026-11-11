@@ -29,8 +29,6 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.rounded.Refresh
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.AlertDialog
@@ -48,7 +46,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.Layout
@@ -89,6 +86,7 @@ internal fun TimetableScreen(state: AppState, viewModel: AppViewModel) {
     var showWeekPicker by remember { mutableStateOf(false) }
     var detail by remember { mutableStateOf<CourseTarget?>(null) }
     val week = state.week
+    viewModel.timetableFeedback.ExpireFeedback()
 
     // 翻页序列：页码只由周次序列换算，UI 不自己算周（AGENTS A3）。
     // 还没有课表时不给 pager 任何页，直接展示空态。
@@ -148,6 +146,7 @@ internal fun TimetableScreen(state: AppState, viewModel: AppViewModel) {
             // 取不到（缓存还没覆盖今天）就留空，不自己按日期推算星期（AGENTS A3）。
             todayWeekday = week?.days?.firstOrNull { it.date == state.todayDate }?.weekdayCn.orEmpty(),
             loading = state.weekLoading || state.timetableSyncing,
+            refreshResult = viewModel.timetableFeedback.result,
             stale = state.weekStale,
             syncedAt = state.weekSyncedAt,
             onOpenWeekPicker = { showWeekPicker = true },
@@ -308,6 +307,7 @@ private fun TimetableHeader(
     isCurrentWeek: Boolean,
     todayWeekday: String,
     loading: Boolean,
+    refreshResult: ActionFeedback?,
     stale: Boolean,
     syncedAt: String,
     onOpenWeekPicker: () -> Unit,
@@ -362,11 +362,6 @@ private fun TimetableHeader(
             // 按钮不参与左侧两行的高度居中：它要贴顶，时间才会落在按钮下面，
             // 而不是被挤到日期那一行的右侧。
             Column(horizontalAlignment = Alignment.End) {
-                val rotation by animateFloatAsState(
-                    targetValue = if (loading) 360f else 0f,
-                    animationSpec = tween(500, easing = FastOutSlowInEasing),
-                    label = "refreshRotation",
-                )
                 Row {
                     HeaderActionButton(
                         enabled = !exporting,
@@ -375,13 +370,12 @@ private fun TimetableHeader(
                         contentDescription = stringResource(R.string.action_export),
                         onClick = onExport,
                     )
-                    HeaderActionButton(
-                        enabled = !loading,
+                    RefreshAction(
                         loading = loading,
-                        icon = Icons.Rounded.Refresh,
+                        result = refreshResult,
                         contentDescription = stringResource(R.string.action_refresh),
-                        rotation = rotation,
                         onClick = onRefresh,
+                        modifier = Modifier.size(40.dp).offset(y = HeaderIconLift),
                     )
                 }
                 when {
@@ -406,7 +400,6 @@ private fun HeaderActionButton(
     icon: ImageVector,
     contentDescription: String,
     onClick: () -> Unit,
-    rotation: Float = 0f,
 ) {
     IconButton(onClick = onClick, enabled = enabled, modifier = Modifier.size(40.dp)) {
         // 40dp 的点击框内图标是垂直居中的；整列已贴顶，再抬 5dp 才与日期那一行对齐，
@@ -419,8 +412,7 @@ private fun HeaderActionButton(
                 contentDescription = contentDescription,
                 modifier = Modifier
                     .size(21.dp)
-                    .offset(y = HeaderIconLift)
-                    .rotate(rotation),
+                    .offset(y = HeaderIconLift),
             )
         }
     }

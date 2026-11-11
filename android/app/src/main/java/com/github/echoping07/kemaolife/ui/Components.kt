@@ -1,5 +1,6 @@
 package com.github.echoping07.kemaolife.ui
 
+import android.provider.Settings
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.RepeatMode
@@ -24,11 +25,11 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -93,23 +94,24 @@ internal fun SectionCard(
     }
 }
 
-/** 主 tab 标题：MD3 Expressive 大字重标题。 */
-@Composable
-internal fun ScreenTitle(text: String, modifier: Modifier = Modifier) {
-    Text(
-        text = text,
-        style = MaterialTheme.typography.headlineLarge,
-        fontWeight = FontWeight.Bold,
-        modifier = modifier.padding(start = 8.dp, top = 16.dp, bottom = 14.dp),
-    )
-}
-
 /**
  * MD3 Expressive 标准的灵动波浪环形加载指示器 (Circular Wavy Progress Indicator)。
  *
  * 结合 Material 官方非对称缓动伸缩与流体环形正弦波浪，
  * 彻底告别传统死板细圈，展现富有弹性质感的现代科技感。
  */
+/** 系统关闭动画时不运行无限装饰动画；状态与静态加载提示仍保留。 */
+@Composable
+internal fun animationsEnabled(): Boolean {
+    val context = LocalContext.current
+    // 每次组合读取系统开关，设置变更后无需重启；读取自身不创建持续动画。
+    return Settings.Global.getFloat(
+        context.contentResolver,
+        Settings.Global.ANIMATOR_DURATION_SCALE,
+        1f,
+    ) != 0f
+}
+
 @Composable
 internal fun ExpressiveLoadingIndicator(
     modifier: Modifier = Modifier,
@@ -117,6 +119,18 @@ internal fun ExpressiveLoadingIndicator(
     size: Dp = 22.dp,
     strokeWidth: Dp = if (size < 22.dp) 2.2.dp else 3.2.dp,
 ) {
+    if (!animationsEnabled()) {
+        Canvas(modifier = modifier.size(size)) {
+            drawArc(
+                color = color,
+                startAngle = -90f,
+                sweepAngle = 270f,
+                useCenter = false,
+                style = Stroke(strokeWidth.toPx(), cap = StrokeCap.Round),
+            )
+        }
+        return
+    }
     val transition = rememberInfiniteTransition(label = "expressiveWavy")
 
     // 基础自转相位 (0 ~ 360)
@@ -269,16 +283,6 @@ internal fun EntryRow(entry: Entry) {
             }
         }
     }
-}
-
-/** 小节之间的浅分隔线。 */
-@Composable
-internal fun ThinDivider(modifier: Modifier = Modifier) {
-    HorizontalDivider(
-        modifier = modifier,
-        thickness = 0.5.dp,
-        color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f),
-    )
 }
 
 /** 通用「加载中」占位：使用 M3 Expressive 形变加载动效。 */

@@ -21,19 +21,14 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.CircleShape
 import com.github.echoping07.kemaolife.ui.theme.smoothShape
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.rounded.Refresh
+import androidx.compose.material.icons.rounded.KeyboardArrowDown
 import androidx.compose.material3.Button
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -41,6 +36,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -58,7 +54,7 @@ import java.util.Locale
  *
  * 排版按「一眼能读」组织：余额是整个页面的视觉重心（headline 大数字），
  * 其余信息降级为 label；同类信息不再各包一张描边卡片，而是统一 filled card +
- * 内部横向分隔（M3 的 card 本身已经有容器色，再套描边会显得廉价）。
+ * 同类信息用留白与分离容器组织，不靠描边和横线堆层次。
  */
 @Composable
 internal fun MoreScreen(
@@ -69,15 +65,11 @@ internal fun MoreScreen(
     // 只把稳定依赖放进 effect：ViewModel 自己读最新 state，不捕获整个 AppState。
     // 进入本页的自动查询按最小间隔节流；手动刷新按钮不受约束。
     LaunchedEffect(Unit) { viewModel.onEnterMore() }
+    viewModel.electricityFeedback.ExpireFeedback()
+    viewModel.campusFeedback.ExpireFeedback()
+    viewModel.campusActionFeedback.ExpireFeedback()
 
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .verticalScroll(rememberScrollState())
-            .padding(horizontal = 16.dp),
-    ) {
-        ScreenTitle(stringResource(R.string.tab_more))
-
+    CollapsingScreen(title = stringResource(R.string.tab_more)) {
         if (state.credentials.studentId.isBlank() || state.credentials.electricityAccount.isBlank()) {
             SetupCard(
                 missingEducation = state.credentials.studentId.isBlank(),
@@ -89,10 +81,10 @@ internal fun MoreScreen(
 
         TodayOverview(state)
 
-        Spacer(Modifier.height(12.dp))
+        Spacer(Modifier.height(16.dp))
         ElectricityCard(state, viewModel)
 
-        Spacer(Modifier.height(12.dp))
+        Spacer(Modifier.height(16.dp))
         CampusCard(state, viewModel)
 
         Spacer(Modifier.height(28.dp))
@@ -137,8 +129,7 @@ private fun TodayOverview(state: AppState) {
 
             day.entries.isEmpty() -> PlaceholderRow(stringResource(R.string.timetable_no_class))
 
-            else -> day.entries.forEachIndexed { index, entry ->
-                if (index > 0) ThinDivider()
+            else -> day.entries.forEach { entry ->
                 EntryRow(entry)
             }
         }
@@ -165,7 +156,9 @@ private fun ElectricityCard(state: AppState, viewModel: AppViewModel) {
         action = {
             RefreshAction(
                 loading = state.electricityLoading,
+                result = viewModel.electricityFeedback.result,
                 onClick = { viewModel.refreshElectricity() },
+                modifier = Modifier.size(40.dp),
             )
         },
     ) {
@@ -247,21 +240,25 @@ private fun ElectricityBody(report: ElectricityReport, unit: String) {
 /** 两列指标：label 在上、value 在下，避免长句换行把布局顶乱。 */
 @Composable
 private fun MetricGrid(left: Pair<String, String>, right: Pair<String, String>) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clip(MaterialTheme.shapes.medium)
-            .background(MaterialTheme.colorScheme.surfaceContainerHigh)
-            .padding(horizontal = 14.dp, vertical = 12.dp),
-    ) {
-        MetricCell(left.first, left.second, Modifier.weight(1f))
-        Box(
-            modifier = Modifier
-                .width(1.dp)
-                .height(32.dp)
-                .background(MaterialTheme.colorScheme.outlineVariant),
+    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        MetricCell(
+            left.first,
+            left.second,
+            Modifier
+                .weight(1f)
+                .clip(MaterialTheme.shapes.large)
+                .background(MaterialTheme.colorScheme.surfaceContainerHigh)
+                .padding(horizontal = 14.dp, vertical = 12.dp),
         )
-        MetricCell(right.first, right.second, Modifier.weight(1f), paddingStart = 14.dp)
+        MetricCell(
+            right.first,
+            right.second,
+            Modifier
+                .weight(1f)
+                .clip(MaterialTheme.shapes.large)
+                .background(MaterialTheme.colorScheme.surfaceContainerHigh)
+                .padding(horizontal = 14.dp, vertical = 12.dp),
+        )
     }
 }
 
@@ -329,8 +326,10 @@ private fun CampusCard(state: AppState, viewModel: AppViewModel) {
         action = {
             RefreshAction(
                 loading = state.campusLoading,
+                result = viewModel.campusFeedback.result,
                 contentDescription = stringResource(R.string.action_probe),
                 onClick = { viewModel.refreshCampusStatus() },
+                modifier = Modifier.size(40.dp),
             )
         },
     ) {
@@ -393,12 +392,28 @@ private fun CampusCard(state: AppState, viewModel: AppViewModel) {
         ).filter { it.second.isNotBlank() }
         if (details.isNotEmpty()) {
             Spacer(Modifier.height(12.dp))
-            Text(
-                text = stringResource(R.string.campus_access_details),
-                style = MaterialTheme.typography.labelLarge,
-                color = MaterialTheme.colorScheme.primary,
-                modifier = Modifier.clickable { showDetails = !showDetails }.padding(vertical = 4.dp),
-            )
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(MaterialTheme.shapes.medium)
+                    .clickable { showDetails = !showDetails }
+                    .padding(vertical = 4.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(
+                    text = stringResource(R.string.campus_access_details),
+                    style = MaterialTheme.typography.labelLarge,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.weight(1f),
+                )
+                val rotation by animateFloatAsState(if (showDetails) 180f else 0f, label = "detailsChevron")
+                Icon(
+                    imageVector = Icons.Rounded.KeyboardArrowDown,
+                    contentDescription = if (showDetails) stringResource(R.string.action_collapse) else stringResource(R.string.action_expand),
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.rotate(rotation),
+                )
+            }
             AnimatedVisibility(visible = showDetails) {
                 Column(modifier = Modifier.fillMaxWidth().padding(top = 6.dp)) {
                     details.forEach { (label, value) ->
@@ -421,31 +436,60 @@ private fun CampusCard(state: AppState, viewModel: AppViewModel) {
         }
 
         Spacer(Modifier.height(14.dp))
-        // 按钮按当前状态给推荐动作：未认证时只有「登录」是实心，已在线时「下线」实心。
-        // 与状态无关的动作降级为描边，避免三个同等重的按钮让人猜该点哪个。
+        // 当前推荐动作用实心按钮；其余降级为 tonal。操作只在对应按钮上显示进度。
         val enabled = state.campusActionsEnabled && state.campusActing == null
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             CampusButton(
                 label = stringResource(R.string.action_login),
-                filled = campus?.state == CampusState.UNAUTH,
+                icon = TabIcons.Login,
+                emphasized = campus?.state == CampusState.UNAUTH,
                 enabled = enabled && campus?.state == CampusState.UNAUTH,
+                loading = state.campusActing == CampusAction.LOGIN,
                 onClick = { viewModel.campusAction(CampusAction.LOGIN) },
                 modifier = Modifier.weight(1f),
             )
             CampusButton(
                 label = stringResource(R.string.action_relogin),
-                filled = false,
+                icon = TabIcons.Refresh,
+                emphasized = false,
                 enabled = enabled,
+                loading = state.campusActing == CampusAction.RELOGIN,
                 onClick = { viewModel.campusAction(CampusAction.RELOGIN) },
                 modifier = Modifier.weight(1f),
             )
             CampusButton(
                 label = stringResource(R.string.action_logout),
-                filled = campus?.state == CampusState.ONLINE,
+                icon = TabIcons.Logout,
+                emphasized = campus?.state == CampusState.ONLINE,
                 enabled = enabled && campus?.state == CampusState.ONLINE,
+                loading = state.campusActing == CampusAction.LOGOUT,
                 onClick = { viewModel.campusAction(CampusAction.LOGOUT) },
                 modifier = Modifier.weight(1f),
             )
+        }
+        AnimatedVisibility(visible = state.campusActing != null || viewModel.campusActionFeedback.result != null) {
+            Row(
+                modifier = Modifier.padding(top = 10.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                val feedback = viewModel.campusActionFeedback.result
+                if (state.campusActing != null) {
+                    ExpressiveLoadingIndicator(size = 15.dp)
+                } else if (feedback != null) {
+                    ActionResultIcon(feedback, modifier = Modifier.size(16.dp))
+                }
+                Spacer(Modifier.width(7.dp))
+                Text(
+                    text = when {
+                        state.campusActing != null -> stringResource(R.string.campus_action_running)
+                        feedback == ActionFeedback.SUCCESS -> stringResource(R.string.action_succeeded)
+                        feedback == ActionFeedback.UNAVAILABLE -> stringResource(R.string.campus_check_configuration)
+                        else -> stringResource(R.string.action_failed)
+                    },
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
         }
     }
 }
@@ -453,42 +497,43 @@ private fun CampusCard(state: AppState, viewModel: AppViewModel) {
 @Composable
 private fun CampusButton(
     label: String,
-    filled: Boolean,
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    emphasized: Boolean,
     enabled: Boolean,
+    loading: Boolean,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    if (filled) {
-        Button(onClick = onClick, enabled = enabled, shape = CircleShape, modifier = modifier) {
-            Text(label, maxLines = 1)
-        }
-    } else {
-        OutlinedButton(onClick = onClick, enabled = enabled, shape = CircleShape, modifier = modifier) {
-            Text(label, maxLines = 1)
-        }
+    val content: @Composable androidx.compose.foundation.layout.RowScope.() -> Unit = {
+        ActionIcon(
+            icon = icon,
+            loading = loading,
+            result = null,
+            tint = if (emphasized) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSecondaryContainer,
+            contentDescription = label,
+            modifier = Modifier.size(17.dp),
+        )
+        Spacer(Modifier.width(5.dp))
+        Text(label, maxLines = 1)
     }
-}
-
-/** 卡片右上角的刷新 / 探测按钮：加载中显示小转圈，避免重复点击。 */
-@Composable
-internal fun RefreshAction(
-    loading: Boolean,
-    onClick: () -> Unit,
-    contentDescription: String? = null,
-) {
-    Box(modifier = Modifier.size(44.dp), contentAlignment = Alignment.Center) {
-        if (loading) {
-            ExpressiveLoadingIndicator(size = 20.dp)
-        } else {
-            TextButton(onClick = onClick) {
-                Icon(
-                    imageVector = Icons.Rounded.Refresh,
-                    contentDescription = contentDescription ?: stringResource(R.string.action_refresh),
-                    tint = MaterialTheme.colorScheme.primary,
-                    modifier = Modifier.size(20.dp),
-                )
-            }
-        }
+    if (emphasized) {
+        Button(
+            onClick = onClick,
+            enabled = enabled,
+            shape = MaterialTheme.shapes.large,
+            modifier = modifier.height(44.dp),
+            contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 8.dp),
+            content = content,
+        )
+    } else {
+        FilledTonalButton(
+            onClick = onClick,
+            enabled = enabled,
+            shape = MaterialTheme.shapes.large,
+            modifier = modifier.height(44.dp),
+            contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 8.dp),
+            content = content,
+        )
     }
 }
 

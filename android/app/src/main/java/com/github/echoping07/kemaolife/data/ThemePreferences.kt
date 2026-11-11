@@ -6,14 +6,56 @@ import android.content.Context
 class ThemePreferences(context: Context) {
     private val preferences = context.getSharedPreferences("appearance", Context.MODE_PRIVATE)
 
-    fun load(): String = preferences.getString(KEY_THEME, DEFAULT_THEME) ?: DEFAULT_THEME
+    /** 兼容旧调用：只返回主题色。新页面应通过 [loadSettings] 一次读取完整偏好。 */
+    fun load(): String = loadSettings().themeColor
 
+    fun loadSettings(): ThemeSettings = ThemeSettings(
+        themeColor = normalizeThemeColor(preferences.getString(KEY_THEME, DEFAULT_THEME_COLOR)),
+        themeMode = loadMode(),
+        dynamicColor = loadDynamicColor(),
+        amoled = loadAmoled(),
+    )
+
+    fun loadMode(): String = normalizeThemeMode(
+        preferences.getString(KEY_THEME_MODE, THEME_MODE_SYSTEM),
+    )
+
+    fun loadDynamicColor(): Boolean = preferences.getBoolean(KEY_DYNAMIC_COLOR, false)
+
+    fun loadAmoled(): Boolean = preferences.getBoolean(KEY_AMOLED, false)
+
+    /** 兼容旧的主题色保存接口。 */
     fun save(theme: String) {
-        preferences.edit().putString(KEY_THEME, theme).apply()
+        preferences.edit().putString(KEY_THEME, normalizeThemeColor(theme)).apply()
+    }
+
+    fun save(settings: ThemeSettings) {
+        preferences.edit()
+            .putString(KEY_THEME, normalizeThemeColor(settings.themeColor))
+            .putString(KEY_THEME_MODE, normalizeThemeMode(settings.themeMode))
+            .putBoolean(KEY_DYNAMIC_COLOR, settings.dynamicColor)
+            .putBoolean(KEY_AMOLED, settings.amoled)
+            .apply()
+    }
+
+    fun saveThemeMode(value: String) {
+        preferences.edit().putString(KEY_THEME_MODE, normalizeThemeMode(value)).apply()
+    }
+
+    fun saveMode(value: String) = saveThemeMode(value)
+
+    fun saveDynamicColor(enabled: Boolean) {
+        preferences.edit().putBoolean(KEY_DYNAMIC_COLOR, enabled).apply()
+    }
+
+    fun saveAmoled(enabled: Boolean) {
+        preferences.edit().putBoolean(KEY_AMOLED, enabled).apply()
     }
 
     private companion object {
         const val KEY_THEME = "theme_color"
-        const val DEFAULT_THEME = "BLUE"
+        const val KEY_THEME_MODE = "theme_mode"
+        const val KEY_DYNAMIC_COLOR = "dynamic_color"
+        const val KEY_AMOLED = "amoled"
     }
 }

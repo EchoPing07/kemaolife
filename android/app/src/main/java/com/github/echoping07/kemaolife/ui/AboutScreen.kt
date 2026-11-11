@@ -4,7 +4,6 @@ import android.content.Intent
 import android.net.Uri
 import android.os.Build
 import androidx.compose.foundation.Image
-import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -13,9 +12,6 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
@@ -23,7 +19,6 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
@@ -39,13 +34,10 @@ internal fun AboutScreen() {
     val context = LocalContext.current
     fun open(url: String) = context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)))
     Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .verticalScroll(rememberScrollState())
-            .padding(horizontal = 20.dp),
+        modifier = Modifier.fillMaxWidth(),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
-        Surface(shape = smoothShape(32.dp), modifier = Modifier.padding(top = 16.dp).size(128.dp)) {
+        Surface(shape = smoothShape(32.dp), modifier = Modifier.padding(top = 4.dp).size(104.dp)) {
             Image(
                 painter = painterResource(R.mipmap.ic_about_logo),
                 contentDescription = stringResource(R.string.app_name),
@@ -57,49 +49,44 @@ internal fun AboutScreen() {
             text = "KeMao Life",
             style = MaterialTheme.typography.headlineSmall,
             fontWeight = FontWeight.SemiBold,
-            modifier = Modifier.padding(top = 18.dp),
+            modifier = Modifier.padding(top = 14.dp),
         )
         Text(
             text = stringResource(R.string.app_name),
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier.padding(top = 4.dp, bottom = 24.dp),
+            modifier = Modifier.padding(top = 4.dp, bottom = 20.dp),
         )
-        AboutGroup {
-            AboutRow(TabIcons.Version, stringResource(R.string.about_version), "${BuildConfig.VERSION_NAME} / ${BuildConfig.VERSION_CODE}")
-            Spacer(Modifier.padding(top = 2.dp))
-            AboutRow(
-                icon = TabIcons.Device,
-                title = stringResource(R.string.about_system),
-                value = "${Build.MANUFACTURER} ${Build.MODEL}\nAndroid ${Build.VERSION.RELEASE} / SDK ${Build.VERSION.SDK_INT}",
-                position = AboutItemPosition.LAST,
-            )
-        }
+        AboutRow(
+            TabIcons.Version,
+            stringResource(R.string.about_version),
+            "${BuildConfig.VERSION_NAME} / ${BuildConfig.VERSION_CODE}",
+            position = GroupPosition.FIRST,
+        )
+        GroupGap()
+        AboutRow(
+            icon = TabIcons.Device,
+            title = stringResource(R.string.about_system),
+            value = "${Build.MANUFACTURER} ${Build.MODEL}\nAndroid ${Build.VERSION.RELEASE} / SDK ${Build.VERSION.SDK_INT}",
+            position = GroupPosition.LAST,
+        )
         Spacer(Modifier.padding(top = 16.dp))
-        AboutGroup {
-            AboutRow(
-                icon = TabIcons.Github,
-                title = "GitHub",
-                value = "EchoPing07/kemaolife",
-                onClick = { open("https://github.com/EchoPing07/kemaolife") },
-            )
-            Spacer(Modifier.padding(top = 2.dp))
-            AboutRow(
-                icon = TabIcons.License,
-                title = stringResource(R.string.about_license),
-                value = stringResource(R.string.about_license_value),
-                onClick = { open("https://github.com/EchoPing07/kemaolife/blob/main/LICENSE") },
-                position = AboutItemPosition.LAST,
-            )
-        }
+        AboutRow(
+            icon = TabIcons.Github,
+            title = "GitHub",
+            value = "EchoPing07/kemaolife",
+            onClick = { open("https://github.com/EchoPing07/kemaolife") },
+            position = GroupPosition.FIRST,
+        )
+        GroupGap()
+        AboutRow(
+            icon = TabIcons.License,
+            title = stringResource(R.string.about_license),
+            value = stringResource(R.string.about_license_value),
+            onClick = { open("https://github.com/EchoPing07/kemaolife/blob/main/LICENSE") },
+            position = GroupPosition.LAST,
+        )
     }
-}
-
-private enum class AboutItemPosition { FIRST, LAST }
-
-@Composable
-private fun AboutGroup(content: @Composable () -> Unit) {
-    Column(modifier = Modifier.fillMaxWidth()) { content() }
 }
 
 @Composable
@@ -108,32 +95,20 @@ private fun AboutRow(
     title: String,
     value: String,
     onClick: (() -> Unit)? = null,
-    position: AboutItemPosition = AboutItemPosition.FIRST,
+    position: GroupPosition,
 ) {
-    val shape = if (position == AboutItemPosition.FIRST) smoothShape(28.dp, 4.dp)
-    else smoothShape(4.dp, 28.dp)
-    Surface(
-        shape = shape,
-        color = MaterialTheme.colorScheme.surfaceContainerLow,
-        onClick = { onClick?.invoke() },
-        enabled = onClick != null,
-        modifier = Modifier.fillMaxWidth(),
-    ) {
+    GroupSurface(position = position, onClick = onClick, modifier = Modifier.fillMaxWidth()) {
         Row(
-            modifier = Modifier.padding(horizontal = 16.dp, vertical = 16.dp),
+            modifier = Modifier.padding(horizontal = 20.dp, vertical = 16.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Icon(
                 imageVector = icon,
                 contentDescription = null,
-                tint = MaterialTheme.colorScheme.primary,
-                modifier = Modifier
-                    .size(36.dp)
-                    .clip(CircleShape)
-                    .background(MaterialTheme.colorScheme.secondaryContainer)
-                    .padding(8.dp),
+                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.size(25.dp),
             )
-            Spacer(Modifier.width(16.dp))
+            Spacer(Modifier.width(18.dp))
             Column(modifier = Modifier.weight(1f)) {
                 Text(text = title, style = MaterialTheme.typography.titleMedium)
                 Text(
