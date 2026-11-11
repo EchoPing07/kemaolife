@@ -25,20 +25,26 @@ import com.github.echoping07.kemaolife.data.THEME_MODE_LIGHT
 import com.github.echoping07.kemaolife.data.isDarkTheme
 import com.github.echoping07.kemaolife.data.normalizeThemeColor
 
-/** 公开的 Material Design 3 基础种子色彩体系。 */
+/**
+ * AOSP ThemePicker/ThemesStub 的 8 个基础色取自
+ * `packages/apps/ThemePicker/themes/res/values/colors.xml` 的 `color_secondary_*`，
+ * 名称取自同目录 `strings.xml`。颜色值本身只是生成配色方案的 seed，
+ * 实际 primary / container / on-* 仍按 M3 色角色派生；预览不直接展示 seed。
+ */
 internal enum class AppThemeColor(
     val label: String,
     val color: Color,
     val secondarySeed: Color,
     val tertiarySeed: Color,
 ) {
-    BLUE("晴空蓝", Color(0xFF0061A4), Color(0xFF535F70), Color(0xFF6B5778)),
-    TEAL("青碧海", Color(0xFF006A6A), Color(0xFF4A6363), Color(0xFF4B607C)),
-    GREEN("松石绿", Color(0xFF2E6C3B), Color(0xFF526350), Color(0xFF386568)),
-    ORANGE("琥珀金", Color(0xFF825500), Color(0xFF6C5C3F), Color(0xFF496547)),
-    ROSE("拂晓粉", Color(0xFF984061), Color(0xFF73565F), Color(0xFF7C5635)),
-    INDIGO("紫罗兰", Color(0xFF6750A4), Color(0xFF625B71), Color(0xFF7D5260)),
-    MONOCHROME("板岩灰", Color(0xFF545F71), Color(0xFF5C5F62), Color(0xFF685B58)),
+    MONOCHROMATIC("单色", Color(0xFFFFFF00), Color(0xFF9A9A9A), Color(0xFFB0B0B0)),
+    RED("红色", Color(0xFFFFB2B5), Color(0xFFD98F93), Color(0xFFB7779C)),
+    ORANGE("橙色", Color(0xFFFFB868), Color(0xFFD99A56), Color(0xFFB78C77)),
+    YELLOW("黄色", Color(0xFFE9C44A), Color(0xFFC7A73F), Color(0xFFA9AE66)),
+    GREEN("绿色", Color(0xFFBAF293), Color(0xFF8FCE71), Color(0xFF70AE86)),
+    BLUE("蓝色", Color(0xFF96CBFF), Color(0xFF71A9DB), Color(0xFF7C8FC4)),
+    PURPLE("紫色", Color(0xFFCBBFFF), Color(0xFFA99CDC), Color(0xFF8F83C2)),
+    MAGENTA("品红色", Color(0xFFF5ACFB), Color(0xFFD18CD7), Color(0xFFB777A8)),
 }
 
 /** 预览与实际主题共用生成逻辑，确保容器色和深色色阶一致。 */
@@ -50,10 +56,14 @@ private fun presetColorScheme(theme: AppThemeColor, dark: Boolean, amoled: Boole
     val secArgb = theme.secondarySeed.toArgb()
     val tertArgb = theme.tertiarySeed.toArgb()
 
-    val primary = if (dark) ColorUtils.blendARGB(argb, android.graphics.Color.WHITE, 0.42f)
-    else ColorUtils.blendARGB(argb, android.graphics.Color.BLACK, 0.08f)
-    val container = if (dark) ColorUtils.blendARGB(argb, android.graphics.Color.BLACK, 0.48f)
-    else ColorUtils.blendARGB(argb, android.graphics.Color.WHITE, 0.82f)
+    // AOSP 基础色是浅亮 seed；浅色主题先把它压到 M3 primary 的深色区间，
+    // 再由 primaryContainer 派生为浅容器色，避免浅粉色 / 黄色直接作主色时对比不足。
+    val lightPrimary = ColorUtils.blendARGB(argb, android.graphics.Color.BLACK, 0.45f)
+    val lightContainer = ColorUtils.blendARGB(argb, android.graphics.Color.WHITE, 0.18f)
+    val primary = if (dark) ColorUtils.blendARGB(argb, android.graphics.Color.WHITE, 0.15f)
+    else lightPrimary
+    val container = if (dark) ColorUtils.blendARGB(argb, android.graphics.Color.BLACK, 0.58f)
+    else lightContainer
     val secondary = if (dark) ColorUtils.blendARGB(secArgb, android.graphics.Color.WHITE, 0.38f)
     else ColorUtils.blendARGB(secArgb, android.graphics.Color.BLACK, 0.06f)
     val secContainer = if (dark) ColorUtils.blendARGB(secArgb, android.graphics.Color.BLACK, 0.45f)
@@ -196,7 +206,7 @@ private val AppShapes = Shapes(
 
 @Composable
 fun KemaolifeTheme(
-    themeColor: String = AppThemeColor.BLUE.name,
+    themeColor: String = AppThemeColor.MONOCHROMATIC.name,
     /** 兼容旧调用；新的 themeMode 未显式传入时沿用这个有效深色值。 */
     darkTheme: Boolean = isSystemInDarkTheme(),
     themeMode: String = if (darkTheme) THEME_MODE_DARK else THEME_MODE_LIGHT,
@@ -206,7 +216,7 @@ fun KemaolifeTheme(
 ) {
     val dark = isDarkTheme(themeMode, darkTheme)
     val theme = AppThemeColor.entries.firstOrNull { it.name == normalizeThemeColor(themeColor) }
-        ?: AppThemeColor.BLUE
+        ?: AppThemeColor.MONOCHROMATIC
     val context = LocalContext.current
     val target = when {
         dynamicColor && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S -> {

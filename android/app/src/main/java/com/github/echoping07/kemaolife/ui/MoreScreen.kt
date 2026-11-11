@@ -87,7 +87,6 @@ internal fun MoreScreen(
         Spacer(Modifier.height(16.dp))
         CampusCard(state, viewModel)
 
-        Spacer(Modifier.height(28.dp))
     }
 }
 

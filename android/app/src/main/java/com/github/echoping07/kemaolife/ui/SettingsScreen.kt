@@ -219,7 +219,6 @@ private fun SettingsOverview(
                 modifier = Modifier.padding(16.dp),
             )
         }
-        Spacer(Modifier.height(28.dp))
     }
 }
 
@@ -230,7 +229,8 @@ private fun SettingsGroupLabel(text: String) {
         style = MaterialTheme.typography.labelLarge,
         fontWeight = FontWeight.Bold,
         color = MaterialTheme.colorScheme.onSurfaceVariant,
-        modifier = Modifier.padding(start = 12.dp, top = 22.dp, bottom = 8.dp),
+        // 页面已在 16dp 内容边距内，分组标题不再额外缩进，与大标题共用左边线。
+        modifier = Modifier.padding(top = 22.dp, bottom = 8.dp),
     )
 }
 

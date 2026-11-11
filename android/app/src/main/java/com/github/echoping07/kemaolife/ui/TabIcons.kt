@@ -170,9 +170,10 @@ internal object TabIcons {
         "M17 12l-5 -5l1.5 -1.5a3.536 3.536 0 1 1 5 5l-1.5 1.5",
         "M3 21l2.5 -2.5", "M18.5 5.5l2.5 -2.5", "M10 11l-2 2", "M13 14l-2 2",
     ))
+    // Tabler outline/login.svg：箭头向矩形内进入。
     val Login = icon("Login", listOf(
-        "M14 8v-2a2 2 0 0 0 -2 -2h-7a2 2 0 0 0 -2 2v12a2 2 0 0 0 2 2h7a2 2 0 0 0 2 -2v-2",
-        "M20 12h-13", "M18 9l3 3l-3 3",
+        "M15 8v-2a2 2 0 0 0 -2 -2h-7a2 2 0 0 0 -2 2v12a2 2 0 0 0 2 2h7a2 2 0 0 0 2 -2v-2",
+        "M21 12h-13l3 -3", "M11 15l-3 -3",
     ))
     val Logout = icon("Logout", listOf(
         "M14 8v-2a2 2 0 0 0 -2 -2h-7a2 2 0 0 0 -2 2v12a2 2 0 0 0 2 2h7a2 2 0 0 0 2 -2v-2",

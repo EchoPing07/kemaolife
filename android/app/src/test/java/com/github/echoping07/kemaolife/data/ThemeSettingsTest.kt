@@ -10,15 +10,27 @@ class ThemeSettingsTest {
     @Test
     fun defaultsMatchLegacyAppearance() {
         assertEquals(
-            ThemeSettings(themeColor = "BLUE", themeMode = "SYSTEM", dynamicColor = false, amoled = false),
+            ThemeSettings(themeColor = "MONOCHROMATIC", themeMode = "SYSTEM", dynamicColor = false, amoled = false),
             ThemeSettings(),
         )
     }
 
     @Test
-    fun allSevenPresetNamesSurviveValidation() {
-        val presets = listOf("BLUE", "TEAL", "GREEN", "ORANGE", "ROSE", "INDIGO", "MONOCHROME")
+    fun allEightPresetNamesSurviveValidation() {
+        val presets = listOf(
+            "MONOCHROMATIC", "RED", "ORANGE", "YELLOW",
+            "GREEN", "BLUE", "PURPLE", "MAGENTA",
+        )
         presets.forEach { assertEquals(it, normalizeThemeColor(it)) }
+        assertEquals(8, presets.size)
+    }
+
+    @Test
+    fun legacyPresetNamesMapToAospPresets() {
+        assertEquals("GREEN", normalizeThemeColor("TEAL"))
+        assertEquals("MAGENTA", normalizeThemeColor("ROSE"))
+        assertEquals("PURPLE", normalizeThemeColor("INDIGO"))
+        assertEquals("MONOCHROMATIC", normalizeThemeColor("MONOCHROME"))
     }
 
     @Test
@@ -26,7 +38,7 @@ class ThemeSettingsTest {
         listOf(null, "", "  ", "UNKNOWN").forEach {
             assertEquals(DEFAULT_THEME_COLOR, normalizeThemeColor(it))
         }
-        assertEquals("ROSE", normalizeThemeColor(" rose "))
+        assertEquals("MAGENTA", normalizeThemeColor(" rose "))
     }
 
     @Test

@@ -119,6 +119,7 @@ private fun AppRoot(viewModel: AppViewModel) {
     }
 
     Scaffold(
+        // 状态栏与底部手势区分别只由这一层 Scaffold 消费一次。
         snackbarHost = { SnackbarHost(snackbar) },
         bottomBar = {
             NavigationBar(
@@ -217,9 +218,10 @@ private fun RowScope.NavItem(
         },
         label = { Text(label) },
         colors = NavigationBarItemDefaults.colors(
-            selectedIconColor = MaterialTheme.colorScheme.onSecondaryContainer,
+            selectedIconColor = MaterialTheme.colorScheme.onPrimaryContainer,
             selectedTextColor = MaterialTheme.colorScheme.onSurface,
-            indicatorColor = MaterialTheme.colorScheme.secondaryContainer,
+            // 官方指示器形状与交互不变；主色容器比中性次容器更清楚地体现当前主题。
+            indicatorColor = MaterialTheme.colorScheme.primaryContainer,
             unselectedIconColor = MaterialTheme.colorScheme.onSurfaceVariant,
             unselectedTextColor = MaterialTheme.colorScheme.onSurfaceVariant,
         ),
