@@ -37,7 +37,7 @@ internal fun AboutScreen() {
         modifier = Modifier.fillMaxWidth(),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
-        Surface(shape = smoothShape(32.dp), modifier = Modifier.padding(top = 4.dp).size(104.dp)) {
+        Surface(shape = smoothShape(PageCorners.Logo), modifier = Modifier.padding(top = 4.dp).size(104.dp)) {
             Image(
                 painter = painterResource(R.mipmap.ic_about_logo),
                 contentDescription = stringResource(R.string.app_name),

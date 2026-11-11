@@ -624,7 +624,7 @@ private fun SettingsSwitchRow(
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .clip(smoothShape(16.dp))
+            .clip(smoothShape(PageCorners.Field))
             .clickable { onCheckedChange(!checked) }
             .padding(vertical = 6.dp),
         verticalAlignment = Alignment.CenterVertically,
@@ -713,7 +713,7 @@ private fun AppTextField(
             focusedBorderColor = MaterialTheme.colorScheme.primary,
             unfocusedBorderColor = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f),
         ),
-        shape = smoothShape(16.dp),
+        shape = smoothShape(PageCorners.Field),
         modifier = Modifier.fillMaxWidth(),
     )
 }

@@ -21,13 +21,13 @@ internal fun GroupSurface(
     onClick: (() -> Unit)? = null,
     content: @Composable ColumnScope.() -> Unit,
 ) {
-    val large = 26.dp
-    val small = 7.dp
+    val outer = PageCorners.GroupOuter
+    val inner = PageCorners.GroupInner
     val shape = when (position) {
-        GroupPosition.ONLY -> smoothShape(large)
-        GroupPosition.FIRST -> smoothShape(large, small)
-        GroupPosition.MIDDLE -> smoothShape(small)
-        GroupPosition.LAST -> smoothShape(small, large)
+        GroupPosition.ONLY -> smoothShape(outer)
+        GroupPosition.FIRST -> smoothShape(outer, inner)
+        GroupPosition.MIDDLE -> smoothShape(inner)
+        GroupPosition.LAST -> smoothShape(inner, outer)
     }
     if (onClick == null) {
         Surface(

@@ -245,7 +245,7 @@ private fun MetricGrid(left: Pair<String, String>, right: Pair<String, String>) 
             left.second,
             Modifier
                 .weight(1f)
-                .clip(MaterialTheme.shapes.large)
+                .clip(smoothShape(PageCorners.Nested))
                 .background(MaterialTheme.colorScheme.surfaceContainerHigh)
                 .padding(horizontal = 14.dp, vertical = 12.dp),
         )
@@ -254,7 +254,7 @@ private fun MetricGrid(left: Pair<String, String>, right: Pair<String, String>) 
             right.second,
             Modifier
                 .weight(1f)
-                .clip(MaterialTheme.shapes.large)
+                .clip(smoothShape(PageCorners.Nested))
                 .background(MaterialTheme.colorScheme.surfaceContainerHigh)
                 .padding(horizontal = 14.dp, vertical = 12.dp),
         )
@@ -394,7 +394,7 @@ private fun CampusCard(state: AppState, viewModel: AppViewModel) {
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .clip(MaterialTheme.shapes.medium)
+                    .clip(smoothShape(PageCorners.Field))
                     .clickable { showDetails = !showDetails }
                     .padding(vertical = 4.dp),
                 verticalAlignment = Alignment.CenterVertically,
@@ -519,7 +519,7 @@ private fun CampusButton(
         Button(
             onClick = onClick,
             enabled = enabled,
-            shape = MaterialTheme.shapes.large,
+            shape = smoothShape(PageCorners.Field),
             modifier = modifier.height(44.dp),
             contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 8.dp),
             content = content,
@@ -528,7 +528,7 @@ private fun CampusButton(
         FilledTonalButton(
             onClick = onClick,
             enabled = enabled,
-            shape = MaterialTheme.shapes.large,
+            shape = smoothShape(PageCorners.Field),
             modifier = modifier.height(44.dp),
             contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 8.dp),
             content = content,

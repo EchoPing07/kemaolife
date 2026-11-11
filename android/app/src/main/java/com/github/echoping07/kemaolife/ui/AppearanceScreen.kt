@@ -39,6 +39,7 @@ import com.github.echoping07.kemaolife.data.isDarkTheme
 import com.github.echoping07.kemaolife.data.normalizeThemeColor
 import com.github.echoping07.kemaolife.ui.theme.AppThemeColor
 import com.github.echoping07.kemaolife.ui.theme.previewColorScheme
+import com.github.echoping07.kemaolife.ui.theme.smoothShape
 import kotlin.math.min
 
 /** 外观页只提供内容；滚动由 CollapsingScreen 的单一 verticalScroll 负责。 */
@@ -223,7 +224,7 @@ private fun ThemeDonutWheel(
     Column(
         horizontalAlignment = Alignment.CenterHorizontally,
         modifier = modifier
-            .clip(MaterialTheme.shapes.large)
+            .clip(smoothShape(PageCorners.Field))
             .selectable(selected = selected, onClick = onClick, role = Role.RadioButton)
             .padding(vertical = 8.dp),
     ) {

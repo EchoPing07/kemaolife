@@ -90,7 +90,10 @@ internal fun LogsScreen(state: AppState, viewModel: AppViewModel) {
                 when {
                     // 还没读过列表：先别下「暂无记录」的结论。
                     state.log == null -> LoadingBlock()
-                    state.log.entries.isEmpty() -> EmptyHint(text = stringResource(R.string.logs_empty))
+                    state.log.entries.isEmpty() -> EmptyHint(
+                        text = stringResource(R.string.logs_empty),
+                        shape = smoothShape(PageCorners.Card),
+                    )
                     else -> state.log.entries.forEachIndexed { index, entry ->
                         // 每条记录独立成卡：它们是并列的一次次请求，不是一组设置项。
                         if (index > 0) Spacer(Modifier.height(8.dp))
@@ -210,7 +213,7 @@ private fun LogDetailSheet(entry: LogEntry, onDismiss: () -> Unit) {
     ModalBottomSheet(
         onDismissRequest = onDismiss,
         sheetState = sheetState,
-        shape = smoothShape(28.dp),
+        shape = smoothShape(PageCorners.Card),
         containerColor = MaterialTheme.colorScheme.surfaceContainerLow,
     ) {
         BoxWithConstraints(modifier = Modifier.fillMaxWidth()) {
@@ -315,7 +318,7 @@ private fun LogBlock(title: String, body: String) {
         Box(
             modifier = Modifier
                 .fillMaxWidth()
-                .clip(smoothShape(14.dp))
+                .clip(smoothShape(PageCorners.Field))
                 .background(MaterialTheme.colorScheme.surfaceContainerHighest)
                 .padding(12.dp),
         ) {
