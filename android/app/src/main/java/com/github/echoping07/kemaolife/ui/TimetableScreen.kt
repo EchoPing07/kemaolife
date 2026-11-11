@@ -66,6 +66,7 @@ import com.github.echoping07.kemaolife.ui.theme.smoothShape
 import kotlinx.coroutines.launch
 
 private val RowHeight = 52.dp
+private val HeaderHeight = 56.dp
 private val WeekStripHeight = 64.dp
 private val GutterWidth = 26.dp
 private val GridEndPadding = 8.dp
@@ -298,6 +299,9 @@ private fun PageContent(
  *
  * 本周时右侧只有周几：这时「浏览周」与「当前周」是同一个数，再显示「当前为第 N 周」
  * 就是同一句话重复两遍；换成今天周几才提供了新信息（docs/002 §5.3 tab1）。
+ *
+ * 左右两列共享固定头部高度：日期贴顶、周次贴底，底边与右侧同步时间齐平；
+ * 中间多出的留白由 SpaceBetween 分配，日期字号放大一档填补这块空位。
  */
 @Composable
 private fun TimetableHeader(
@@ -316,16 +320,20 @@ private fun TimetableHeader(
     onExport: () -> Unit,
 ) {
     Column(modifier = Modifier.padding(start = 16.dp, end = 6.dp)) {
-        Row(verticalAlignment = Alignment.Top) {
+        // 固定两行的头部高度：左侧日期与周次分别贴顶 / 贴底，右侧按钮与时间
+        // 同样贴顶 / 贴底，两侧底边齐平；放大的日期只填补中间留白，不撑高头部。
+        Row(modifier = Modifier.height(HeaderHeight)) {
             Column(
                 modifier = Modifier
                     .weight(1f)
+                    .fillMaxHeight()
                     .clip(MaterialTheme.shapes.medium)
                     .clickable(role = Role.Button, onClick = onOpenWeekPicker),
+                verticalArrangement = Arrangement.SpaceBetween,
             ) {
                 Text(
                     text = if (todayDate.isBlank()) stringResource(R.string.tab_timetable) else prettyDate(todayDate),
-                    style = MaterialTheme.typography.titleLarge,
+                    style = MaterialTheme.typography.headlineSmall,
                     fontWeight = FontWeight.SemiBold,
                     maxLines = 1,
                 )
@@ -353,15 +361,19 @@ private fun TimetableHeader(
                         color = MaterialTheme.colorScheme.onSurface,
                         fontWeight = FontWeight.Medium,
                         maxLines = 1,
-                        modifier = Modifier.padding(top = 3.dp, bottom = 4.dp),
+                        modifier = Modifier.padding(top = 2.dp),
                     )
                 }
             }
 
-            // 右侧一列：图标按钮在上（导出在刷新左边），数据时间紧跟按钮下方右对齐。
-            // 按钮不参与左侧两行的高度居中：它要贴顶，时间才会落在按钮下面，
-            // 而不是被挤到日期那一行的右侧。
-            Column(horizontalAlignment = Alignment.End) {
+            // 右侧一列：图标按钮贴顶（导出在刷新左边），数据时间贴底右对齐，
+            // 底边与左侧周次齐平。按钮不参与左侧两行的高度居中，
+            // 否则时间会被挤到日期那一行的右侧。
+            Column(
+                modifier = Modifier.fillMaxHeight(),
+                horizontalAlignment = Alignment.End,
+                verticalArrangement = Arrangement.SpaceBetween,
+            ) {
                 Row {
                     HeaderActionButton(
                         enabled = !exporting,
