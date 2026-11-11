@@ -58,7 +58,7 @@ import com.github.echoping07.kemaolife.R
 import com.github.echoping07.kemaolife.data.AppPreferences
 import com.github.echoping07.kemaolife.data.Credentials
 
-private enum class SettingsPage { ROOT, EDUCATION, ELECTRICITY, CAMPUS, APPEARANCE, ABOUT }
+private enum class SettingsPage { ROOT, EDUCATION, ELECTRICITY, CAMPUS, APPEARANCE, ABOUT, LOGS }
 
 /** 设置总览只承担导航；凭据表单放进各自页面，避免三个功能域一次全部铺开。 */
 @Composable
@@ -78,6 +78,7 @@ internal fun SettingsScreen(state: AppState, viewModel: AppViewModel) {
                 SettingsPage.CAMPUS -> R.string.section_portal
                 SettingsPage.APPEARANCE -> R.string.settings_appearance
                 SettingsPage.ABOUT -> R.string.settings_about
+                SettingsPage.LOGS -> R.string.settings_logs
             },
         )
         val testTarget = when (page) {
@@ -101,6 +102,13 @@ internal fun SettingsScreen(state: AppState, viewModel: AppViewModel) {
                                 modifier = Modifier.size(23.dp),
                             )
                         }
+                    }
+                    // 日志页的清空按钮：只清内容，不影响「记录请求」开关。
+                    if (page == SettingsPage.LOGS) {
+                        LogClearAction(
+                            enabled = state.log?.count?.let { it > 0 } == true,
+                            onClick = viewModel::clearRequestLog,
+                        )
                     }
                 },
                 modifier = Modifier.fillMaxSize(),
@@ -132,12 +140,14 @@ internal fun SettingsScreen(state: AppState, viewModel: AppViewModel) {
                             onCampus = { pageName = SettingsPage.CAMPUS.name },
                             onAppearance = { pageName = SettingsPage.APPEARANCE.name },
                             onAbout = { pageName = SettingsPage.ABOUT.name },
+                            onLogs = { pageName = SettingsPage.LOGS.name },
                         )
                         SettingsPage.EDUCATION -> EducationSettings(state, viewModel)
                         SettingsPage.ELECTRICITY -> ElectricitySettings(state, viewModel)
                         SettingsPage.CAMPUS -> CampusSettings(state, viewModel)
                         SettingsPage.APPEARANCE -> AppearanceScreen(state, viewModel)
                         SettingsPage.ABOUT -> AboutScreen()
+                        SettingsPage.LOGS -> LogsScreen(state, viewModel)
                     }
                 }
             }
@@ -153,6 +163,7 @@ private fun SettingsOverview(
     onCampus: () -> Unit,
     onAppearance: () -> Unit,
     onAbout: () -> Unit,
+    onLogs: () -> Unit,
 ) {
     Column(modifier = Modifier.fillMaxWidth()) {
         SettingsGroupLabel(stringResource(R.string.settings_accounts))
@@ -200,14 +211,29 @@ private fun SettingsOverview(
             title = stringResource(R.string.settings_appearance),
             supporting = stringResource(R.string.settings_theme_hint),
             onClick = onAppearance,
-            position = GroupPosition.FIRST,
+            position = GroupPosition.ONLY,
         )
-        GroupGap()
+
+        // 关于与日志同属辅助项：它们不影响账号、也不影响外观，
+        // 单独一组避免混在「个性化」里让外观项被挤成半组。
+        SettingsGroupLabel(stringResource(R.string.settings_utility))
         SettingsDestination(
             icon = TabIcons.Info,
             title = stringResource(R.string.settings_about),
             supporting = stringResource(R.string.settings_about_hint),
             onClick = onAbout,
+            position = GroupPosition.FIRST,
+        )
+        GroupGap()
+        SettingsDestination(
+            icon = TabIcons.Bug,
+            title = stringResource(R.string.settings_logs),
+            supporting = if (state.requestLogEnabled) {
+                stringResource(R.string.settings_logs_hint)
+            } else {
+                stringResource(R.string.settings_logs_idle)
+            },
+            onClick = onLogs,
             position = GroupPosition.LAST,
         )
 

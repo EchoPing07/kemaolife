@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/EchoPing07/kemaolife/internal/core"
@@ -51,12 +52,16 @@ type PortalCredential struct {
 type PortalNetwork struct {
 	probe  *http.Client
 	portal *http.Client
-	cred   func() PortalCredential
-	sleep  func(context.Context, time.Duration) error
+	// probeTransport / portalTransport 保留未包装的 Transport，供 SetRequestLog 重新套一层记录器。
+	probeTransport  http.RoundTripper
+	portalTransport http.RoundTripper
+	cred            func() PortalCredential
+	sleep           func(context.Context, time.Duration) error
 	// base 是 Portal 基地址；正常为 portalBase，测试覆盖为 httptest 地址。
 	base string
 	// ua 是 POST 时的 User-Agent（实测缺失会被拦）。
 	ua string
+	mu sync.Mutex
 }
 
 // NewPortalNetwork 构造适配器。cred 是凭据提供者（每轮重新读，支持设置窗口热更新）。
@@ -96,12 +101,29 @@ func NewPortalNetwork(cred func() PortalCredential, userAgent string) *PortalNet
 	}
 
 	return &PortalNetwork{
-		probe:  probe,
-		portal: portal,
-		cred:   cred,
-		sleep:  sleepCtx,
-		base:   portalBase,
-		ua:     userAgent,
+		probe:           probe,
+		portal:          portal,
+		probeTransport:  probe.Transport,
+		portalTransport: portal.Transport,
+		cred:            cred,
+		sleep:           sleepCtx,
+		base:            portalBase,
+		ua:              userAgent,
+	}
+}
+
+// SetRequestLog 安装请求记录器（nil 表示不记录），与 HTTPDoer 同一套口径。
+//
+// 两个客户端都要套：判态探测与登录 / 下线 POST 属于同一条排查链路。
+// 登录表单里的密码 / 账号 / 指纹由记录器按字段名遮罩（P1）。
+func (p *PortalNetwork) SetRequestLog(l *RequestLog) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	if p.probeTransport != nil {
+		p.probe.Transport = l.Wrap(p.probeTransport)
+	}
+	if p.portalTransport != nil {
+		p.portal.Transport = l.Wrap(p.portalTransport)
 	}
 }
 

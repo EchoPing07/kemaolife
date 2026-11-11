@@ -13,6 +13,8 @@ import com.github.echoping07.kemaolife.data.CredentialStore
 import com.github.echoping07.kemaolife.data.Credentials
 import com.github.echoping07.kemaolife.data.DaySchedule
 import com.github.echoping07.kemaolife.data.ElectricityReport
+import com.github.echoping07.kemaolife.data.LogEntry
+import com.github.echoping07.kemaolife.data.LogState
 import com.github.echoping07.kemaolife.data.NetworkState
 import com.github.echoping07.kemaolife.data.ProbeResult
 import com.github.echoping07.kemaolife.data.Repository
@@ -73,6 +75,8 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     private var campusActionJob: Job? = null
     private var probeJob: Job? = null
     private var exportJob: Job? = null
+    private var requestLogJob: Job? = null
+    private var requestLogDetailJob: Job? = null
 
     // 图标结果态只跟随显式手动点击；自动查询共用 Job，但不能反复闪成功提示。
     internal val timetableFeedback = ActionFeedbackController()
@@ -123,6 +127,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
             timetableInterval = preferences.timetableIntervalMinutes,
             electricityInterval = preferences.electricityIntervalMinutes,
             campusWifiOnly = preferences.campusWifiOnly,
+            requestLogEnabled = preferences.requestLogEnabled,
         ),
     )
     val state: StateFlow<AppState> = _state.asStateFlow()
@@ -143,7 +148,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         viewModelScope.launch {
             // 冷启动：门面 Init 之后先用 CacheOnly 校正跨周 / 跨学期的镜像，
             // 再无条件联网。镜像已在首帧显示，这里的回读只负责「更正」。
-            withContext(Dispatchers.IO) { repo.init(credentials) }
+            withContext(Dispatchers.IO) { repo.init(credentials, requestLog = preferences.requestLogEnabled) }
             _state.update { it.copy(bridgeReady = repo.isReady(), bridgeError = repo.readyError()) }
 
             fetchWeek(0)
@@ -553,14 +558,102 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
-    fun setCampusWifiOnly(enabled: Boolean) {
-        preferences.campusWifiOnly = enabled
+    fun setCampusWifiOnly(enabled: Boolean) {        preferences.campusWifiOnly = enabled
         _state.update { it.copy(campusWifiOnly = enabled) }
         if (enabled && !networkState.isOnWifi()) {
             // 打开开关时立刻把残留的 online/unauth 置为 offline，动作按钮同时禁用。
             applyCampusOfflineSkipped()
         } else {
             refreshCampusStatus(manual = false)
+        }
+    }
+
+    // ---- 请求记录（设置页「日志」） ---------------------------------------
+
+    /** 首次进入日志页：读一次最近列表（0 请求，只读 Go 进程内存）。 */
+    fun loadRequestLog() {
+        if (requestLogJob?.isActive == true) return
+        requestLogJob = viewModelScope.launch {
+            val result = withContext(Dispatchers.IO) { repo.requestLog() }
+            result.fold(
+                onSuccess = { log ->
+                    // 轮询每 2s 一次：内容没变就不动 state，避免无意义的重组。
+                    if (_state.value.log != log) _state.update { it.copy(log = log) }
+                },
+                onFailure = { ex ->
+                    // 门面未就绪是启动时序问题，不弹错；下次进入页面会再读一次。
+                    if (!repo.isReady()) return@fold
+                    pushError(ex)
+                },
+            )
+        }
+    }
+
+    /**
+     * 开关请求记录。
+     *
+     * 为什么要落盘后重新 `Init`：Go 侧记录器挂在会话的 HTTP 适配器上，
+     * **真正的开关动作走 `log.enable`**（不需要重新 Init）；持久化只为了让冷启动后的
+     * `Init` 带上 `requestLog`，把用户上次的选择恢复回来。
+     */
+    fun setRequestLog(enabled: Boolean) {
+        // 先改本地状态：开关是即时动作，不能等网络 / JNI 回来再动。
+        preferences.requestLogEnabled = enabled
+        _state.update { it.copy(requestLogEnabled = enabled, log = null) }
+        requestLogJob?.cancel()
+        requestLogJob = viewModelScope.launch {
+            val result = withContext(Dispatchers.IO) { repo.setRequestLog(enabled) }
+            result.fold(
+                onSuccess = { log -> _state.update { it.copy(log = log) } },
+                onFailure = { ex ->
+                    // 回滚本地状态：没真的开起来就不能显示「已开启」。
+                    preferences.requestLogEnabled = !enabled
+                    _state.update { it.copy(requestLogEnabled = !enabled) }
+                    if (!repo.isReady()) return@fold
+                    pushError(ex)
+                },
+            )
+        }
+    }
+
+    /** 日志页轮询用：读一次列表（0 请求，只读 Go 进程内存）。 */
+    fun refreshRequestLog() = loadRequestLog()
+
+    /** 点开某条日志：取完整记录（含原始标头与正文）。 */
+    fun openRequestLog(seq: Long) {
+        if (requestLogDetailJob?.isActive == true) return
+        _state.update { it.copy(logDetail = null, logDetailLoading = true) }
+        requestLogDetailJob = viewModelScope.launch {
+            val result = withContext(Dispatchers.IO) { repo.requestLogDetail(seq) }
+            result.fold(
+                onSuccess = { entry ->
+                    _state.update { it.copy(logDetail = entry, logDetailLoading = false) }
+                },
+                onFailure = { ex ->
+                    // 条目已被环形窗口丢弃时会回 2001：把列表刷一遍，弹窗不弹错。
+                    _state.update { it.copy(logDetailLoading = false) }
+                    pushError(ex)
+                    loadRequestLog()
+                },
+            )
+        }
+    }
+
+    fun closeRequestLog() {
+        requestLogDetailJob?.cancel()
+        _state.update { it.copy(logDetail = null, logDetailLoading = false) }
+    }
+    /** 清空记录：只清内容，不改开关。 */
+    fun clearRequestLog() {
+        if (requestLogDetailJob?.isActive == true) return
+        requestLogDetailJob = viewModelScope.launch {
+            val result = withContext(Dispatchers.IO) { repo.clearRequestLog() }
+            result.fold(
+                onSuccess = { log ->
+                    _state.update { it.copy(log = log, logDetail = null) }
+                },
+                onFailure = { ex -> pushError(ex) },
+            )
         }
     }
 
@@ -710,7 +803,13 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                     }
                 }
 
-                val env = withContext(Dispatchers.IO) { repo.init(merged, resetSnapshot = identityChanged) }
+                val env = withContext(Dispatchers.IO) {
+                    repo.init(
+                        merged,
+                        resetSnapshot = identityChanged,
+                        requestLog = preferences.requestLogEnabled,
+                    )
+                }
                 _state.update {
                     it.copy(
                         credentials = merged,
@@ -903,6 +1002,14 @@ data class AppState(
     val amoled: Boolean = false,
     val settingsSaved: Boolean = false,
     val error: String? = null,
+
+    /** 请求记录开关（默认关闭，docs/002 §2.1 规则 10）。 */
+    val requestLogEnabled: Boolean = false,
+    /** 日志页列表；`null` 表示还没读过（首次进页时加载）。 */
+    val log: LogState? = null,
+    /** 点开的日志详情；非 null 时展示底部弹层。 */
+    val logDetail: LogEntry? = null,
+    val logDetailLoading: Boolean = false,
 
     val probe: ProbeState? = null,
 

@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
@@ -527,4 +528,159 @@ func TestTimetableExportWithoutSnapshotReturns3001(t *testing.T) {
 	if _, has := env["data"]; has {
 		t.Error("失败信封不应出现 data")
 	}
+}
+
+// —— 请求记录（设置页「日志」） ——
+//
+// 四个 log.* op 是排查用的：开关默认关闭，开启后记录完整的请求 / 响应形状，
+// 但 Cookie 与凭据字段必须恒遮罩（docs/002 §5.3、P1 / P2 / P6）。
+// 记录器是进程级共享的，每个用例自行开关 + 清空，互不串味。
+
+func resetRequestLog(t *testing.T) {
+	t.Helper()
+	l := currentRequestLog()
+	t.Cleanup(func() { l.SetEnabled(false) })
+	l.SetEnabled(false)
+}
+
+func TestLogOpsDefaultOff(t *testing.T) {
+	resetRequestLog(t)
+	testSession(t, initConfig{})
+
+	env := decode(t, Call(`{"op":"log.list"}`))
+	if env["ok"] != true {
+		t.Fatalf("log.list 失败: %v", env)
+	}
+	data, _ := env["data"].(map[string]any)
+	if data["enabled"] != false {
+		t.Errorf("记录必须默认关闭: %v", data)
+	}
+	if count, _ := data["count"].(float64); count != 0 {
+		t.Errorf("count = %v, want 0", data["count"])
+	}
+}
+
+// 开启后经真实适配器（本地 httptest）发出的请求会被记录，且 Cookie / 密码被遮罩。
+func TestLogRecordsRawExchangeThroughAdapter(t *testing.T) {
+	resetRequestLog(t)
+	s := testSession(t, initConfig{})
+	decode(t, Call(`{"op":"log.enable","enabled":true}`))
+
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write([]byte(`{"result":"0","roomverify":"rv-value"}`))
+	}))
+	defer ts.Close()
+	req, err := http.NewRequest(http.MethodPost, ts.URL+"/api?ticket=ST-1",
+		strings.NewReader("signupInputUserName=<学号>&signupInputPassword=<密码>"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	req.Header.Set("Cookie", "bzb_jsxsd=sess-value")
+	resp, err := s.doer.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, _ = io.ReadAll(resp.Body)
+	_ = resp.Body.Close()
+
+	list := decode(t, Call(`{"op":"log.list"}`))
+	data, _ := list["data"].(map[string]any)
+	entries, _ := data["entries"].([]any)
+	if len(entries) != 1 {
+		t.Fatalf("entries = %v", entries)
+	}
+	summary, _ := entries[0].(map[string]any)
+	if summary["method"] != http.MethodPost || summary["status"].(float64) != 200 {
+		t.Errorf("摘要 = %v", summary)
+	}
+	seq, _ := summary["seq"].(float64)
+
+	detail := decode(t, Call(fmt.Sprintf(`{"op":"log.detail","seq":%d}`, int64(seq))))
+	detailData, _ := detail["data"].(map[string]any)
+	all := fmt.Sprint(detailData)
+	// 记录的是完整原始报文：标头（含 Cookie）、正文、URL 参数都原样保留。
+	// 隐私约束落在「不入仓」一侧 —— 这里用的全是占位符（P1 / P3）。
+	for _, want := range []string{
+		"signupInputUserName=<学号>", "signupInputPassword=<密码>",
+		"bzb_jsxsd=sess-value", "rv-value", "ticket=ST-1",
+	} {
+		if !strings.Contains(all, want) {
+			t.Errorf("记录缺少原始内容 %q: %s", want, all)
+		}
+	}
+}
+
+func TestLogEnableClearsAndDisableWipes(t *testing.T) {
+	resetRequestLog(t)
+	s := testSession(t, initConfig{})
+	decode(t, Call(`{"op":"log.enable","enabled":true}`))
+	hitLocal(t, s)
+
+	// 关闭再开启：窗口从「开启那一刻」重新开始，不混入上一轮条目。
+	decode(t, Call(`{"op":"log.enable","enabled":false}`))
+	env := decode(t, Call(`{"op":"log.enable","enabled":true}`))
+	data, _ := env["data"].(map[string]any)
+	if count, _ := data["count"].(float64); count != 0 {
+		t.Errorf("重新开启应清空旧条目, count = %v", count)
+	}
+
+	hitLocal(t, s)
+	off := decode(t, Call(`{"op":"log.enable","enabled":false}`))
+	offData, _ := off["data"].(map[string]any)
+	if offData["enabled"] != false || offData["count"].(float64) != 0 {
+		t.Errorf("关闭后应清空: %v", offData)
+	}
+}
+
+func TestLogClearAndExpiredDetail(t *testing.T) {
+	resetRequestLog(t)
+	s := testSession(t, initConfig{})
+	decode(t, Call(`{"op":"log.enable","enabled":true}`))
+	hitLocal(t, s)
+	hitLocal(t, s)
+
+	list := decode(t, Call(`{"op":"log.list"}`))
+	data, _ := list["data"].(map[string]any)
+	entries, _ := data["entries"].([]any)
+	if len(entries) != 2 {
+		t.Fatalf("entries = %v", entries)
+	}
+	first, _ := entries[0].(map[string]any)
+	seq, _ := first["seq"].(float64)
+
+	cleared := decode(t, Call(`{"op":"log.clear"}`))
+	clearedData, _ := cleared["data"].(map[string]any)
+	if removed, _ := clearedData["removed"].(float64); int(removed) != 2 {
+		t.Errorf("removed = %v, want 2", clearedData["removed"])
+	}
+
+	// 条目已不存在时回 2001，不静默返回空对象。
+	gone := decode(t, Call(fmt.Sprintf(`{"op":"log.detail","seq":%d}`, int64(seq))))
+	if gone["ok"] != false {
+		t.Fatalf("过期条目应失败: %v", gone)
+	}
+}
+
+// hitLocal 经会话的 HTTP 适配器打一次本地服务，用于产生一条日志。
+func hitLocal(t *testing.T, s *session) {
+	t.Helper()
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write([]byte(`{"result":"0"}`))
+	}))
+	defer ts.Close()
+	resp, err := s.doer.Do(mustRequest(t, ts.URL+"/api"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, _ = io.ReadAll(resp.Body)
+	_ = resp.Body.Close()
+}
+
+func mustRequest(t *testing.T, url string) *http.Request {
+	t.Helper()
+	req, err := http.NewRequest(http.MethodGet, url, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return req
 }

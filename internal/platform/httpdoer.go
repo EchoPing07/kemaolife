@@ -18,7 +18,11 @@ import (
 type HTTPDoer struct {
 	client  *http.Client
 	noRedir *http.Client
-	mu      sync.Mutex
+	// base 保留未包装的 Transport：安装 / 卸载请求记录时在此之上重新套一层，
+	// 不让「包装」与「拆包」互相嵌套（否则重复开关会套出多层记录器）。
+	base   *http.Transport
+	reqLog *RequestLog
+	mu     sync.Mutex
 }
 
 // NewHTTPDoer 构造适配器；timeout<=0 时用 30s。
@@ -39,7 +43,21 @@ func NewHTTPDoer(timeout time.Duration) *HTTPDoer {
 		MaxIdleConnsPerHost:   2,
 		ForceAttemptHTTP2:     true,
 	}
-	return &HTTPDoer{client: &http.Client{Timeout: timeout, Transport: transport}}
+	return &HTTPDoer{client: &http.Client{Timeout: timeout, Transport: transport}, base: transport}
+}
+
+// SetRequestLog 安装请求记录器（nil 表示不记录）。
+//
+// 记录器只在启用时读取正文，关闭时 RoundTrip 直通，正常查询不受影响。
+func (h *HTTPDoer) SetRequestLog(l *RequestLog) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	h.reqLog = l
+	if h.base != nil {
+		h.client.Transport = l.Wrap(h.base)
+	}
+	// noRedir 是从 client 复制出来的：旧副本仍指向旧 Transport，必须重建。
+	h.noRedir = nil
 }
 
 // Do 满足 core.HTTPDoer。

@@ -191,6 +191,24 @@ internal object TabIcons {
         "M12 4l1.6 4.4l4.4 1.6l-4.4 1.6l-1.6 4.4l-1.6 -4.4l-4.4 -1.6l4.4 -1.6z",
     ))
 
+    // Tabler `bug`：日志页（请求记录）入口。
+    val Bug = icon("Bug", listOf(
+        "M9 9v-1a3 3 0 0 1 6 0v1",
+        "M8 9h8a6 6 0 0 1 1 3v3a5 5 0 0 1 -10 0v-3a6 6 0 0 1 1 -3",
+        "M3 13h4", "M17 13h4",
+        "M12 20v-6",
+        "M4 19l3.35 -2", "M20 19l-3.35 -2",
+        "M4 7l3.75 2.4", "M20 7l-3.75 2.4",
+    ))
+
+    // Tabler `trash`：日志页右上角的清空按钮。
+    val Trash = icon("Trash", listOf(
+        "M4 7h16",
+        "M10 11v6", "M14 11v6",
+        "M5 7l1 12a2 2 0 0 0 2 2h8a2 2 0 0 0 2 -2l1 -12",
+        "M9 7v-3a1 1 0 0 1 1 -1h4a1 1 0 0 1 1 1v3",
+    ))
+
     // Tabler `download`：导出课表（导出到用户选定的文件位置）。
     val Export = icon("Download", listOf(
         "M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2 -2v-2",
