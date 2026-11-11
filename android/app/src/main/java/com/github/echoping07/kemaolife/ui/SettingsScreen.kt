@@ -214,9 +214,9 @@ private fun SettingsOverview(
             position = GroupPosition.ONLY,
         )
 
-        // 关于与日志同属辅助项：它们不影响账号、也不影响外观，
+        // 关于与日志归为「关于与支持」：它们不影响账号、也不影响外观，
         // 单独一组避免混在「个性化」里让外观项被挤成半组。
-        SettingsGroupLabel(stringResource(R.string.settings_utility))
+        SettingsGroupLabel(stringResource(R.string.settings_about_support))
         SettingsDestination(
             icon = TabIcons.Info,
             title = stringResource(R.string.settings_about),

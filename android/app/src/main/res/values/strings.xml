@@ -95,8 +95,8 @@
     <string name="settings_about">关于</string>
     <string name="settings_about_hint">版本与开源信息</string>
 
-    <!-- 设置页「辅助」组：关于 + 日志（docs/002 §5.3 tab3）。 -->
-    <string name="settings_utility">辅助</string>
+    <!-- 设置页「关于与支持」组：关于 + 日志（docs/002 §5.3 tab3）。 -->
+    <string name="settings_about_support">关于与支持</string>
     <string name="settings_logs">日志</string>
     <string name="settings_logs_hint">正在记录请求，点开查看详情</string>
     <string name="settings_logs_idle">记录完整请求，便于排查</string>
