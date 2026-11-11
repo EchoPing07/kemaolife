@@ -56,8 +56,8 @@ import kotlin.math.sin
 /**
  * 通用容器：MD3 Expressive filled card + 标题行。
  *
- * 卡片使用 [MaterialTheme.colorScheme.surfaceContainerLow]（在浅色模式下为高亮纯白），
- * 与柔和浅灰的背景色（surface）形成明暗对比，让内容区域成为视觉焦点。
+ * 卡片使用 [MaterialTheme.colorScheme.surfaceContainerLow]（浅色模式下为纯白），
+ * 与带当前主题色相的浅灰页面底色形成明暗对比，让内容区域成为视觉焦点。
  * 圆角采用 extraLarge（28dp 平滑圆角），展现饱满包容的张力。
  */
 @Composable

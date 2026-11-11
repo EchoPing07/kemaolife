@@ -51,6 +51,36 @@ internal enum class AppThemeColor(
 internal fun AppThemeColor.previewColorScheme(dark: Boolean, amoled: Boolean = false): ColorScheme =
     presetColorScheme(this, dark, amoled)
 
+/** 浅色表面色阶：单色预设无可用色相，沿用既有冷中性。 */
+private fun AppThemeColor.lightSurface(lightness: Float): Color {
+    if (this == AppThemeColor.MONOCHROMATIC) {
+        // 用同一 HSL 公式的中性分支，明度与彩色预设一致。
+        val hsl = floatArrayOf(210f, 0.02f, lightness)
+        return Color(ColorUtils.HSLToColor(hsl))
+    }
+    val hsl = FloatArray(3)
+    ColorUtils.colorToHSL(secondarySeed.toArgb(), hsl)
+    hsl[1] = 0.12f
+    hsl[2] = lightness
+    return Color(ColorUtils.HSLToColor(hsl))
+}
+
+/**
+ * 浅色页面底色：取当前预设 secondarySeed 的色相，固定低饱和与固定明度。
+ *
+ * 为什么固定明度而不是按 seed 直接混色：AOSP 8 个基础色的明度差很大（黄 vs 蓝），
+ * 按比例混合会让绿色主题页面明显更亮、白卡对比变弱。统一 HSL 明度后 8 个预设的
+ * 白卡 / 底色对比都在 1.2 左右，页面色相仍随主题变化，卡片始终是最亮的面。
+ * 同色相的低明度派生色用于卡片内的指标块 / 弹层，避免暖色主题里嵌冷蓝灰。
+ */
+private data class LightSurfaces(val page: Color, val high: Color, val highest: Color)
+
+private fun AppThemeColor.lightSurfaces(): LightSurfaces = LightSurfaces(
+    page = lightSurface(0.91f),
+    high = lightSurface(0.865f),
+    highest = lightSurface(0.825f),
+)
+
 private fun presetColorScheme(theme: AppThemeColor, dark: Boolean, amoled: Boolean): ColorScheme {
     val argb = theme.color.toArgb()
     val secArgb = theme.secondarySeed.toArgb()
@@ -73,6 +103,9 @@ private fun presetColorScheme(theme: AppThemeColor, dark: Boolean, amoled: Boole
     val tertContainer = if (dark) ColorUtils.blendARGB(tertArgb, android.graphics.Color.BLACK, 0.45f)
     else ColorUtils.blendARGB(tertArgb, android.graphics.Color.WHITE, 0.85f)
 
+    // 浅色：页面底色、固定顶栏（surface）与底栏（surfaceContainer）共用同一色，
+    // 卡片 / 分组项用最亮表面纯白，白卡成为唯一亮面；深色与 AMOLED 不参与。
+    val surfaces = theme.lightSurfaces()
     val base = if (dark) {
         darkColorScheme(
             background = Color(0xFF0F1113),
@@ -89,13 +122,13 @@ private fun presetColorScheme(theme: AppThemeColor, dark: Boolean, amoled: Boole
         )
     } else {
         lightColorScheme(
-            background = Color(0xFFF3F4F6),
-            surface = Color(0xFFF3F4F6),
+            background = surfaces.page,
+            surface = surfaces.page,
             surfaceContainerLowest = Color(0xFFFFFFFF),
             surfaceContainerLow = Color(0xFFFFFFFF),
-            surfaceContainer = Color(0xFFE5E7EB),
-            surfaceContainerHigh = Color(0xFFDDE1E6),
-            surfaceContainerHighest = Color(0xFFD1D5DB),
+            surfaceContainer = surfaces.page,
+            surfaceContainerHigh = surfaces.high,
+            surfaceContainerHighest = surfaces.highest,
             onSurface = Color(0xFF191C1E),
             onSurfaceVariant = Color(0xFF44474B),
             outline = Color(0xFF74777B),
@@ -128,6 +161,19 @@ private fun ColorScheme.withAmoledSurfaces(): ColorScheme = copy(
     surfaceContainer = Color(0xFF101010),
     surfaceContainerHigh = Color(0xFF181818),
     surfaceContainerHighest = Color(0xFF202020),
+)
+
+/**
+ * 动态取色（Android 12+）的浅色分支与预设主题保持同一明暗关系。
+ *
+ * 系统浅色里 background / surface 是 tone 98、surfaceContainerLow 是 tone 96，
+ * 直接用默认值会出现「页面比卡片更亮」。页面统一退到 surfaceContainer（tone 94），
+ * 卡片升到 surfaceContainerLowest（纯白）；深色分支不动，避免纯黑上出现灰片。
+ */
+private fun ColorScheme.withLightPageSurfaces(): ColorScheme = copy(
+    background = surfaceContainer,
+    surface = surfaceContainer,
+    surfaceContainerLow = surfaceContainerLowest,
 )
 
 private fun Color.darken(amount: Float) = Color(ColorUtils.blendARGB(toArgb(), android.graphics.Color.BLACK, amount))
@@ -221,7 +267,11 @@ fun KemaolifeTheme(
     val target = when {
         dynamicColor && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S -> {
             val dynamic = if (dark) dynamicDarkColorScheme(context) else dynamicLightColorScheme(context)
-            if (dark && amoled) dynamic.withAmoledSurfaces() else dynamic
+            when {
+                dark && amoled -> dynamic.withAmoledSurfaces()
+                !dark -> dynamic.withLightPageSurfaces()
+                else -> dynamic
+            }
         }
         else -> presetColorScheme(theme, dark, amoled)
     }

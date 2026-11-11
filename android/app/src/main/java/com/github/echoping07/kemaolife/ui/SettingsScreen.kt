@@ -681,8 +681,9 @@ private fun AppTextField(
             imeAction = imeAction,
         ),
         colors = androidx.compose.material3.OutlinedTextFieldDefaults.colors(
-            focusedContainerColor = MaterialTheme.colorScheme.surface,
-            unfocusedContainerColor = MaterialTheme.colorScheme.surface,
+            // 输入框在白色分组卡内；用卡片同色而不是页面底色，避免在白卡里嵌一块灰。
+            focusedContainerColor = MaterialTheme.colorScheme.surfaceContainerLow,
+            unfocusedContainerColor = MaterialTheme.colorScheme.surfaceContainerLow,
             focusedBorderColor = MaterialTheme.colorScheme.primary,
             unfocusedBorderColor = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f),
         ),
