@@ -1,5 +1,6 @@
 package com.github.echoping07.kemaolife
 
+import android.os.Build
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -62,6 +63,13 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
+        // 小米 / 澎湃把只属于三键导航的白色对比度遮罩也画到手势提示线区域，
+        // 盖住底栏延伸到屏幕底边的部分；底栏已由 Scaffold 消费底部 inset，
+        // 关掉遮罩才能透出底栏色（小米开发者平台 pId=1629）。
+        // enableEdgeToEdge() 内部会把该开关置为 true，因此必须放在它之后。
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            window.isNavigationBarContrastEnforced = false
+        }
         setContent {
             val state by viewModel.state.collectAsStateWithLifecycle()
             KemaolifeTheme(
