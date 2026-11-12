@@ -201,6 +201,13 @@ internal object TabIcons {
         "M4 7l3.75 2.4", "M20 7l-3.75 2.4",
     ))
 
+    // Tabler `share-2`：设置页「分享」（箭头从方框向外）。
+    val Share = icon("Share2", listOf(
+        "M8 9h-1a2 2 0 0 0 -2 2v8a2 2 0 0 0 2 2h10a2 2 0 0 0 2 -2v-8a2 2 0 0 0 -2 -2h-1",
+        "M12 14v-11",
+        "M9 6l3 -3l3 3",
+    ))
+
     // Tabler `trash`：日志页右上角的清空按钮。
     val Trash = icon("Trash", listOf(
         "M4 7h16",

@@ -47,6 +47,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
@@ -214,7 +215,7 @@ private fun SettingsOverview(
             position = GroupPosition.ONLY,
         )
 
-        // 关于与日志归为「关于与支持」：它们不影响账号、也不影响外观，
+        // 关于、日志与分享归为「关于与支持」：它们不影响账号、也不影响外观，
         // 单独一组避免混在「个性化」里让外观项被挤成半组。
         SettingsGroupLabel(stringResource(R.string.settings_about_support))
         SettingsDestination(
@@ -234,8 +235,10 @@ private fun SettingsOverview(
                 stringResource(R.string.settings_logs_idle)
             },
             onClick = onLogs,
-            position = GroupPosition.LAST,
+            position = GroupPosition.MIDDLE,
         )
+        GroupGap()
+        ShareDestination()
 
         if (!state.bridgeReady && state.bridgeError != null) {
             Text(
@@ -246,6 +249,21 @@ private fun SettingsOverview(
             )
         }
     }
+}
+
+/** 分享只发固定的公开项目信息，不读取任何查询结果 / 日志 / 凭据。 */
+@Composable
+private fun ShareDestination() {
+    val context = LocalContext.current
+    val appName = stringResource(R.string.app_name)
+    val chooserTitle = stringResource(R.string.share_chooser_title)
+    SettingsDestination(
+        icon = TabIcons.Share,
+        title = stringResource(R.string.settings_share),
+        supporting = stringResource(R.string.settings_share_hint),
+        onClick = { shareProject(context, appName, chooserTitle) },
+        position = GroupPosition.LAST,
+    )
 }
 
 @Composable
