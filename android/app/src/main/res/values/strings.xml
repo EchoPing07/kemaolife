@@ -102,6 +102,9 @@
     <string name="settings_logs_idle">记录完整请求，便于排查</string>
     <string name="settings_share">分享</string>
     <string name="settings_share_hint">发送应用名称与项目地址</string>
+    <string name="settings_contact">交流</string>
+    <string name="settings_contact_hint">QQ 群 %1$s</string>
+    <string name="settings_contact_failed">没有找到可以打开 QQ 群的应用</string>
     <string name="share_chooser_title">分享项目</string>
     <string name="share_no_target">没有可用于分享的应用</string>
 

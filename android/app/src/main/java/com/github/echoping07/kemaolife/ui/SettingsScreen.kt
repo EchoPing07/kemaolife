@@ -215,7 +215,7 @@ private fun SettingsOverview(
             position = GroupPosition.ONLY,
         )
 
-        // 关于、日志与分享归为「关于与支持」：它们不影响账号、也不影响外观，
+        // 关于、日志、交流与分享归为「关于与支持」：它们不影响账号、也不影响外观，
         // 单独一组避免混在「个性化」里让外观项被挤成半组。
         SettingsGroupLabel(stringResource(R.string.settings_about_support))
         SettingsDestination(
@@ -238,6 +238,8 @@ private fun SettingsOverview(
             position = GroupPosition.MIDDLE,
         )
         GroupGap()
+        ContactDestination()
+        GroupGap()
         ShareDestination()
 
         if (!state.bridgeReady && state.bridgeError != null) {
@@ -249,6 +251,19 @@ private fun SettingsOverview(
             )
         }
     }
+}
+
+/** 交流只跳 QQ 交流群，不带任何本机数据；加群逻辑见 [joinQQGroup]。 */
+@Composable
+private fun ContactDestination() {
+    val context = LocalContext.current
+    SettingsDestination(
+        icon = TabIcons.QQ,
+        title = stringResource(R.string.settings_contact),
+        supporting = stringResource(R.string.settings_contact_hint, QQ_GROUP_NUMBER),
+        onClick = { joinQQGroup(context) },
+        position = GroupPosition.MIDDLE,
+    )
 }
 
 /** 分享只发固定的公开项目信息，不读取任何查询结果 / 日志 / 凭据。 */
