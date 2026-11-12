@@ -45,6 +45,14 @@ class TimetableCacheTest {
         assertEquals("2026-11-09", cached?.schedule?.days?.single()?.date)
         assertEquals("高等数学", cached?.schedule?.days?.single()?.entries?.single()?.name)
         assertEquals("2026-11-08T09:00:00+08:00", cached?.syncedAt)
+        assertTrue(TimetableCache.encode(week, "2026-11-08T09:00:00+08:00").contains("\"version\":${TimetableCache.VERSION}"))
+    }
+
+    @Test
+    fun `旧版本与缺版本的展示镜像必须失效`() {
+        val raw = TimetableCache.encode(week, "2026-11-08T09:00:00+08:00")
+        assertNull(TimetableCache.decode(raw.replace("\"version\":${TimetableCache.VERSION}", "\"version\":1")))
+        assertNull(TimetableCache.decode(JSONObject().put("week", 7).put("days", JSONArray()).toString()))
     }
 
     @Test

@@ -114,7 +114,12 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
 
     // 首帧缓存同步读：SharedPreferences 的读取很轻，且必须在 ViewModel 构造时完成，
     // 不能像以前那样塞进 viewModelScope.launch（那会等到协程调度 + JNI Init 之后）。
-    private val cachedWeek: CachedWeek? = TimetableCache.decode(preferences.timetableCacheJson)
+    private val cachedWeek: CachedWeek? = TimetableCache.decode(preferences.timetableCacheJson).also {
+        // 旧版本镜像可能含整门课聚合地点：立即清掉，首帧不再显示不可信教室。
+        if (it == null && preferences.timetableCacheJson.isNotEmpty()) {
+            preferences.clearTimetableCache()
+        }
+    }
 
     private val _state = MutableStateFlow(
         AppState(

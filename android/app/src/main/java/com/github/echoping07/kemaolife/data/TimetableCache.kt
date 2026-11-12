@@ -20,7 +20,16 @@ data class CachedWeek(val schedule: WeekSchedule, val syncedAt: String)
 
 object TimetableCache {
 
+    /**
+     * 展示镜像格式版本。
+     *
+     * v1 的 `location` 可能是整门课全部地点的汇总；课时段地点配对修正后，
+     * 旧镜像必须丢弃，不能继续作为冷启动首帧（docs/002 §5.3）。
+     */
+    const val VERSION = 2
+
     fun encode(schedule: WeekSchedule, syncedAt: String): String = JSONObject()
+        .put("version", VERSION)
         .put("week", schedule.week)
         .put("syncedAt", syncedAt)
         .put("days", JSONArray().also { days ->
@@ -33,6 +42,8 @@ object TimetableCache {
         if (raw.isBlank()) return null
         return try {
             val obj = JSONObject(raw)
+            // 旧版本（含缺省 version = 0）里可能存着聚合地点，不能用于首帧。
+            if (obj.optInt("version", 0) != VERSION) return null
             val days = obj.optJSONArray("days") ?: return null
             if (days.length() == 0) return null
             val parsed = ArrayList<DaySchedule>(days.length())

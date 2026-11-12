@@ -33,38 +33,63 @@ var (
 
 // Slot 是一条课的一个上课时段（同一条课程可能有多个）。
 type Slot struct {
-	Weekday int    // 周一 = 1 … 周日 = 7
-	Periods string // 归一化节次，如 "1-2" 或 "1,2"
-	Weeks   []int  // 展开后的周次（升序）
+	Weekday  int    // 周一 = 1 … 周日 = 7
+	Periods  string // 归一化节次，如 "1-2" 或 "1,2"
+	Weeks    []int  // 展开后的周次（升序）
+	Location string // 该时段对应的上课地点，不再汇总整门课的全部地点
 }
 
 // ParseSktime 把 `sktime` 字段解析成若干上课时段。
 //
-// 例：`周三第1、2节{2,4,7-10}全周;周四第1、2节{9}全周` → 两个 Slot。
-func ParseSktime(raw string) ([]Slot, error) {
+// `locationsRaw` 是同一课程行的 `skddmc`：两个字段都用 `;` 分段，
+// 第 i 个非空地点属于第 i 个非空时段（api-docs/001 §5.5）。空片段会被忽略，
+// 一个地点可用于所有时段；其它数量关系一律报错，不允许猜测对应关系。
+//
+// 例：`周三第1、2节{2,4,7-10}全周;周四第1、2节{9}全周` + `<地点A>;<地点B>` → 两个 Slot。
+func ParseSktime(raw, locationsRaw string) ([]Slot, error) {
 	trimmed := strings.TrimSpace(raw)
 	if trimmed == "" {
 		return nil, model.NewError(model.CodeMalformedResponse, "上课安排字段为空")
 	}
 
-	segments := strings.Split(trimmed, ";")
+	segments := nonEmptySegments(trimmed)
+	locations := nonEmptySegments(locationsRaw)
+	if len(locations) > 1 && len(locations) != len(segments) {
+		return nil, model.NewError(model.CodeMalformedResponse,
+			fmt.Sprintf("上课时段与地点数量不匹配: 时段 %d 个，地点 %d 个", len(segments), len(locations)))
+	}
+
 	slots := make([]Slot, 0, len(segments))
-	for _, seg := range segments {
-		seg = strings.TrimSpace(seg)
-		if seg == "" {
-			continue
-		}
+	for i, seg := range segments {
 		slot, err := parseSlotSegment(seg)
 		if err != nil {
 			return nil, err
 		}
+		switch {
+		case len(locations) == 1:
+			slot.Location = locations[0]
+		case len(locations) > 1:
+			slot.Location = locations[i]
+		}
 		slots = append(slots, slot)
 	}
 	if len(slots) == 0 {
-		return nil, model.NewError(model.CodeMalformedResponse,
-			fmt.Sprintf("上课安排未解析出任何时段: %q", raw))
+		return nil, model.NewError(model.CodeMalformedResponse, "上课安排未解析出任何时段")
 	}
 	return slots, nil
+}
+
+// nonEmptySegments 按 `;` 切分并去掉首尾空白与空片段。
+// 实测上游地点片段可能带首尾空白，尾部分号也不代表额外时段。
+func nonEmptySegments(raw string) []string {
+	parts := strings.Split(raw, ";")
+	out := make([]string, 0, len(parts))
+	for _, part := range parts {
+		if part = strings.TrimSpace(part); part != "" {
+			out = append(out, part)
+		}
+	}
+	return out
 }
 
 func parseSlotSegment(seg string) (Slot, error) {

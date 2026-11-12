@@ -6,7 +6,7 @@ import (
 )
 
 func TestParseSktimeSingle(t *testing.T) {
-	slots, err := ParseSktime("周三第1、2节{2,4,7-10}全周")
+	slots, err := ParseSktime("周三第1、2节{2,4,7-10}全周", "<地点A>")
 	if err != nil {
 		t.Fatalf("ParseSktime: %v", err)
 	}
@@ -24,11 +24,15 @@ func TestParseSktimeSingle(t *testing.T) {
 	if !equalInts(slots[0].Weeks, want) {
 		t.Errorf("weeks = %v, want %v", slots[0].Weeks, want)
 	}
+	if slots[0].Location != "<地点A>" {
+		t.Errorf("location = %q, want <地点A>", slots[0].Location)
+	}
 }
 
 func TestParseSktimeMultipleSlots(t *testing.T) {
 	raw := "周三第3、4节{19}全周;周三第3、4节{2-4,7-8,10}全周;周四第5、6节{9}全周"
-	slots, err := ParseSktime(raw)
+	locations := " <地点A> ; <地点B> ; <地点C> ;"
+	slots, err := ParseSktime(raw, locations)
 	if err != nil {
 		t.Fatalf("ParseSktime: %v", err)
 	}
@@ -38,11 +42,67 @@ func TestParseSktimeMultipleSlots(t *testing.T) {
 	if slots[2].Weekday != 4 {
 		t.Errorf("第三段 weekday = %d, want 4", slots[2].Weekday)
 	}
+	wantLocations := []string{"<地点A>", "<地点B>", "<地点C>"}
+	for i, want := range wantLocations {
+		if slots[i].Location != want {
+			t.Errorf("slots[%d].location = %q, want %q", i, slots[i].Location, want)
+		}
+	}
+}
+
+func TestParseSktimeLocationAlignment(t *testing.T) {
+	raw := "周一第1、2节{1}全周;周三第3、4节{2}全周"
+
+	slots, err := ParseSktime(raw, "<地点A>;<地点B>")
+	if err != nil {
+		t.Fatalf("ParseSktime: %v", err)
+	}
+	if got := []string{slots[0].Location, slots[1].Location}; !equalStrings(got, []string{"<地点A>", "<地点B>"}) {
+		t.Errorf("locations = %v, want each slot's real location", got)
+	}
+
+	// 同一地点在不同时段重复时，不做跨时段去重。
+	repeated, err := ParseSktime(raw, "<地点A>;<地点A>")
+	if err != nil {
+		t.Fatalf("ParseSktime repeated location: %v", err)
+	}
+	if repeated[0].Location != "<地点A>" || repeated[1].Location != "<地点A>" {
+		t.Errorf("repeated locations = %q,%q", repeated[0].Location, repeated[1].Location)
+	}
+
+	// 单个地点仍按整门课的共用地点广播给所有时段。
+	one, err := ParseSktime(raw, "<地点A>")
+	if err != nil {
+		t.Fatalf("ParseSktime common location: %v", err)
+	}
+	if one[0].Location != "<地点A>" || one[1].Location != "<地点A>" {
+		t.Errorf("common locations = %q,%q", one[0].Location, one[1].Location)
+	}
+
+	if _, err := ParseSktime(raw, "<地点A>;<地点B>;<地点C>"); err == nil {
+		t.Error("地点片段多于时段时应当报错")
+	}
+	threeSlots := "周一第1、2节{1}全周;周三第3、4节{2}全周;周五第5、6节{3}全周"
+	if _, err := ParseSktime(threeSlots, "<地点A>;<地点B>"); err == nil {
+		t.Error("地点片段少于时段时应当报错")
+	}
+}
+
+func equalStrings(a, b []string) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	for i := range a {
+		if a[i] != b[i] {
+			return false
+		}
+	}
+	return true
 }
 
 func TestParseSktimeRangePeriods(t *testing.T) {
 	// `第5-8节` 这种连续写法要保留成 5-8。
-	slots, err := ParseSktime("周二第5-8节{19}全周")
+	slots, err := ParseSktime("周二第5-8节{19}全周", "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -56,7 +116,7 @@ func TestParseSktimeRangePeriods(t *testing.T) {
 
 func TestParseSktimeRejectsGarbage(t *testing.T) {
 	for _, raw := range []string{"", "   ", "周三", "第1节{1}全周", "周三第1节", "周三第1节{}全周"} {
-		if _, err := ParseSktime(raw); err == nil {
+		if _, err := ParseSktime(raw, ""); err == nil {
 			t.Errorf("ParseSktime(%q) 应当报错", raw)
 		}
 	}

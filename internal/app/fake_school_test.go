@@ -31,8 +31,8 @@ const fakeAnchorHTML = `<table id="timetable"><thead><tr>
 
 const fakeCoursesJSON = `{"msg":"","code":0,"count":1,"data":[
  {"kc_mc":"新课程","kch":"<课程号>","jg0101mc":"教师乙",
-  "sktime":"周三第1、2节{10}全周",
-  "skddmc":"<地点>","skxqmc":"<校区>","kt_mc":"<教学班>"}
+  "sktime":"周三第1、2节{10}全周;周四第1、2节{9}全周",
+  "skddmc":"<地点A>;<地点B>","skxqmc":"<校区>","kt_mc":"<教学班>"}
 ]}`
 
 func newFakeSchool(t *testing.T) *fakeSchool {

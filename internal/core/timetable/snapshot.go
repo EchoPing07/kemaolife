@@ -11,7 +11,7 @@ import (
 )
 
 // SnapshotVersion 是快照格式版本；不匹配即丢弃重拉，不做兼容迁移（AGENTS §4.3）。
-const SnapshotVersion = 1
+const SnapshotVersion = 2
 
 // ErrSnapshotAbsent 是「从来没同步过」的哨兵，供 app 层把首次使用映射为 3001。
 //

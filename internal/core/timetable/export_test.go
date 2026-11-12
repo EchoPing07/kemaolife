@@ -35,6 +35,11 @@ func exportSnapshot() *Snapshot {
 			// 重复行（多时段解析出的同一节）只占一格。
 			{Name: "高等数学", Periods: "1,2", Weekday: 1, Weeks: seq(1, 5),
 				Teacher: "张三", Location: "逸夫楼101", WeeksText: "1-5周"},
+			// 同一门课不同时段位于不同教室：CSV 每行只写该时段的地点。
+			{Name: "大学英语", Periods: "1-2", Weekday: 3, Weeks: seq(1, 5),
+				Teacher: "教师甲", Location: "逸夫楼A", WeeksText: "1-5周"},
+			{Name: "大学英语", Periods: "3-4", Weekday: 3, Weeks: seq(1, 5),
+				Teacher: "教师甲", Location: "逸夫楼B", WeeksText: "1-5周"},
 		},
 	}
 }
@@ -58,6 +63,9 @@ func TestExportWakeUpCSVMatchOfficialTemplateShape(t *testing.T) {
 		"高等数学,1,1,2,张三,逸夫楼101,1-5",
 		// 含逗号的课程名 / 地点要加引号，否则列会错位。
 		`"创新,实践",2,3,4,李四,"实验楼,A101",2-4`,
+		// 同一门课不同时段位于不同教室：CSV 每行只写该时段的地点。
+		"大学英语,3,1,2,教师甲,逸夫楼A,1-5",
+		"大学英语,3,3,4,教师甲,逸夫楼B,1-5",
 		// 不连续节次（1,3）拆成两行，不能压成 1-3 凭空多出第 2 节。
 		"有机化学,4,1,1,王五,逸夫楼108,1-5",
 		"有机化学,4,3,3,王五,逸夫楼108,1-5",

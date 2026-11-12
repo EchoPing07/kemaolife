@@ -617,6 +617,41 @@ func (c *countingFailHTTP) Do(*http.Request) (*http.Response, error) {
 }
 
 // 导出只读缓存：即使 HTTP 完全不可用也照常出 CSV，且不发任何请求（docs/002 §5.3）。
+// 真实同步链路必须把多时段地点分别写入快照，并按周查询返回当节真实地点。
+func TestSyncTimetableMapsLocationsPerSlot(t *testing.T) {
+	deps, _, _ := testDeps(testClock())
+	fake := newFakeSchool(t)
+	deps.HTTP = fake.client
+	deps.CASBaseURL = fake.casURL
+	deps.JSBBaseURL = fake.jsbURL
+
+	result, err := app.SyncTimetable(context.Background(), deps, testConfig())
+	if err != nil {
+		t.Fatalf("SyncTimetable: %v", err)
+	}
+	if result.LessonCount != 2 {
+		t.Errorf("lessonCount = %d, want 2", result.LessonCount)
+	}
+
+	// 第 10 周周三：第一个时段；第 9 周周四：第二个时段。
+	wed, err := app.GetSchedule(context.Background(), deps, testConfig(),
+		model.Date{Year: 2026, Month: 11, Day: 4}, app.CacheOnly)
+	if err != nil {
+		t.Fatalf("GetSchedule wed: %v", err)
+	}
+	if len(wed.Day.Entries) != 1 || wed.Day.Entries[0].Location != "<地点A>" {
+		t.Errorf("wed entries = %+v, want <地点A>", wed.Day.Entries)
+	}
+	thu, err := app.GetSchedule(context.Background(), deps, testConfig(),
+		model.Date{Year: 2026, Month: 10, Day: 29}, app.CacheOnly)
+	if err != nil {
+		t.Fatalf("GetSchedule thu: %v", err)
+	}
+	if len(thu.Day.Entries) != 1 || thu.Day.Entries[0].Location != "<地点B>" {
+		t.Errorf("thu entries = %+v, want <地点B>", thu.Day.Entries)
+	}
+}
+
 func TestExportTimetableCSVReadsLocalSnapshot(t *testing.T) {
 	clock := testClock()
 	deps, store, _ := testDeps(clock)

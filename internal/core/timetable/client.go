@@ -212,17 +212,15 @@ func (c *Client) Sync(ctx context.Context) (*Snapshot, error) {
 	for _, course := range courses {
 		expanded, maxWeek, err := lessonFromCourse(course)
 		if err != nil {
-			// 单条课程解析失败不拖垮整份课表，但不能整份静默变空。
-			continue
+			// 不能跳过单条课程：那会让课表静默少课，而用户仍以为拿到了完整快照。
+			// 底层解析错误可能引用上游 `sktime` / `skddmc` 原文，只回固定脱敏文案（P2）。
+			return nil, model.NewError(model.CodeMalformedResponse,
+				"课程行的上课时段或地点无法可靠解析，请重新同步")
 		}
 		lessons = append(lessons, expanded...)
 		if maxWeek > lastWeek {
 			lastWeek = maxWeek
 		}
-	}
-	if len(lessons) == 0 && len(courses) > 0 {
-		return nil, model.NewError(model.CodeMalformedResponse,
-			"课程 JSON 全部条目解析失败，可能字段名已变更")
 	}
 	if lastWeek == 0 {
 		lastWeek = 1
@@ -248,16 +246,14 @@ func lessonFromCourse(row courseRow) ([]Lesson, int, error) {
 	name := pickString(row, fieldCourseName)
 	sktime := pickString(row, fieldCourseTime)
 	if name == "" || sktime == "" {
-		return nil, 0, fmt.Errorf("课程行缺少必填字段")
+		return nil, 0, model.NewError(model.CodeMalformedResponse, "课程行缺少必填字段")
 	}
-	slots, err := ParseSktime(sktime)
+	slots, err := ParseSktime(sktime, pickString(row, fieldCourseRoom))
 	if err != nil {
 		return nil, 0, err
 	}
 
 	teacher := pickString(row, fieldCourseTeacher)
-	location := dedupeList(pickString(row, fieldCourseRoom))
-	weeksText := summarizeWeeks(slots)
 
 	maxWeek := 0
 	out := make([]Lesson, 0, len(slots))
@@ -268,8 +264,8 @@ func lessonFromCourse(row courseRow) ([]Lesson, int, error) {
 			Weekday:   slot.Weekday,
 			Weeks:     slot.Weeks,
 			Teacher:   teacher,
-			Location:  location,
-			WeeksText: weeksText,
+			Location:  slot.Location,
+			WeeksText: summarizeWeeks([]Slot{slot}),
 		})
 		for _, w := range slot.Weeks {
 			if w > maxWeek {
@@ -576,27 +572,6 @@ func pickString(row map[string]any, key string) string {
 	default:
 		return strings.TrimSpace(fmt.Sprint(t))
 	}
-}
-
-// dedupeList 去掉 `;` 分隔列表里的重复项并保留首次出现顺序。
-//
-// 实测 skddmc 会把同一地点的多个周次段重复拼接
-// （`A;A;A;B`），原样输出既难读又会让 diff 噪声很大。
-func dedupeList(raw string) string {
-	if !strings.Contains(raw, ";") {
-		return raw
-	}
-	seen := map[string]bool{}
-	parts := make([]string, 0, 4)
-	for _, item := range strings.Split(raw, ";") {
-		item = strings.TrimSpace(item)
-		if item == "" || seen[item] {
-			continue
-		}
-		seen[item] = true
-		parts = append(parts, item)
-	}
-	return strings.Join(parts, ";")
 }
 
 func trimFloat(f float64) string {

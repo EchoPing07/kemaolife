@@ -39,7 +39,7 @@ const anchorHTML = `<table id="timetable"><thead><tr>
 const coursesJSON = `{"msg":"","code":0,"count":1,"data":[
  {"kc_mc":"课程甲","kch":"<课程号>","jg0101mc":"教师甲",
   "sktime":"周三第1、2节{2,4,7-10}全周;周四第1、2节{9}全周",
-  "skddmc":"<地点>","skxqmc":"<校区>","kt_mc":"<教学班>"}
+  "skddmc":"<地点A>;<地点B>","skxqmc":"<校区>","kt_mc":"<教学班>"}
 ]}`
 
 // newFakeSchool 起两个 httptest：cas 与 jsb，模拟实测跨主机链路。
@@ -247,9 +247,17 @@ func TestSyncHappyPath(t *testing.T) {
 	if snap.LastWeek != 10 {
 		t.Errorf("LastWeek = %d, want 10", snap.LastWeek)
 	}
-	// 一条课程两个时段 → 两条 Lesson。
+	// 一条课程两个时段 → 两条 Lesson，且各自带真实地点与所属周次文本。
 	if len(snap.Lessons) != 2 {
 		t.Fatalf("Lessons = %+v", snap.Lessons)
+	}
+	if snap.Lessons[0].Location != "<地点A>" || snap.Lessons[1].Location != "<地点B>" {
+		t.Errorf("locations = %q,%q, want each slot's real location",
+			snap.Lessons[0].Location, snap.Lessons[1].Location)
+	}
+	if snap.Lessons[0].WeeksText != "2,4,7-10周" || snap.Lessons[1].WeeksText != "9周" {
+		t.Errorf("weeksText = %q,%q, want per-slot summaries",
+			snap.Lessons[0].WeeksText, snap.Lessons[1].WeeksText)
 	}
 	if len(snap.SlotTimes) != 6 || snap.SlotTimes[0] != "08:30~10:00" {
 		t.Errorf("SlotTimes = %v", snap.SlotTimes)
@@ -280,6 +288,54 @@ func TestSyncHappyPath(t *testing.T) {
 	}
 	if wed.Entries[0].Time != "08:30~10:00" {
 		t.Errorf("time = %q", wed.Entries[0].Time)
+	}
+	if wed.Entries[0].Location != "<地点A>" {
+		t.Errorf("wed location = %q, want <地点A>", wed.Entries[0].Location)
+	}
+
+	week9 := Query(snap, model.Date{Year: 2026, Month: 10, Day: 29}) // 第 9 周周四
+	if len(week9.Entries) != 1 || week9.Entries[0].Location != "<地点B>" {
+		t.Errorf("第 9 周周四 entries = %+v, want single real location", week9.Entries)
+	}
+}
+
+// sktime 与 skddmc 的片段数无法配对时，整份同步必须报 4002，不能静默丢课。
+func TestSyncLocationMismatchIs4002(t *testing.T) {
+	school := newFakeSchool(t, fakeOpts{
+		coursesBody: `{"code":0,"data":[{"kc_mc":"课程甲",
+ "sktime":"周三第1、2节{1}全周;周四第1、2节{2}全周",
+ "skddmc":"<地点A>;<地点B>;<地点C>","jg0101mc":"<教师>"}]}`,
+	})
+	c := school.client()
+	c.SetCookies(map[string]string{SessionCookie: "sess-1", ServerCookie: "srv-1"})
+
+	_, err := c.Sync(context.Background())
+	if model.CodeOf(err) != model.CodeMalformedResponse {
+		t.Errorf("code = %d, want %d", model.CodeOf(err), model.CodeMalformedResponse)
+	}
+}
+
+// 同一地点在多个时段重复出现时，每条 Lesson 都保留自己的地点。
+func TestSyncKeepsRepeatedLocationPerSlot(t *testing.T) {
+	school := newFakeSchool(t, fakeOpts{
+		coursesBody: `{"code":0,"data":[{"kc_mc":"课程甲",
+ "sktime":"周三第1、2节{1}全周;周四第1、2节{2}全周",
+ "skddmc":"<地点A>;<地点A>","jg0101mc":"<教师>"}]}`,
+	})
+	c := school.client()
+	c.SetCookies(map[string]string{SessionCookie: "sess-1", ServerCookie: "srv-1"})
+
+	snap, err := c.Sync(context.Background())
+	if err != nil {
+		t.Fatalf("Sync: %v", err)
+	}
+	if len(snap.Lessons) != 2 {
+		t.Fatalf("Lessons = %+v", snap.Lessons)
+	}
+	for i, lesson := range snap.Lessons {
+		if lesson.Location != "<地点A>" {
+			t.Errorf("Lessons[%d].Location = %q, want <地点A>", i, lesson.Location)
+		}
 	}
 }
 
@@ -404,6 +460,21 @@ func TestLoadSnapshotMissing(t *testing.T) {
 }
 
 // 版本不匹配：丢弃重拉，不尝试迁移（AGENTS §4.3）。
+// v1 快照含聚合地点，升级后必须失效，避免继续展示整门课全部教室。
+func TestLoadSnapshotRejectsLegacyVersion(t *testing.T) {
+	store := porttest.NewMemStore()
+	snap := testSnapshot()
+	snap.Version = 1
+	snap.SyncedAt = fixedClock().Now()
+	if err := SaveSnapshot(store, snap); err != nil {
+		t.Fatal(err)
+	}
+	_, err := LoadSnapshot(store)
+	if model.CodeOf(err) != model.CodeSnapshotMissing {
+		t.Errorf("code = %d, want %d", model.CodeOf(err), model.CodeSnapshotMissing)
+	}
+}
+
 func TestLoadSnapshotVersionMismatch(t *testing.T) {
 	store := porttest.NewMemStore()
 	snap := testSnapshot()

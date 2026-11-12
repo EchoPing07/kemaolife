@@ -487,6 +487,8 @@ func TestTimetableExportReturnsCSVAndDataTime(t *testing.T) {
 		Lessons: []timetable.Lesson{
 			{Name: "高等数学", Periods: "1-2", Weekday: 1, Weeks: []int{1, 2, 3},
 				Teacher: "张三", Location: "逸夫楼101", WeeksText: "1-3周"},
+			{Name: "高等数学", Periods: "3-4", Weekday: 1, Weeks: []int{1, 2, 3},
+				Teacher: "张三", Location: "逸夫楼102", WeeksText: "1-3周"},
 		},
 	}
 	if err := timetable.SaveSnapshot(s.deps.Store, snap); err != nil {
@@ -499,8 +501,9 @@ func TestTimetableExportReturnsCSVAndDataTime(t *testing.T) {
 	}
 	data, _ := env["data"].(map[string]any)
 	csvText, _ := data["csv"].(string)
-	if !strings.Contains(csvText, "高等数学,1,1,2,张三,逸夫楼101,1-3") {
-		t.Errorf("csv 内容不符预期:\n%q", csvText)
+	if !strings.Contains(csvText, "高等数学,1,1,2,张三,逸夫楼101,1-3") ||
+		!strings.Contains(csvText, "高等数学,1,3,4,张三,逸夫楼102,1-3") {
+		t.Errorf("csv 必须按课节保留真实地点:\n%q", csvText)
 	}
 	if name, _ := data["filename"].(string); !strings.HasSuffix(name, ".csv") {
 		t.Errorf("filename = %v", data["filename"])
@@ -509,8 +512,8 @@ func TestTimetableExportReturnsCSVAndDataTime(t *testing.T) {
 	if env["syncedAt"] != formatRFC3339(syncedAt) || data["syncedAt"] != formatRFC3339(syncedAt) {
 		t.Errorf("syncedAt 口径不一致: env=%v data=%v", env["syncedAt"], data["syncedAt"])
 	}
-	if count, _ := data["lessonCount"].(float64); int(count) != 1 {
-		t.Errorf("lessonCount = %v, want 1", data["lessonCount"])
+	if count, _ := data["lessonCount"].(float64); int(count) != 2 {
+		t.Errorf("lessonCount = %v, want 2", data["lessonCount"])
 	}
 }
 
