@@ -196,6 +196,56 @@ class EnvelopeAndDtoTest {
         assertEquals(1, export.lessonCount)
     }
 
+    @Test
+    fun `日志开关默认关闭且列表为空`() {
+        // 请求记录默认关闭（docs/002 §2.1 规则 10）：UI 不能因为解析缺字段就显示「已开启」。
+        val state = LogState.from(JSONObject("""{"enabled":false,"count":0}"""))
+        assertFalse(state.enabled)
+        assertEquals(0, state.count)
+        assertTrue(state.entries.isEmpty())
+    }
+
+    @Test
+    fun `日志列表保留后端顺序并投影状态码与耗时`() {
+        val state = LogState.from(
+            JSONObject(
+                """{"enabled":true,"count":2,"entries":[
+                   {"seq":9,"at":"2026-11-11T19:11:42.100","method":"POST",
+                    "url":"http://<探测地址>/v1/chat/completions","status":200,"durationMs":5181},
+                   {"seq":8,"at":"2026-11-11T19:11:25.900","method":"GET",
+                    "url":"http://<探测地址>/v1/models","status":0,"durationMs":270,
+                    "error":"网络不可达"}]}""",
+            ),
+        )
+        assertTrue(state.enabled)
+        assertEquals(2, state.count)
+        // 顺序由 Go 侧给出（新的在前），Kotlin 不重排。
+        assertEquals(9L, state.entries[0].seq)
+        assertEquals("19:11:42", state.entries[0].clock)
+        assertEquals(5181L, state.entries[0].durationMs)
+        assertEquals("网络不可达", state.entries[1].error)
+    }
+
+    @Test
+    fun `日志详情逐字透传原始标头与正文`() {
+        // 记录的是完整原始报文（Go 侧不做字段级脱敏）：Kotlin 只做字段投影，
+        // 不得改写、裁剪或再过滤一遍 —— 否则详情页看到的就不是发出的那个请求了。
+        val entry = LogEntry.from(
+            JSONObject(
+                """{"seq":9,"at":"2026-11-11T19:11:40.490","method":"POST",
+                   "url":"http://<探测地址>/api","status":200,"durationMs":3238,
+                   "requestHeaders":"Cookie: <会话值>","requestBody":"passwd=<密码>",
+                   "responseHeaders":"Content-Type: application/json",
+                   "responseBody":"{\"result\":\"0\"}"}""",
+            ),
+        )
+        assertEquals("2026-11-11 19:11:40.490", entry.stamp)
+        // 夹具里只用占位符（P1 / P3），真实值不会进仓库。
+        assertEquals("Cookie: <会话值>", entry.requestHeaders)
+        assertEquals("passwd=<密码>", entry.requestBody)
+        assertEquals("""{"result":"0"}""", entry.responseBody)
+    }
+
     private companion object {
         /** UTF-8 BOM：用码位构造，源码里不出现不可见字符。 */
         val BOM: String = String(Character.toChars(0xFEFF))

@@ -12,7 +12,10 @@ import com.github.echoping07.kemaolife.data.CampusStatus
 import com.github.echoping07.kemaolife.data.CredentialStore
 import com.github.echoping07.kemaolife.data.Credentials
 import com.github.echoping07.kemaolife.data.DaySchedule
+import com.github.echoping07.kemaolife.data.DEFAULT_DYNAMIC_COLOR
 import com.github.echoping07.kemaolife.data.ElectricityReport
+import com.github.echoping07.kemaolife.data.LogEntry
+import com.github.echoping07.kemaolife.data.LogState
 import com.github.echoping07.kemaolife.data.NetworkState
 import com.github.echoping07.kemaolife.data.ProbeResult
 import com.github.echoping07.kemaolife.data.Repository
@@ -73,6 +76,14 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     private var campusActionJob: Job? = null
     private var probeJob: Job? = null
     private var exportJob: Job? = null
+    private var requestLogJob: Job? = null
+    private var requestLogDetailJob: Job? = null
+
+    // 图标结果态只跟随显式手动点击；自动查询共用 Job，但不能反复闪成功提示。
+    internal val timetableFeedback = ActionFeedbackController()
+    internal val electricityFeedback = ActionFeedbackController()
+    internal val campusFeedback = ActionFeedbackController()
+    internal val campusActionFeedback = ActionFeedbackController()
 
     // 课表读取代次：切周 / 同步回读都可能并发，只允许最新一次写 state。
     @Volatile
@@ -117,6 +128,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
             timetableInterval = preferences.timetableIntervalMinutes,
             electricityInterval = preferences.electricityIntervalMinutes,
             campusWifiOnly = preferences.campusWifiOnly,
+            requestLogEnabled = preferences.requestLogEnabled,
         ),
     )
     val state: StateFlow<AppState> = _state.asStateFlow()
@@ -127,6 +139,9 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
             it.copy(
                 credentials = credentials,
                 themeColor = themePreferences.load(),
+                themeMode = themePreferences.loadMode(),
+                dynamicColor = themePreferences.loadDynamicColor(),
+                amoled = themePreferences.loadAmoled(),
             )
         }
         // 老版本用 wall-clock 存时间戳，升到单调时钟后那些值全部失效，重查一次即可。
@@ -134,7 +149,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         viewModelScope.launch {
             // 冷启动：门面 Init 之后先用 CacheOnly 校正跨周 / 跨学期的镜像，
             // 再无条件联网。镜像已在首帧显示，这里的回读只负责「更正」。
-            withContext(Dispatchers.IO) { repo.init(credentials) }
+            withContext(Dispatchers.IO) { repo.init(credentials, requestLog = preferences.requestLogEnabled) }
             _state.update { it.copy(bridgeReady = repo.isReady(), bridgeError = repo.readyError()) }
 
             fetchWeek(0)
@@ -281,7 +296,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     /** 联网同步一次课表；成功后回读缓存覆盖界面。不做间隔判断。 */
-    fun syncTimetable() {
+    internal fun syncTimetable(feedbackId: Long? = null) {
         if (syncJob?.isActive == true) return
         syncJob = viewModelScope.launch {
             try {
@@ -295,10 +310,17 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                         // 用户在同步期间切了周也不跳过刷新：否则刚同步成功却不更新界面；
                         // 回读当前用户正在看的那一周，并用 generation 防止旧结果覆盖新选择。
                         val desired = _state.value.week?.week ?: 0
-                        fetchWeek(desired, fromSync = true)
+                        val refreshed = fetchWeek(desired, fromSync = true)
+                        feedbackId?.let {
+                            timetableFeedback.complete(
+                                it,
+                                if (refreshed) ActionFeedback.SUCCESS else ActionFeedback.FAILURE,
+                            )
+                        }
                         _state.update { it.copy(timetableSyncing = false) }
                     },
                     onFailure = { ex ->
+                        feedbackId?.let { timetableFeedback.complete(it, actionFeedbackFor(ex)) }
                         _state.update { s ->
                             s.copy(
                                 timetableSyncing = false,
@@ -331,7 +353,16 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     /** 头部刷新按钮：手动动作，不受最小间隔约束。 */
-    fun refreshWeek() = syncTimetable()
+    fun refreshWeek() {
+        if (syncJob?.isActive == true) return
+        val c = _state.value.credentials
+        if (c.studentId.isBlank() || c.eduPassword.isBlank()) {
+            timetableFeedback.begin()
+            timetableFeedback.complete(timetableFeedback.generation, ActionFeedback.UNAVAILABLE)
+            return
+        }
+        syncTimetable(timetableFeedback.begin())
+    }
 
     // ---- 导出 -------------------------------------------------------------
 
@@ -372,7 +403,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     // ---- 电费 -------------------------------------------------------------
 
     /** 电费查询并渲染；不做间隔判断（手动刷新与「测试」都走这里）。 */
-    fun refreshElectricity() {
+    private fun queryElectricity(feedbackId: Long? = null) {
         if (electricityJob?.isActive == true) return
         electricityJob = viewModelScope.launch {
             try {
@@ -382,15 +413,18 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                 preferences.lastElectricityAt = attemptedAt
                 result.fold(
                     onSuccess = { report ->
+                        feedbackId?.let { electricityFeedback.complete(it, ActionFeedback.SUCCESS) }
                         withContext(Dispatchers.IO) { cacheElectricityReport(report) }
                         _state.update {
                             it.copy(electricity = report, electricityLoading = false)
                         }
                     },
                     onFailure = { ex ->
+                        feedbackId?.let { electricityFeedback.complete(it, actionFeedbackFor(ex)) }
                         // 失败不清缓存：旧电费照常可看。
+                        // 自动查询每次打开都会跑，失败文案不进全局 snackbar；
+                        // 诊断走设置页电费「测试」弹窗与日志页（docs/002 §5.3）。
                         _state.update { it.copy(electricityLoading = false) }
-                        pushError(ex)
                     },
                 )
             } finally {
@@ -410,7 +444,17 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
             return
         }
         if (_state.value.credentials.electricityAccount.isBlank()) return
-        refreshElectricity()
+        queryElectricity()
+    }
+
+    fun refreshElectricity() {
+        if (electricityJob?.isActive == true) return
+        if (_state.value.credentials.electricityAccount.isBlank()) {
+            electricityFeedback.begin()
+            electricityFeedback.complete(electricityFeedback.generation, ActionFeedback.UNAVAILABLE)
+            return
+        }
+        queryElectricity(electricityFeedback.begin())
     }
 
     // ---- 校园网 -----------------------------------------------------------
@@ -447,8 +491,13 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     fun refreshCampusStatus(manual: Boolean = true) {
         if (!campusAllowed()) {
             applyCampusOfflineSkipped()
+            if (manual) {
+                campusFeedback.begin()
+                campusFeedback.complete(campusFeedback.generation, ActionFeedback.UNAVAILABLE)
+            }
             return
         }
+        val feedbackId = if (manual) campusFeedback.begin() else null
         campusJob?.cancel()
         campusJob = viewModelScope.launch {
             try {
@@ -456,9 +505,11 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                 val result = withContext(Dispatchers.IO) { repo.campusStatus() }
                 result.fold(
                     onSuccess = { status ->
+                        feedbackId?.let { campusFeedback.complete(it, ActionFeedback.SUCCESS) }
                         _state.update { it.copy(campus = status, campusLoading = false) }
                     },
                     onFailure = { ex ->
+                        feedbackId?.let { campusFeedback.complete(it, actionFeedbackFor(ex)) }
                         applyCampusFailure(ex)
                         if (manual) pushError(ex)
                     },
@@ -471,10 +522,15 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
 
     /** 手动登录 / 下线 / 重登；不再失败后复探（会绕过 WiFi 门控且多一次请求）。 */
     fun campusAction(action: CampusAction) {
-        if (!campusAllowed()) {
-            applyCampusOfflineSkipped()
+        if (campusActionJob?.isActive == true) return
+        val c = _state.value.credentials
+        if (c.campusUser.isBlank() || c.campusPassword.isBlank() || !campusAllowed()) {
+            if (!campusAllowed()) applyCampusOfflineSkipped()
+            campusActionFeedback.begin()
+            campusActionFeedback.complete(campusActionFeedback.generation, ActionFeedback.UNAVAILABLE)
             return
         }
+        val feedbackId = campusActionFeedback.begin()
         campusActionJob?.cancel()
         campusActionJob = viewModelScope.launch {
             try {
@@ -488,9 +544,11 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                 }
                 result.fold(
                     onSuccess = { status ->
+                        campusActionFeedback.complete(feedbackId, ActionFeedback.SUCCESS)
                         _state.update { it.copy(campus = status, campusActing = null) }
                     },
                     onFailure = { ex ->
+                        campusActionFeedback.complete(feedbackId, actionFeedbackFor(ex))
                         pushError(ex)
                         applyCampusFailure(ex)
                         _state.update { it.copy(campusActing = null) }
@@ -502,14 +560,102 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
-    fun setCampusWifiOnly(enabled: Boolean) {
-        preferences.campusWifiOnly = enabled
+    fun setCampusWifiOnly(enabled: Boolean) {        preferences.campusWifiOnly = enabled
         _state.update { it.copy(campusWifiOnly = enabled) }
         if (enabled && !networkState.isOnWifi()) {
             // 打开开关时立刻把残留的 online/unauth 置为 offline，动作按钮同时禁用。
             applyCampusOfflineSkipped()
         } else {
             refreshCampusStatus(manual = false)
+        }
+    }
+
+    // ---- 请求记录（设置页「日志」） ---------------------------------------
+
+    /** 首次进入日志页：读一次最近列表（0 请求，只读 Go 进程内存）。 */
+    fun loadRequestLog() {
+        if (requestLogJob?.isActive == true) return
+        requestLogJob = viewModelScope.launch {
+            val result = withContext(Dispatchers.IO) { repo.requestLog() }
+            result.fold(
+                onSuccess = { log ->
+                    // 轮询每 2s 一次：内容没变就不动 state，避免无意义的重组。
+                    if (_state.value.log != log) _state.update { it.copy(log = log) }
+                },
+                onFailure = { ex ->
+                    // 门面未就绪是启动时序问题，不弹错；下次进入页面会再读一次。
+                    if (!repo.isReady()) return@fold
+                    pushError(ex)
+                },
+            )
+        }
+    }
+
+    /**
+     * 开关请求记录。
+     *
+     * 为什么要落盘后重新 `Init`：Go 侧记录器挂在会话的 HTTP 适配器上，
+     * **真正的开关动作走 `log.enable`**（不需要重新 Init）；持久化只为了让冷启动后的
+     * `Init` 带上 `requestLog`，把用户上次的选择恢复回来。
+     */
+    fun setRequestLog(enabled: Boolean) {
+        // 先改本地状态：开关是即时动作，不能等网络 / JNI 回来再动。
+        preferences.requestLogEnabled = enabled
+        _state.update { it.copy(requestLogEnabled = enabled, log = null) }
+        requestLogJob?.cancel()
+        requestLogJob = viewModelScope.launch {
+            val result = withContext(Dispatchers.IO) { repo.setRequestLog(enabled) }
+            result.fold(
+                onSuccess = { log -> _state.update { it.copy(log = log) } },
+                onFailure = { ex ->
+                    // 回滚本地状态：没真的开起来就不能显示「已开启」。
+                    preferences.requestLogEnabled = !enabled
+                    _state.update { it.copy(requestLogEnabled = !enabled) }
+                    if (!repo.isReady()) return@fold
+                    pushError(ex)
+                },
+            )
+        }
+    }
+
+    /** 日志页轮询用：读一次列表（0 请求，只读 Go 进程内存）。 */
+    fun refreshRequestLog() = loadRequestLog()
+
+    /** 点开某条日志：取完整记录（含原始标头与正文）。 */
+    fun openRequestLog(seq: Long) {
+        if (requestLogDetailJob?.isActive == true) return
+        _state.update { it.copy(logDetail = null, logDetailLoading = true) }
+        requestLogDetailJob = viewModelScope.launch {
+            val result = withContext(Dispatchers.IO) { repo.requestLogDetail(seq) }
+            result.fold(
+                onSuccess = { entry ->
+                    _state.update { it.copy(logDetail = entry, logDetailLoading = false) }
+                },
+                onFailure = { ex ->
+                    // 条目已被环形窗口丢弃时会回 2001：把列表刷一遍，弹窗不弹错。
+                    _state.update { it.copy(logDetailLoading = false) }
+                    pushError(ex)
+                    loadRequestLog()
+                },
+            )
+        }
+    }
+
+    fun closeRequestLog() {
+        requestLogDetailJob?.cancel()
+        _state.update { it.copy(logDetail = null, logDetailLoading = false) }
+    }
+    /** 清空记录：只清内容，不改开关。 */
+    fun clearRequestLog() {
+        if (requestLogDetailJob?.isActive == true) return
+        requestLogDetailJob = viewModelScope.launch {
+            val result = withContext(Dispatchers.IO) { repo.clearRequestLog() }
+            result.fold(
+                onSuccess = { log ->
+                    _state.update { it.copy(log = log, logDetail = null) }
+                },
+                onFailure = { ex -> pushError(ex) },
+            )
         }
     }
 
@@ -659,7 +805,13 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                     }
                 }
 
-                val env = withContext(Dispatchers.IO) { repo.init(merged, resetSnapshot = identityChanged) }
+                val env = withContext(Dispatchers.IO) {
+                    repo.init(
+                        merged,
+                        resetSnapshot = identityChanged,
+                        requestLog = preferences.requestLogEnabled,
+                    )
+                }
                 _state.update {
                     it.copy(
                         credentials = merged,
@@ -698,6 +850,21 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     fun setThemeColor(value: String) {
         themePreferences.save(value)
         _state.update { it.copy(themeColor = value) }
+    }
+
+    fun setThemeMode(value: String) {
+        themePreferences.saveMode(value)
+        _state.update { it.copy(themeMode = themePreferences.loadMode()) }
+    }
+
+    fun setDynamicColor(value: Boolean) {
+        themePreferences.saveDynamicColor(value)
+        _state.update { it.copy(dynamicColor = value) }
+    }
+
+    fun setAmoled(value: Boolean) {
+        themePreferences.saveAmoled(value)
+        _state.update { it.copy(amoled = value) }
     }
 
     fun consumeSettingsSaved() = _state.update { it.copy(settingsSaved = false) }
@@ -832,8 +999,19 @@ data class AppState(
     val campusWifiOnly: Boolean = true,
 
     val themeColor: String = "BLUE",
+    val themeMode: String = "SYSTEM",
+    val dynamicColor: Boolean = DEFAULT_DYNAMIC_COLOR,
+    val amoled: Boolean = false,
     val settingsSaved: Boolean = false,
     val error: String? = null,
+
+    /** 请求记录开关（默认关闭，docs/002 §2.1 规则 10）。 */
+    val requestLogEnabled: Boolean = false,
+    /** 日志页列表；`null` 表示还没读过（首次进页时加载）。 */
+    val log: LogState? = null,
+    /** 点开的日志详情；非 null 时展示底部弹层。 */
+    val logDetail: LogEntry? = null,
+    val logDetailLoading: Boolean = false,
 
     val probe: ProbeState? = null,
 

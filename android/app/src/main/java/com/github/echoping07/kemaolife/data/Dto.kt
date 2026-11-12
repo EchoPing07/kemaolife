@@ -235,3 +235,91 @@ data class ProbeResult(
         }
     }
 }
+
+/**
+ * `log.list` / `log.enable` / `log.clear` 的 `data`：开关状态 + 条数 + 摘要列表。
+ *
+ * 列表项刻意不含正文：一次抓十几条请求，把整份正文都塞进 state 会让首帧变慢，
+ * 而且看列表时并不需要它。正文走 [LogEntry]，点开某条时才取（docs/002 §2.1 规则 10）。
+ */
+data class LogState(
+    val enabled: Boolean,
+    val count: Int,
+    val entries: List<LogSummary>,
+) {
+    companion object {
+        fun from(obj: JSONObject): LogState = LogState(
+            enabled = obj.optBoolean("enabled", false),
+            count = obj.optInt("count", 0),
+            entries = obj.optJSONArray("entries").mapObjects { LogSummary.from(it) },
+        )
+    }
+}
+
+/** 日志列表项：方法、URL、状态码与耗时；`error` 非空表示这次请求根本没走完。 */
+data class LogSummary(
+    val seq: Long,
+    val at: String,
+    val method: String,
+    val url: String,
+    val status: Int,
+    val durationMs: Long,
+    val error: String,
+) {
+    /** 列表右上角的时间：`at` 是 `YYYY-MM-DDTHH:mm:ss.SSS`，只留时分秒。 */
+    val clock: String
+        get() = if (at.length >= 19) at.substring(11, 19) else at
+
+    companion object {
+        fun from(obj: JSONObject): LogSummary = LogSummary(
+            seq = obj.optLong("seq"),
+            at = obj.optString("at"),
+            method = obj.optString("method"),
+            url = obj.optString("url"),
+            status = obj.optInt("status"),
+            durationMs = obj.optLong("durationMs"),
+            error = obj.optString("error"),
+        )
+    }
+}
+
+/**
+ * `log.detail` 的 `data`：一条完整记录。
+ *
+ * 标头与正文都是**原始字节**（Go 侧不做字段级脱敏）：排查协议需要看清真实报文。
+ * Kotlin 也只在详情页原样展示，不再二次处理 —— 记录只留在本机内存，
+ * 与「不入仓库」的隐私口径（P1 / P3）各管一头。
+ */
+data class LogEntry(
+    val seq: Long,
+    val at: String,
+    val method: String,
+    val url: String,
+    val status: Int,
+    val durationMs: Long,
+    val requestHeaders: String,
+    val requestBody: String,
+    val responseHeaders: String,
+    val responseBody: String,
+    val error: String,
+) {
+    /** 详情标题下的时间：`YYYY-MM-DDTHH:mm:ss.SSS` → `YYYY-MM-DD HH:mm:ss.SSS`。 */
+    val stamp: String
+        get() = if (at.length >= 10) at.replace('T', ' ') else at
+
+    companion object {
+        fun from(obj: JSONObject): LogEntry = LogEntry(
+            seq = obj.optLong("seq"),
+            at = obj.optString("at"),
+            method = obj.optString("method"),
+            url = obj.optString("url"),
+            status = obj.optInt("status"),
+            durationMs = obj.optLong("durationMs"),
+            requestHeaders = obj.optString("requestHeaders"),
+            requestBody = obj.optString("requestBody"),
+            responseHeaders = obj.optString("responseHeaders"),
+            responseBody = obj.optString("responseBody"),
+            error = obj.optString("error"),
+        )
+    }
+}

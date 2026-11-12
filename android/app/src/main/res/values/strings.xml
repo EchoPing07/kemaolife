@@ -74,6 +74,11 @@
     <string name="action_probe">重新探测</string>
     <string name="action_test">测试</string>
     <string name="action_test_again">重新测试</string>
+    <string name="action_succeeded">操作成功</string>
+    <string name="action_failed">操作失败</string>
+    <string name="action_unavailable">请先检查配置或网络条件</string>
+    <string name="campus_action_running">正在处理，请稍候…</string>
+    <string name="campus_check_configuration">请检查校园网凭据与 WiFi 连接</string>
 
     <!-- 设置页：总览 + 教务 / 电费 / 校园网三个二级页。 -->
     <string name="settings_accounts">账号与服务</string>
@@ -86,9 +91,43 @@
     <string name="settings_personalization">个性化</string>
     <string name="settings_appearance">外观</string>
     <string name="settings_theme_color">主题色</string>
-    <string name="settings_theme_hint">选择会立即应用到整个应用，并保存在本机。</string>
+    <string name="settings_theme_hint">莫奈取色、AMOLED深色模式、主题</string>
     <string name="settings_about">关于</string>
     <string name="settings_about_hint">版本与开源信息</string>
+
+    <!-- 设置页「关于与支持」组：关于 + 日志 + 分享（docs/002 §5.3 tab3）。 -->
+    <string name="settings_about_support">关于与支持</string>
+    <string name="settings_logs">日志</string>
+    <string name="settings_logs_hint">正在记录请求，点开查看详情</string>
+    <string name="settings_logs_idle">记录完整请求，便于排查</string>
+    <string name="settings_share">分享</string>
+    <string name="settings_share_hint">推荐本APP给朋友</string>
+    <string name="settings_contact">交流</string>
+    <string name="settings_contact_hint">QQ 群 %1$s</string>
+    <string name="settings_contact_failed">没有找到可以打开 QQ 群的应用</string>
+    <string name="share_chooser_title">分享项目</string>
+    <string name="share_no_target">没有可用于分享的应用</string>
+
+    <!-- 日志页：请求记录默认关闭；开启后列表展示最近 100 条。 -->
+    <string name="logs_record_requests">记录请求</string>
+    <string name="logs_record_requests_hint">捕获请求标头、正文和响应元数据</string>
+    <string name="logs_empty">暂无请求记录。打开上面的开关并刷新一次课表或电费，回来就能看到。</string>
+    <string name="logs_status">Status: %1$d</string>
+    <string name="logs_status_failed">失败</string>
+    <string name="logs_duration">%1$dms</string>
+    <string name="logs_clear">清空日志</string>
+    <string name="logs_detail_title">请求详情</string>
+    <string name="logs_field_time">时间</string>
+    <string name="logs_field_url">URL</string>
+    <string name="logs_field_method">方法</string>
+    <string name="logs_field_status">状态码</string>
+    <string name="logs_field_duration">耗时</string>
+    <string name="logs_field_error">错误</string>
+    <string name="logs_request_headers">请求标头</string>
+    <string name="logs_request_body">请求正文</string>
+    <string name="logs_response_headers">响应标头</string>
+    <string name="logs_response_body">响应正文</string>
+    <string name="logs_mask_hint">记录只保存在本机内存，关闭开关或退出应用即清除；内容含 Cookie 与账号信息，请勿截图外发。</string>
     <string name="about_version">版本</string>
     <string name="about_system">系统</string>
     <string name="about_license">开源许可</string>
@@ -124,7 +163,6 @@
     <string name="interval_hint_education">自动同步的最小间隔，最少 %1$d 分钟；手动刷新不受限制。</string>
     <string name="interval_hint_electricity">自动查询的最小间隔，最少 %1$d 分钟；手动查询不受限制。</string>
     <string name="interval_clamped">低于下限，将按 %1$d %2$s 生效</string>
-    <string name="action_apply_interval">应用间隔</string>
     <string name="campus_independent_hint">校园网凭据独立保存，不复用教务密码。</string>
     <string name="credentials_keystore_hint">凭据经 Android Keystore 加密后保存在本机，不上传、不进日志。</string>
 
@@ -150,6 +188,8 @@
 
     <!-- 通用。 -->
     <string name="action_ok">知道了</string>
+    <string name="action_expand">展开</string>
+    <string name="action_collapse">收起</string>
     <string name="loading">加载中…</string>
     <!-- 课表空态：不把内部初始化状态摊到课表位，只给可操作的引导。 -->
     <string name="timetable_cache_missing">本机还没有课表，点「同步」获取一次</string>

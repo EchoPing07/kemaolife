@@ -71,6 +71,12 @@ type initConfig struct {
 	// ResetSnapshot 为 true 时先删除本地课表快照再替换会话：凭据身份变更时必须
 	// 防止旧账号的课表先显示出来（docs/002 §2.1 规则 2）。缺省 false，老客户端不受影响。
 	ResetSnapshot bool `json:"resetSnapshot"`
+
+	// RequestLog 为 true 时记录每次 HTTP 往返的方法 / URL / 标头 / 正文 / 响应元数据，
+	// 供设置页「日志」查看（docs/002 §5.3）。缺省 false = 不记录。
+	//
+	// 记录只存进程内存、不进 logcat；Cookie 与凭据类字段恒遮罩（P1 / P2 / P6）。
+	RequestLog bool `json:"requestLog"`
 }
 
 // session 是一次 Init 组装好的依赖；配置随 Init 更新，避免每次调用重复解析。
@@ -83,6 +89,10 @@ type session struct {
 	cfg    model.Config
 	clock  platform.RealClock
 
+	// doer 保留具体适配器类型：它在 Init 里装好请求记录器，
+	// 测试也用它验证「经真实适配器发出的请求确实被记录下来」。
+	doer *platform.HTTPDoer
+
 	ctx    context.Context
 	cancel context.CancelFunc
 	gen    uint64
@@ -92,7 +102,21 @@ var (
 	mu         sync.Mutex
 	cur        *session
 	generation uint64
+
+	// sharedLog 是进程级请求记录器：设置页保存凭据会重新 Init，但已记录的内容
+	// 不应因为「换了一代会话」就消失 —— 用户排查的是这段时间的全部请求。
+	// 默认关闭；只有用户在设置页打开才记录（docs/002 §5.3）。
+	sharedLogOnce sync.Once
+	sharedLog     *platform.RequestLog
 )
+
+// currentRequestLog 取得进程级记录器（首次调用时构造）。
+func currentRequestLog() *platform.RequestLog {
+	sharedLogOnce.Do(func() {
+		sharedLog = platform.NewRequestLog(platform.RealClock{}.Now)
+	})
+	return sharedLog
+}
 
 // timeZoneOnce 保证 time.Local 只写一次。
 //
@@ -132,6 +156,12 @@ func Init(configJSON string) string {
 
 	clock := platform.RealClock{}
 	doer := platform.NewHTTPDoer(defaultTimeout)
+	reqLog := currentRequestLog()
+	// `requestLog` 只用于「打开」：关闭由 `log.enable` 承担。
+	// 否则改一次凭据（重新 Init）就会把用户刚打开的日志悄悄关掉。
+	if cfg.RequestLog {
+		reqLog.SetEnabled(true)
+	}
 
 	customerCode := strings.TrimSpace(cfg.CustomerCode)
 	if customerCode == "" {
@@ -147,6 +177,8 @@ func Init(configJSON string) string {
 			Fingerprint: cred.CampusFingerprint,
 		}
 	}, "")
+	doer.SetRequestLog(reqLog)
+	portal.SetRequestLog(reqLog)
 
 	s := &session{
 		deps: app.Deps{
@@ -162,6 +194,7 @@ func Init(configJSON string) string {
 			ElectricityStudentID: strings.TrimSpace(cfg.ElectricityStudentID),
 		},
 		clock: clock,
+		doer:  doer,
 	}
 	s.ctx, s.cancel = context.WithCancel(context.Background())
 
@@ -233,6 +266,11 @@ type callRequest struct {
 	Week  int    `json:"week"`
 	Date  string `json:"date"`
 	Month string `json:"month"`
+	// Seq 是 `log.detail` 的条目序号，其余 op 忽略。
+	Seq int64 `json:"seq"`
+	// Limit / Enabled 分别给 `log.list` 与 `log.enable` 用；其余 op 忽略。
+	Limit   int  `json:"limit"`
+	Enabled bool `json:"enabled"`
 }
 
 // Call takes a request JSON and returns a response JSON. Unknown op yields
@@ -289,6 +327,14 @@ func Call(reqJSON string) string {
 		return s.campusAction(app.LogoutCampusNetwork)
 	case "campusnet.relogin":
 		return s.campusAction(app.ReloginCampusNetwork)
+	case "log.enable":
+		return s.logEnable(req.Enabled)
+	case "log.list":
+		return s.logList(req.Limit)
+	case "log.detail":
+		return s.logDetail(req.Seq)
+	case "log.clear":
+		return s.logClear()
 	}
 	return failure(model.NewError(model.CodeInvalidArgument, "未知 op"))
 }
@@ -492,6 +538,58 @@ func (s *session) campusProbe() string {
 			CampusStatus: &status,
 		}, nil
 	})
+}
+
+// —— 请求记录（设置页「日志」） ——
+//
+// 四个 op 只为 Android 设置页服务（docs/002 §5.3）：开关、列表（新的在前）、
+// 单条详情（含已脱敏的标头与正文）、清空。数据全部来自进程内存，不落盘。
+
+// logEnable 打开 / 关闭记录。打开时清空旧内容：
+// 「开启后记录」意味着窗口从这个时刻开始，不应混入上一次留下的条目。
+func (s *session) logEnable(enabled bool) string {
+	l := currentRequestLog()
+	if enabled && !l.Enabled() {
+		l.Clear()
+	}
+	l.SetEnabled(enabled)
+	return encode(model.Success(s.clock.Now(), map[string]any{
+		"enabled": l.Enabled(),
+		"count":   l.Count(),
+	}))
+}
+
+// logList 返回最近 limit 条摘要（新的在前）；limit<=0 使用默认窗口。
+func (s *session) logList(limit int) string {
+	if limit <= 0 || limit > platform.DefaultLogEntries {
+		limit = platform.DefaultLogEntries
+	}
+	l := currentRequestLog()
+	return encode(model.Success(s.clock.Now(), map[string]any{
+		"enabled": l.Enabled(),
+		"count":   l.Count(),
+		"entries": l.Summaries(limit),
+	}))
+}
+
+// logDetail 返回一条完整记录；序号已过期（被环形窗口丢弃）时回 2001。
+func (s *session) logDetail(seq int64) string {
+	l := currentRequestLog()
+	entry, ok := l.Find(seq)
+	if !ok {
+		return failure(model.NewError(model.CodeInvalidArgument, "日志条目已不存在"))
+	}
+	return encode(model.Success(s.clock.Now(), entry))
+}
+
+// logClear 清空记录，返回清掉的条数。
+func (s *session) logClear() string {
+	l := currentRequestLog()
+	removed := l.Clear()
+	return encode(model.Success(s.clock.Now(), map[string]any{
+		"removed": removed,
+		"count":   l.Count(),
+	}))
 }
 
 // envelopeWithStale 组装带 stale / syncedAt 的课表信封（docs/002 §2）。

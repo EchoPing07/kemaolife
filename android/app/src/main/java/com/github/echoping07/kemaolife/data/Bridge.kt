@@ -32,7 +32,7 @@ class Bridge(private val context: Context) {
      * `resetSnapshot = true` 用于凭据身份变更：Go 侧先删本地快照（含旧 Cookie）再换会话，
      * 避免旧账号课表在 CacheOnly 路径上先显示出来（docs/002 §2.1 规则 2）。
      */
-    fun init(credentials: Credentials, resetSnapshot: Boolean = false): Envelope {
+    fun init(credentials: Credentials, resetSnapshot: Boolean = false, requestLog: Boolean = false): Envelope {
         // 时区必须由 Kotlin 传入：Go 在 Android 上找不到系统的 zoneinfo 目录，
         // time.Local 会退化成 UTC，导致所有时间戳差 8 小时（见 android/README.md）。
         val zone = java.util.TimeZone.getDefault()
@@ -52,6 +52,8 @@ class Bridge(private val context: Context) {
             .put("timeZone", zone.id)
             .put("timeZoneOffsetSeconds", zone.getOffset(System.currentTimeMillis()) / 1000)
             .put("resetSnapshot", resetSnapshot)
+            // 请求记录开关：只用于「恢复上次打开的状态」，关闭一律走 log.enable。
+            .put("requestLog", requestLog)
 
         val env = Envelope.parse(Kemaolife.init(config.toString()))
         initialized = env.ok

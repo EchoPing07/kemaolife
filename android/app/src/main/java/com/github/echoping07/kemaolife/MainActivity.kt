@@ -11,15 +11,19 @@ import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.scaleIn
-import androidx.compose.animation.scaleOut
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.RowScope
+import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.NavigationBar
+import androidx.compose.material3.NavigationBarDefaults
 import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.NavigationBarItemDefaults
 import androidx.compose.material3.Scaffold
@@ -42,6 +46,7 @@ import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.runtime.DisposableEffect
 import com.github.echoping07.kemaolife.ui.AppOpenGate
+import com.github.echoping07.kemaolife.ui.animationsEnabled
 import com.github.echoping07.kemaolife.ui.AppViewModel
 import com.github.echoping07.kemaolife.ui.MoreScreen
 import com.github.echoping07.kemaolife.ui.ProbeDialog
@@ -59,7 +64,12 @@ class MainActivity : ComponentActivity() {
         enableEdgeToEdge()
         setContent {
             val state by viewModel.state.collectAsStateWithLifecycle()
-            KemaolifeTheme(themeColor = state.themeColor) {
+            KemaolifeTheme(
+                themeColor = state.themeColor,
+                themeMode = state.themeMode,
+                dynamicColor = state.dynamicColor,
+                amoled = state.amoled,
+            ) {
                 AppRoot(viewModel)
             }
         }
@@ -68,11 +78,18 @@ class MainActivity : ComponentActivity() {
 
 private enum class Tab { TIMETABLE, MORE, SETTINGS }
 
+// material3 1.3.1 的 NavigationBar 默认内容高 80dp（NavigationBarTokens.ContainerHeight）。
+// 带标签 item 的内容高 = 32dp 指示器 + 4dp 指示器内边距 + 4dp 到标签 + 16dp 标签行 = 56dp，
+// placeLabelAndIcon 再把上下留白补到至少 4dp，所以 64dp 是不裁标签的下限；再低会挤压图标与文字。
+// 默认 windowInsets 仍需保留系统手势区，因此总高 = 64dp + 底部 inset。
+private val NavBarContentHeight = 64.dp
+
 @Composable
 private fun AppRoot(viewModel: AppViewModel) {
     val state by viewModel.state.collectAsStateWithLifecycle()
     var tab by rememberSaveable { mutableStateOf(Tab.TIMETABLE) }
     val snackbar = remember { SnackbarHostState() }
+    val motionEnabled = animationsEnabled()
 
     // 回到前台也算「每次打开」：首帧缓存由 ViewModel 构造函数同步给出，
     // 这里只负责触发那一轮无条件联网。注册 observer 时 Activity 可能已处于 RESUMED，
@@ -111,9 +128,16 @@ private fun AppRoot(viewModel: AppViewModel) {
     }
 
     Scaffold(
+        // 状态栏与底部手势区分别只由这一层 Scaffold 消费一次。
         snackbarHost = { SnackbarHost(snackbar) },
         bottomBar = {
+            // 固定高而非 heightIn(min)：后者不改变 maxHeight，内部 defaultMinSize(80dp) 仍会把
+            // 内容撑回 80dp。固定高把 Row / item 的 80dp 下限 coerce 到 64dp，即带标签 item 的最小高。
+            val bottomInset = NavigationBarDefaults.windowInsets
+                .asPaddingValues()
+                .calculateBottomPadding()
             NavigationBar(
+                modifier = Modifier.height(NavBarContentHeight + bottomInset),
                 containerColor = MaterialTheme.colorScheme.surfaceContainer,
                 tonalElevation = 0.dp,
             ) {
@@ -124,20 +148,26 @@ private fun AppRoot(viewModel: AppViewModel) {
                         // 切回课表时按最小间隔补一次同步（打开 App 本身是特殊自动，不受限）。
                         viewModel.maybeAutoSync()
                     },
+                    motionEnabled = motionEnabled,
                     label = stringResource(R.string.tab_timetable),
-                    icon = { Icon(TabIcons.Timetable, contentDescription = null) },
+                    icon = TabIcons.Timetable,
+                    selectedIcon = TabIcons.TimetableFilled,
                 )
                 NavItem(
                     selected = tab == Tab.MORE,
                     onClick = { tab = Tab.MORE },
+                    motionEnabled = motionEnabled,
                     label = stringResource(R.string.tab_more),
-                    icon = { Icon(TabIcons.More, contentDescription = null) },
+                    icon = TabIcons.More,
+                    selectedIcon = TabIcons.MoreFilled,
                 )
                 NavItem(
                     selected = tab == Tab.SETTINGS,
                     onClick = { tab = Tab.SETTINGS },
+                    motionEnabled = motionEnabled,
                     label = stringResource(R.string.tab_settings),
-                    icon = { Icon(TabIcons.Settings, contentDescription = null) },
+                    icon = TabIcons.Settings,
+                    selectedIcon = TabIcons.SettingsFilled,
                 )
             }
         },
@@ -150,9 +180,16 @@ private fun AppRoot(viewModel: AppViewModel) {
             AnimatedContent(
                 targetState = tab,
                 transitionSpec = {
-                    (fadeIn(tween(240, delayMillis = 40)) +
-                        scaleIn(tween(280, easing = FastOutSlowInEasing), initialScale = 0.985f)) togetherWith
-                        (fadeOut(tween(140)) + scaleOut(tween(180), targetScale = 0.99f))
+                    val direction = if (targetState.ordinal > initialState.ordinal) 1 else -1
+                    if (motionEnabled) {
+                        (fadeIn(tween(200, delayMillis = 30)) +
+                            slideInHorizontally(tween(300, easing = FastOutSlowInEasing)) { direction * it / 18 } +
+                            scaleIn(tween(300, easing = FastOutSlowInEasing), initialScale = 0.985f)) togetherWith
+                            (fadeOut(tween(120)) + slideOutHorizontally(tween(220)) { -direction * it / 28 })
+                    } else {
+                        androidx.compose.animation.EnterTransition.None togetherWith
+                            androidx.compose.animation.ExitTransition.None
+                    }
                 },
                 label = "tabTransition",
             ) { currentTab ->
@@ -170,18 +207,36 @@ private fun AppRoot(viewModel: AppViewModel) {
 private fun RowScope.NavItem(
     selected: Boolean,
     onClick: () -> Unit,
+    motionEnabled: Boolean,
     label: String,
-    icon: @Composable () -> Unit,
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    selectedIcon: androidx.compose.ui.graphics.vector.ImageVector,
 ) {
     NavigationBarItem(
         selected = selected,
         onClick = onClick,
-        icon = icon,
+        icon = {
+            AnimatedContent(
+                targetState = selected,
+                transitionSpec = {
+                    if (motionEnabled) {
+                        fadeIn(tween(180)) togetherWith fadeOut(tween(120))
+                    } else {
+                        androidx.compose.animation.EnterTransition.None togetherWith
+                            androidx.compose.animation.ExitTransition.None
+                    }
+                },
+                label = "navigationIcon",
+            ) { isSelected ->
+                Icon(if (isSelected) selectedIcon else icon, contentDescription = null)
+            }
+        },
         label = { Text(label) },
         colors = NavigationBarItemDefaults.colors(
-            selectedIconColor = MaterialTheme.colorScheme.onSecondaryContainer,
+            selectedIconColor = MaterialTheme.colorScheme.onPrimaryContainer,
             selectedTextColor = MaterialTheme.colorScheme.onSurface,
-            indicatorColor = MaterialTheme.colorScheme.secondaryContainer,
+            // 官方指示器形状与交互不变；主色容器比中性次容器更清楚地体现当前主题。
+            indicatorColor = MaterialTheme.colorScheme.primaryContainer,
             unselectedIconColor = MaterialTheme.colorScheme.onSurfaceVariant,
             unselectedTextColor = MaterialTheme.colorScheme.onSurfaceVariant,
         ),

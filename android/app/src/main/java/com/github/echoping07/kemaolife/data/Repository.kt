@@ -16,8 +16,8 @@ class Repository(private val bridge: Bridge) {
     fun isReady() = bridge.isReady()
     fun readyError() = bridge.readyError()
 
-    fun init(credentials: Credentials, resetSnapshot: Boolean = false): Envelope =
-        bridge.init(credentials, resetSnapshot)
+    fun init(credentials: Credentials, resetSnapshot: Boolean = false, requestLog: Boolean = false): Envelope =
+        bridge.init(credentials, resetSnapshot, requestLog)
 
     // ---- 课表 -------------------------------------------------------------
 
@@ -84,6 +84,24 @@ class Repository(private val bridge: Bridge) {
     /** `campusnet.probe`：设置页「测试」，只探测一次判态。 */
     fun testCampus(): Result<ProbeResult> =
         bridge.call("campusnet.probe").toResult { ProbeResult.from(it) }
+
+    // ---- 请求记录（设置页「日志」） ---------------------------------------
+
+    /** `log.enable`：开关请求记录；关闭会同时清空已记录内容（docs/002 §2.1 规则 10）。 */
+    fun setRequestLog(enabled: Boolean): Result<LogState> =
+        bridge.call("log.enable", "enabled" to enabled).toResult { LogState.from(it) }
+
+    /** `log.list`：最近若干条摘要（新的在前），不含正文。 */
+    fun requestLog(): Result<LogState> =
+        bridge.call("log.list").toResult { LogState.from(it) }
+
+    /** `log.detail`：单条完整记录（原始标头与正文）。 */
+    fun requestLogDetail(seq: Long): Result<LogEntry> =
+        bridge.call("log.detail", "seq" to seq).toResult { LogEntry.from(it) }
+
+    /** `log.clear`：清空记录。 */
+    fun clearRequestLog(): Result<LogState> =
+        bridge.call("log.clear").toResult { LogState.from(it) }
 
     // ---- 信封 → Result ----------------------------------------------------
 

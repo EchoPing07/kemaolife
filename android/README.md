@@ -60,7 +60,7 @@ gomobile bind -target=android -androidapi 24 \
 cd android
 ./gradlew :app:assembleDebug        # 4 个 ABI 的 debug APK
 ./gradlew :app:assembleRelease      # 未注入发布密钥时回落 debug 签名，仅供自测
-./gradlew :app:testDebugUnitTest    # 信封 / DTO / probe、查询间隔、镜像、启动时序、课程布局与翻页纯函数单测
+./gradlew :app:testDebugUnitTest    # 信封 / DTO / probe、查询间隔、镜像、启动时序、课程布局、翻页、分享正文与 QQ 群 scheme 纯函数单测
 ```
 
 产物在 `app/build/outputs/apk/<变体>/app-<ABI>-<变体>.apk`。装到真机：

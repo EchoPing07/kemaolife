@@ -49,6 +49,17 @@ class AppPreferences(context: Context) {
         set(value) = prefs.editCommit { putBoolean(KEY_CAMPUS_WIFI_ONLY, value) }
 
     /**
+     * 请求记录开关（默认关闭，docs/002 §2.1 规则 10）。
+     *
+     * 为什么要落盘：Go 侧记录器只存进程内存，进程被系统杀死后内容就没了；
+     * 开关状态必须跨进程存活，否则每次冷启动都要用户重新打开。
+     * 记录内容本身**不**落盘（含 Cookie 等凭据，等同凭据，P6）。
+     */
+    var requestLogEnabled: Boolean
+        get() = prefs.getBoolean(KEY_REQUEST_LOG, false)
+        set(value) = prefs.editCommit { putBoolean(KEY_REQUEST_LOG, value) }
+
+    /**
      * 上次课表同步**尝试**时刻（`SystemClock.elapsedRealtime()`，单调时钟）。
      * 0 表示从未同步。记「尝试」而不是「成功」：失败后不记账会切一次 tab 再打一次接口。
      */
@@ -146,6 +157,7 @@ class AppPreferences(context: Context) {
         private const val KEY_TIMETABLE_INTERVAL = "timetable_interval_minutes"
         private const val KEY_ELECTRICITY_INTERVAL = "electricity_interval_minutes"
         private const val KEY_CAMPUS_WIFI_ONLY = "campus_wifi_only"
+        private const val KEY_REQUEST_LOG = "request_log_enabled"
         private const val KEY_LAST_TIMETABLE_SYNC = "last_timetable_sync_at"
         private const val KEY_LAST_ELECTRICITY = "last_electricity_at"
         private const val KEY_ELECTRICITY_CACHE = "electricity_cache_json"
