@@ -3,6 +3,7 @@ package com.github.echoping07.kemaolife.ui
 import androidx.compose.foundation.ScrollState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
@@ -11,6 +12,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -52,6 +54,22 @@ internal fun collapsingTitleProgress(scrollPx: Int, collapseDistancePx: Int): Fl
 }
 
 /**
+ * 滚动内容的最小高度 = 视口高 + 收起距离。
+ *
+ * 收起进度只由滚动位移决定（见 [collapsingTitleProgress]），可短于一屏的页面
+ * （关于、日志开关未开时、未填指纹的校园网）自然内容不满一屏 + 收起距离，
+ * 可滚距离小于收起距离，大标题就停在半路、小标题永远淡不满。
+ * 把最小高度补到「视口 + 收起距离」，短页也能滚到收起态；长页自然高度更大，
+ * `heightIn` 不改变其高度，多出的空间只落在内容末尾（Column 顶部对齐）。
+ *
+ * 视口高未知（无界约束）或没有收起距离时返回 0，即不加最小高度约束。
+ */
+internal fun collapsingContentMinHeightPx(viewportPx: Int, collapseDistancePx: Int): Int {
+    if (viewportPx <= 0 || collapseDistancePx <= 0) return 0
+    return viewportPx + collapseDistancePx
+}
+
+/**
  * 状态栏 inset 由外层 Scaffold 统一提供。大标题随内容向上离场，
  * 收起后小标题直接在固定返回按钮右侧出现，不使用 LargeTopAppBar 的字形缩放。
  */
@@ -71,11 +89,19 @@ internal fun CollapsingScreen(
     val titleOffset = with(density) { -ExpandedTitleHeight.toPx() * progress }
     val motionEnabled = animationsEnabled()
 
-    Box(modifier = modifier.fillMaxSize()) {
+    BoxWithConstraints(modifier = modifier.fillMaxSize()) {
+        // 视口高取本层约束：滚动区与固定顶栏共用同一个 Box，高度一致。
+        val contentMinHeight = with(density) {
+            collapsingContentMinHeightPx(
+                viewportPx = if (constraints.hasBoundedHeight) constraints.maxHeight else 0,
+                collapseDistancePx = collapseDistance.roundToInt(),
+            ).toDp()
+        }
         Column(
             modifier = Modifier
                 .fillMaxSize()
                 .verticalScroll(scroll)
+                .heightIn(min = contentMinHeight)
                 .padding(horizontal = PageHorizontalPadding),
         ) {
             Spacer(Modifier.height(CollapsedTitleHeight + ExpandedTitleGap))
@@ -98,6 +124,8 @@ internal fun CollapsingScreen(
             Spacer(Modifier.height(16.dp))
             content()
             // 属于滚动内容的尾部留白：最后一张卡可以离开底栏，不形成固定空白带。
+            // 内容不足一屏 + 收起距离时，[collapsingContentMinHeightPx] 会在其后补足空白，
+            // 空白同样属于滚动内容，可以随内容一起滚走。
             Spacer(Modifier.height(PageBottomPadding))
         }
 
