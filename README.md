@@ -22,7 +22,7 @@
 > 仓库当前已实现 CLI（M0 / M1，含 macOS 预编译包（darwin amd64 / arm64）与源码构建支持）、Windows 托盘（M2）与 Android App（M0.5 / M3，已在 Android 15 真机跑通）；M4 仅剩 D8 / D11 结论复核。想先搞清楚「要做什么」，从[需求与产品定位](./docs/000-需求与产品定位.md)读起；想直接看命令、字段和退出码，去[功能规格](./docs/002-功能规格.md)。
 
 > [!WARNING]
-> **本版提供 macOS 预编译包，但未经 Apple Developer ID 签名 / 公证（notarization），且 macOS CLI 未经过实机测试。** 仓库无 macOS 真机，`kemaolife_<版本>_darwin_amd64.tar.gz`（Intel Mac / x86_64）与 `kemaolife_<版本>_darwin_arm64.tar.gz`（Apple Silicon / M1 及以后）由 Linux CI 交叉编译，darwin amd64 / arm64 仅交叉编译 + 静态审查 + 自动化单测通过，**未在真实 Mac 上运行**。以下行为**未经实机确认**：真实终端 `TIOCGETA` / `TIOCSETA` 回显控制与恢复、Gatekeeper `com.apple.quarantine` 拦截与 `xattr -d` 处理、系统根证书链下的 HTTPS 请求、`time.Local` 取到本地时区、Apple Silicon 上 arm64 二进制首次执行不被系统拦截。二进制**未经 Apple Developer ID 签名、未经 Apple 公证（notarization）**：无 Apple 付费账号证书、不做公证；arm64 二进制带 Go 链接器自动生成的 ad-hoc 代码签名（Apple Silicon 要求），**不等于 Apple 签名**。浏览器下载解压后可能带 `com.apple.quarantine`，首次运行被 Gatekeeper 拦截，请在解压后、首次运行前手动执行 `xattr -d com.apple.quarantine kemaolife`（或 `xattr -r -d com.apple.quarantine <目录>`）后再运行。仍不做 Developer ID 签名 / 公证 / Keychain / 第三方依赖；凭据仍存 `~/.config/kemaolife/config.json`（目录 0700 / 文件 0600 / 原子写，XDG 优先）与 `~/.cache/kemaolife/`。请按试验性支持使用，遇到问题带 macOS 版本与现象提 Issue。Linux / Windows / Android 的既有产物行为未改动。
+> **macOS 预编译包未经 Apple Developer ID 签名 / 公证（notarization），且 macOS CLI 未经过实机测试。** 仓库无 macOS 真机，`kemaolife_<版本>_darwin_amd64.tar.gz`（Intel Mac / x86_64）与 `kemaolife_<版本>_darwin_arm64.tar.gz`（Apple Silicon / M1 及以后）由 Linux CI 交叉编译，darwin amd64 / arm64 仅交叉编译 + 静态审查 + 自动化单测通过，**未在真实 Mac 上运行**。以下行为**未经实机确认**：真实终端 `TIOCGETA` / `TIOCSETA` 回显控制与恢复、Gatekeeper `com.apple.quarantine` 拦截与 `xattr -d` 处理、系统根证书链下的 HTTPS 请求、`time.Local` 取到本地时区、Apple Silicon 上 arm64 二进制首次执行不被系统拦截。二进制**未经 Apple Developer ID 签名、未经 Apple 公证（notarization）**：无 Apple 付费账号证书、不做公证；arm64 二进制带 Go 链接器自动生成的 ad-hoc 代码签名（Apple Silicon 要求），**不等于 Apple 签名**。浏览器下载解压后可能带 `com.apple.quarantine`，首次运行被 Gatekeeper 拦截，请在解压后、首次运行前手动执行 `xattr -d com.apple.quarantine kemaolife`（或 `xattr -r -d com.apple.quarantine <目录>`）后再运行。仍不做 Developer ID 签名 / 公证 / Keychain / 第三方依赖；凭据仍存 `~/.config/kemaolife/config.json`（目录 0700 / 文件 0600 / 原子写，XDG 优先）与 `~/.cache/kemaolife/`。请按试验性支持使用，遇到问题带 macOS 版本与现象提 Issue。Linux / Windows / Android 的既有产物行为未改动。
 
 ## KeMao Life 是什么
 
@@ -67,7 +67,7 @@ Portal   ──探测 302──► 判态 ──► 登录 / 下线 / 重登（W
 |---|---|---|
 | 设计基线 | R1–R5、三端定位、架构与端口、共享契约、三个接口协议文档 | 已入库 |
 | M0 · 契约 + core | DTO、错误码、`core` / `ports`、单测、`kemaolife` 跑通 | 已实现 |
-| M1 · CLI + skill（linux / darwin） | 单二进制 `kemaolife` + 子命令、`config`、快照缓存、SKILL.md、刷新降级、电费合并查询 | 已实现（aarch64 Linux 真机验证；**本版起提供 macOS 预编译包**（darwin amd64 / arm64），darwin amd64/arm64 仅交叉编译 + 静态审查 + 自动化单测通过，**macOS CLI 未经过实机测试、未在真实 Mac 上运行**） |
+| M1 · CLI + skill（linux / darwin） | 单二进制 `kemaolife` + 子命令、`config`、快照缓存、SKILL.md、刷新降级、电费合并查询 | 已实现（aarch64 Linux 真机验证；macOS 预编译包（darwin amd64 / arm64）仅交叉编译 + 静态审查 + 自动化单测通过，**macOS CLI 未经过实机测试、未在真实 Mac 上运行**） |
 | M2 · Windows 托盘 | 托盘状态与按模式切换的按钮组、4 小时电费轮询（600s 硬下限）、120 秒判态轮询（30s 下限）、阈值去重与静默时段、失败退避、托盘通知、DPAPI 凭据、原生设置窗口、开机自启 | 已实现（本机 Win11 验证） |
 | M3 · Android App | `gomobile` 门面、三 tab、单页周视图与横向翻页、WakeUp CSV 导出、缓存优先 / 打开联网覆盖、电费页、校园网手动动作、Keystore 多级设置 / 外观 / 关于 | 已实现（Android 15 真机已验证基础三功能链路；单页周视图 / 横向翻页 / CSV 导出增量由 CI 与本机静态自检覆盖，增量未在真机复验） |
 | M4 · 校园网自动登录复核 | Windows 自动模式已随 M2 实现，Android 手动适配器与平台网络配置已随 M3 落地；M4 仅按 D8 / D11 结论复核 Windows 链路 | 待 D8 / D11 定稿 |
@@ -107,15 +107,15 @@ Portal   ──探测 302──► 判态 ──► 登录 / 下线 / 重登（W
 
 ### 下载预编译包（推荐）
 
-Linux CLI 三个 `tar.gz`：`kemaolife_0.4.1_linux_amd64.tar.gz` / `kemaolife_0.4.1_linux_arm64.tar.gz` / `kemaolife_0.4.1_linux_armv7.tar.gz`；macOS CLI 两个 `tar.gz`：`kemaolife_0.4.1_darwin_amd64.tar.gz`（Intel Mac / x86_64）与 `kemaolife_0.4.1_darwin_arm64.tar.gz`（Apple Silicon / M1 及以后）。macOS 包与 Linux 包同构，包内含 `kemaolife` / `LICENSE` / `INSTALL.txt`；文件名用 `darwin`（仓库 GOOS 口径），展示名用 macOS。
+Linux CLI 三个 `tar.gz`：`kemaolife_0.5.1_linux_amd64.tar.gz` / `kemaolife_0.5.1_linux_arm64.tar.gz` / `kemaolife_0.5.1_linux_armv7.tar.gz`；macOS CLI 两个 `tar.gz`：`kemaolife_0.5.1_darwin_amd64.tar.gz`（Intel Mac / x86_64）与 `kemaolife_0.5.1_darwin_arm64.tar.gz`（Apple Silicon / M1 及以后）。macOS 包与 Linux 包同构，包内含 `kemaolife` / `LICENSE` / `INSTALL.txt`；文件名用 `darwin`（仓库 GOOS 口径），展示名用 macOS。
 
 ```bash
 # Linux：解压后安装
-tar -xzf kemaolife_0.4.1_linux_amd64.tar.gz
+tar -xzf kemaolife_0.5.1_linux_amd64.tar.gz
 install -m 0755 kemaolife ~/.local/bin/kemaolife
 
 # macOS：Apple Silicon 用 arm64；Intel Mac 把 arm64 换成 amd64
-tar -xzf kemaolife_0.4.1_darwin_arm64.tar.gz
+tar -xzf kemaolife_0.5.1_darwin_arm64.tar.gz
 xattr -d com.apple.quarantine kemaolife        # 解压后、首次运行前；或按 Gatekeeper 提示处理
 install -m 0755 kemaolife ~/.local/bin/kemaolife
 

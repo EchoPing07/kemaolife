@@ -16,7 +16,7 @@ android {
         // 本地构建不给该参数时退回 1，仅用于调试，不保证覆盖安装。
         versionCode = (project.findProperty("versionCode") as String?)?.toIntOrNull() ?: 1
         // 与 internal/version.Version 保持一致；发版只改 Go 侧唯一来源并同步这里。
-        versionName = "0.4.1"
+        versionName = "0.5.1"
     }
 
     buildFeatures {

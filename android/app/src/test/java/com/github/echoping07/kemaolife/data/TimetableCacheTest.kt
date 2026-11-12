@@ -52,7 +52,12 @@ class TimetableCacheTest {
     fun `旧版本与缺版本的展示镜像必须失效`() {
         val raw = TimetableCache.encode(week, "2026-11-08T09:00:00+08:00")
         assertNull(TimetableCache.decode(raw.replace("\"version\":${TimetableCache.VERSION}", "\"version\":1")))
-        assertNull(TimetableCache.decode(JSONObject().put("week", 7).put("days", JSONArray()).toString()))
+        // 用非空 days 才能证明失效来自缺 version，而不是空数组分支。
+        val legacy = JSONObject()
+            .put("week", 7)
+            .put("syncedAt", "2026-11-08T09:00:00+08:00")
+            .put("days", JSONArray().put(JSONObject().put("date", "2026-11-09")))
+        assertNull(TimetableCache.decode(legacy.toString()))
     }
 
     @Test
@@ -73,6 +78,7 @@ class TimetableCacheTest {
 
         val sparse = TimetableCache.decode(
             JSONObject()
+                .put("version", TimetableCache.VERSION)
                 .put("week", 3)
                 .put("syncedAt", "")
                 .put("days", JSONArray().put(JSONObject().put("date", "2026-10-05")))
