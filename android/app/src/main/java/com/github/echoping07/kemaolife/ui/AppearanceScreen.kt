@@ -32,9 +32,6 @@ import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import com.github.echoping07.kemaolife.data.THEME_MODE_DARK
-import com.github.echoping07.kemaolife.data.THEME_MODE_LIGHT
-import com.github.echoping07.kemaolife.data.THEME_MODE_SYSTEM
 import com.github.echoping07.kemaolife.data.isDarkTheme
 import com.github.echoping07.kemaolife.data.normalizeThemeColor
 import com.github.echoping07.kemaolife.ui.theme.AppThemeColor
@@ -48,29 +45,9 @@ internal fun AppearanceScreen(state: AppState, viewModel: AppViewModel) {
     val dark = isDarkTheme(state.themeMode, isSystemInDarkTheme())
     val dynamicAvailable = Build.VERSION.SDK_INT >= Build.VERSION_CODES.S
 
+    // 颜色模式不在这里：它是设置总览「个性化」组的常驻分段控件（见 ThemeModeSelector）。
     Column(modifier = Modifier.fillMaxWidth()) {
-        AppearanceSectionLabel(AppearanceText.ColorMode, topPadding = 0.dp)
-        val modes = listOf(
-            Triple(THEME_MODE_SYSTEM, AppearanceText.ModeSystem, "根据系统深浅色设置自动切换"),
-            Triple(THEME_MODE_LIGHT, AppearanceText.ModeLight, "始终使用浅色界面"),
-            Triple(THEME_MODE_DARK, AppearanceText.ModeDark, "始终使用深色界面"),
-        )
-        modes.forEachIndexed { index, (mode, label, summary) ->
-            ThemeModeRow(
-                title = label,
-                summary = summary,
-                selected = state.themeMode == mode,
-                position = when (index) {
-                    0 -> GroupPosition.FIRST
-                    modes.lastIndex -> GroupPosition.LAST
-                    else -> GroupPosition.MIDDLE
-                },
-                onClick = { viewModel.setThemeMode(mode) },
-            )
-            if (index < modes.lastIndex) GroupGap()
-        }
-
-        AppearanceSectionLabel(AppearanceText.DisplayAndColor)
+        AppearanceSectionLabel(AppearanceText.DisplayAndColor, topPadding = 0.dp)
         GroupSurface(GroupPosition.FIRST, modifier = Modifier.fillMaxWidth()) {
             AppearanceSwitchRow(
                 title = AppearanceText.DynamicColor,
@@ -121,47 +98,6 @@ internal fun AppearanceScreen(state: AppState, viewModel: AppViewModel) {
                         repeat(4 - rowThemes.size) { Spacer(Modifier.weight(1f)) }
                     }
                 }
-            }
-        }
-    }
-}
-
-@Composable
-private fun ThemeModeRow(
-    title: String,
-    summary: String,
-    selected: Boolean,
-    position: GroupPosition,
-    onClick: () -> Unit,
-) {
-    GroupSurface(position = position, modifier = Modifier.fillMaxWidth()) {
-        Row(
-            modifier = Modifier
-                .selectable(selected = selected, onClick = onClick, role = Role.RadioButton)
-                .padding(horizontal = 20.dp, vertical = 15.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    text = title,
-                    style = MaterialTheme.typography.titleMedium,
-                    color = if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface,
-                    fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal,
-                )
-                Text(
-                    text = summary,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.padding(top = 3.dp),
-                )
-            }
-            if (selected) {
-                Icon(
-                    imageVector = Icons.Rounded.Check,
-                    contentDescription = null,
-                    tint = MaterialTheme.colorScheme.primary,
-                    modifier = Modifier.size(24.dp),
-                )
             }
         }
     }

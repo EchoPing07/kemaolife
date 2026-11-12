@@ -111,3 +111,16 @@ internal fun smoothShape(top: Dp, bottom: Dp): CornerBasedShape = SmoothCornerSh
     CornerSize(bottom),
     CornerSize(bottom),
 )
+
+/** 四角独立圆角（连体钮的首段 / 末段：外侧最大、内侧收窄）。 */
+internal fun smoothShape(
+    topStart: Dp,
+    topEnd: Dp,
+    bottomEnd: Dp,
+    bottomStart: Dp,
+): CornerBasedShape = SmoothCornerShape(
+    CornerSize(topStart),
+    CornerSize(topEnd),
+    CornerSize(bottomEnd),
+    CornerSize(bottomStart),
+)

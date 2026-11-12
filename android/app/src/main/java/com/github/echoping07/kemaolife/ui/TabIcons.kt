@@ -182,8 +182,16 @@ internal object TabIcons {
     val Moon = icon("Moon", listOf(
         "M12 3c.132 0 .263 0 .393 0a7.5 7.5 0 0 0 7.92 12.446a9 9 0 1 1 -8.313 -12.454z",
     ))
+    // Tabler `sun`：颜色模式「浅色」段图标（保留官方路径坐标）。
+    val Sun = icon("Sun", listOf(
+        "M12 12m-4 0a4 4 0 1 0 8 0a4 4 0 1 0 -8 0",
+        "M3 12h1", "M12 3v1", "M20 12h1", "M12 20v1",
+        "M5.6 5.6l.7 .7", "M18.4 5.6l-.7 .7",
+        "M17.7 17.7l.7 .7", "M6.3 17.7l-.7 .7",
+    ))
+    // Tabler `contrast`：颜色模式入口（官方路径，右半圆为 5 半径的月牙内轮廓）。
     val Contrast = icon("Contrast", listOf(
-        "M3 12a9 9 0 1 0 18 0a9 9 0 1 0 -18 0", "M12 3a9 9 0 0 1 0 18",
+        "M3 12a9 9 0 1 0 18 0a9 9 0 1 0 -18 0", "M12 17a5 5 0 0 0 0 -10v10",
     ))
     val Sparkles = icon("Sparkles", listOf(
         "M16 18a2 2 0 0 1 2 2a2 2 0 0 1 2 -2a2 2 0 0 1 -2 -2a2 2 0 0 1 -2 2",

@@ -3,7 +3,7 @@ package com.github.echoping07.kemaolife.ui
 /** 外观页展示文案；仅呈现层，不参与主题偏好的持久化键或业务逻辑。 */
 internal object AppearanceText {
     const val ColorMode = "颜色模式"
-    const val ModeSystem = "跟随系统"
+    const val ModeSystem = "系统"
     const val ModeLight = "浅色"
     const val ModeDark = "深色"
 

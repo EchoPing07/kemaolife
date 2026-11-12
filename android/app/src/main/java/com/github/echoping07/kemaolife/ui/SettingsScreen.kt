@@ -136,6 +136,7 @@ internal fun SettingsScreen(state: AppState, viewModel: AppViewModel) {
                     when (currentPage) {
                         SettingsPage.ROOT -> SettingsOverview(
                             state = state,
+                            onThemeMode = viewModel::setThemeMode,
                             onEducation = { pageName = SettingsPage.EDUCATION.name },
                             onElectricity = { pageName = SettingsPage.ELECTRICITY.name },
                             onCampus = { pageName = SettingsPage.CAMPUS.name },
@@ -159,6 +160,7 @@ internal fun SettingsScreen(state: AppState, viewModel: AppViewModel) {
 @Composable
 private fun SettingsOverview(
     state: AppState,
+    onThemeMode: (String) -> Unit,
     onEducation: () -> Unit,
     onElectricity: () -> Unit,
     onCampus: () -> Unit,
@@ -207,12 +209,16 @@ private fun SettingsOverview(
         )
 
         SettingsGroupLabel(stringResource(R.string.settings_personalization))
+        // 颜色模式放在外观入口上方：它是本组最常改的一项，可直接在总览切换，
+        // 外观页只保留配色类设置（莫奈取色 / AMOLED / 预设主题）。
+        ThemeModeSelector(themeMode = state.themeMode, onSelect = onThemeMode)
+        GroupGap()
         SettingsDestination(
             icon = TabIcons.Appearance,
             title = stringResource(R.string.settings_appearance),
             supporting = stringResource(R.string.settings_theme_hint),
             onClick = onAppearance,
-            position = GroupPosition.ONLY,
+            position = GroupPosition.LAST,
         )
 
         // 关于、日志、交流与分享归为「关于与支持」：它们不影响账号、也不影响外观，
