@@ -65,6 +65,7 @@ internal fun MoreScreen(
     // 只把稳定依赖放进 effect：ViewModel 自己读最新 state，不捕获整个 AppState。
     // 进入本页的自动查询按最小间隔节流；手动刷新按钮不受约束。
     LaunchedEffect(Unit) { viewModel.onEnterMore() }
+    viewModel.timetableFeedback.ExpireFeedback()
     viewModel.electricityFeedback.ExpireFeedback()
     viewModel.campusFeedback.ExpireFeedback()
     viewModel.campusActionFeedback.ExpireFeedback()
@@ -79,7 +80,7 @@ internal fun MoreScreen(
             Spacer(Modifier.height(12.dp))
         }
 
-        TodayOverview(state)
+        TodayOverview(state, viewModel)
 
         Spacer(Modifier.height(16.dp))
         ElectricityCard(state, viewModel)
@@ -115,10 +116,21 @@ private fun SetupCard(
 }
 
 @Composable
-private fun TodayOverview(state: AppState) {
+private fun TodayOverview(state: AppState, viewModel: AppViewModel) {
     val day: DaySchedule? = state.todayDay
     val title = stringResource(R.string.section_today)
-    SectionCard(title = title) {
+    SectionCard(
+        title = title,
+        action = {
+            // 与电费 / 校园网保持一致：手动同步课表，不受最小查询间隔约束（docs/002 §5.3）。
+            RefreshAction(
+                loading = state.weekLoading || state.timetableSyncing,
+                result = viewModel.timetableFeedback.result,
+                onClick = { viewModel.refreshWeek() },
+                modifier = Modifier.size(40.dp),
+            )
+        },
+    ) {
         when {
             day == null -> PlaceholderRow(
                 text = state.timetableError ?: stringResource(R.string.loading),
