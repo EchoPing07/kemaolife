@@ -373,15 +373,9 @@ private fun CampusCard(state: AppState, viewModel: AppViewModel) {
             )
         }
 
-        if (campus?.errorMsg?.isNotBlank() == true) {
-            Spacer(Modifier.height(6.dp))
-            Text(
-                text = campus.errorMsg.lineSequence().first().substringBefore('；').substringBefore(';').trim(),
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.error,
-            )
-        }
-
+        // errorMsg 是上游 Location 的历史提示，不参与判态；已在线时夹带
+        // 「正在进行外网拨号」会造成误读，卡片按三态收敛。手动判态 / 动作
+        // 失败原因另走 snackbar，自动判态失败归 offline，不在此处渲染。
         val details = listOf(
             stringResource(R.string.campus_bras_name) to campus?.brasName.orEmpty(),
             stringResource(R.string.campus_bras_address) to campus?.brasAddress.orEmpty(),
