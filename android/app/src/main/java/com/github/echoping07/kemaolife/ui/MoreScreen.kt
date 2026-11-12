@@ -329,7 +329,6 @@ private fun UsageSparkline(values: List<Double>) {
 @Composable
 private fun CampusCard(state: AppState, viewModel: AppViewModel) {
     val campus = state.campus
-    val busy = state.campusLoading || state.campusActing != null
     var showDetails by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf(false) }
 
     SectionCard(
@@ -360,10 +359,6 @@ private fun CampusCard(state: AppState, viewModel: AppViewModel) {
                     fontWeight = FontWeight.SemiBold,
                     color = tint,
                 )
-            }
-            if (busy) {
-                Spacer(Modifier.width(10.dp))
-                ExpressiveLoadingIndicator(size = 16.dp)
             }
         }
 
@@ -471,30 +466,6 @@ private fun CampusCard(state: AppState, viewModel: AppViewModel) {
                 onClick = { viewModel.campusAction(CampusAction.LOGOUT) },
                 modifier = Modifier.weight(1f),
             )
-        }
-        AnimatedVisibility(visible = state.campusActing != null || viewModel.campusActionFeedback.result != null) {
-            Row(
-                modifier = Modifier.padding(top = 10.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                val feedback = viewModel.campusActionFeedback.result
-                if (state.campusActing != null) {
-                    ExpressiveLoadingIndicator(size = 15.dp)
-                } else if (feedback != null) {
-                    ActionResultIcon(feedback, modifier = Modifier.size(16.dp))
-                }
-                Spacer(Modifier.width(7.dp))
-                Text(
-                    text = when {
-                        state.campusActing != null -> stringResource(R.string.campus_action_running)
-                        feedback == ActionFeedback.SUCCESS -> stringResource(R.string.action_succeeded)
-                        feedback == ActionFeedback.UNAVAILABLE -> stringResource(R.string.campus_check_configuration)
-                        else -> stringResource(R.string.action_failed)
-                    },
-                    style = MaterialTheme.typography.labelMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
         }
     }
 }
