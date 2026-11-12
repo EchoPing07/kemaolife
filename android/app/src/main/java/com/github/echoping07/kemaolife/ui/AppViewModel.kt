@@ -422,8 +422,9 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                     onFailure = { ex ->
                         feedbackId?.let { electricityFeedback.complete(it, actionFeedbackFor(ex)) }
                         // 失败不清缓存：旧电费照常可看。
+                        // 自动查询每次打开都会跑，失败文案不进全局 snackbar；
+                        // 诊断走设置页电费「测试」弹窗与日志页（docs/002 §5.3）。
                         _state.update { it.copy(electricityLoading = false) }
-                        pushError(ex)
                     },
                 )
             } finally {
