@@ -13,7 +13,7 @@ internal object AppearanceText {
     const val DynamicColorDisabledSummary = "开启后优先使用系统壁纸配色"
     const val DynamicColorUnavailable = "当前设备不可用，需要 Android 12 或更高版本"
 
-    const val Amoled = "AMOLED 纯黑"
+    const val Amoled = "AMOLED深色模式"
     const val AmoledActiveSummary = "深色背景使用纯黑，保留清晰的色彩层次"
     const val AmoledInactiveSummary = "可随时开启，纯黑背景仅在深色界面生效"
 

@@ -56,7 +56,9 @@ internal fun AppearanceScreen(state: AppState, viewModel: AppViewModel) {
                     state.dynamicColor -> AppearanceText.DynamicColorEnabledSummary
                     else -> AppearanceText.DynamicColorDisabledSummary
                 },
-                checked = state.dynamicColor,
+                // 默认开启只作用于支持动态取色的设备；旧版本呈关闭态，
+                // 避免「开关已开、功能却不可用」的误导（配色仍走预设主题）。
+                checked = state.dynamicColor && dynamicAvailable,
                 enabled = dynamicAvailable,
                 onCheckedChange = viewModel::setDynamicColor,
             )

@@ -12,6 +12,7 @@ import com.github.echoping07.kemaolife.data.CampusStatus
 import com.github.echoping07.kemaolife.data.CredentialStore
 import com.github.echoping07.kemaolife.data.Credentials
 import com.github.echoping07.kemaolife.data.DaySchedule
+import com.github.echoping07.kemaolife.data.DEFAULT_DYNAMIC_COLOR
 import com.github.echoping07.kemaolife.data.ElectricityReport
 import com.github.echoping07.kemaolife.data.LogEntry
 import com.github.echoping07.kemaolife.data.LogState
@@ -998,7 +999,7 @@ data class AppState(
 
     val themeColor: String = "BLUE",
     val themeMode: String = "SYSTEM",
-    val dynamicColor: Boolean = false,
+    val dynamicColor: Boolean = DEFAULT_DYNAMIC_COLOR,
     val amoled: Boolean = false,
     val settingsSaved: Boolean = false,
     val error: String? = null,

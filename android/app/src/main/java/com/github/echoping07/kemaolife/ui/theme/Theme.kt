@@ -20,6 +20,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.github.echoping07.kemaolife.ui.animationsEnabled
 import androidx.core.graphics.ColorUtils
+import com.github.echoping07.kemaolife.data.DEFAULT_DYNAMIC_COLOR
 import com.github.echoping07.kemaolife.data.THEME_MODE_DARK
 import com.github.echoping07.kemaolife.data.THEME_MODE_LIGHT
 import com.github.echoping07.kemaolife.data.isDarkTheme
@@ -256,7 +257,7 @@ fun KemaolifeTheme(
     /** 兼容旧调用；新的 themeMode 未显式传入时沿用这个有效深色值。 */
     darkTheme: Boolean = isSystemInDarkTheme(),
     themeMode: String = if (darkTheme) THEME_MODE_DARK else THEME_MODE_LIGHT,
-    dynamicColor: Boolean = false,
+    dynamicColor: Boolean = DEFAULT_DYNAMIC_COLOR,
     amoled: Boolean = false,
     content: @Composable () -> Unit,
 ) {

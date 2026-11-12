@@ -8,11 +8,22 @@ import org.junit.Test
 class ThemeSettingsTest {
 
     @Test
-    fun defaultsMatchLegacyAppearance() {
+    fun defaultAppearanceValues() {
         assertEquals(
-            ThemeSettings(themeColor = "MONOCHROMATIC", themeMode = "SYSTEM", dynamicColor = false, amoled = false),
+            ThemeSettings(themeColor = "MONOCHROMATIC", themeMode = "SYSTEM", dynamicColor = true, amoled = false),
             ThemeSettings(),
         )
+    }
+
+    @Test
+    fun dynamicColorIsEnabledByDefault() {
+        assertTrue(DEFAULT_DYNAMIC_COLOR)
+        assertTrue(ThemeSettings().dynamicColor)
+    }
+
+    @Test
+    fun dynamicColorCanBeTurnedOffExplicitly() {
+        assertFalse(ThemeSettings(dynamicColor = false).dynamicColor)
     }
 
     @Test

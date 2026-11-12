@@ -5,11 +5,14 @@ const val THEME_MODE_LIGHT = "LIGHT"
 const val THEME_MODE_DARK = "DARK"
 const val DEFAULT_THEME_COLOR = "MONOCHROMATIC"
 
+/** 莫奈取色的唯一默认来源；偏好里已显式存过 false 时仍以本机值为准。 */
+const val DEFAULT_DYNAMIC_COLOR = true
+
 /** 本机外观偏好；字段与 AppState 的展示字段保持一一对应。 */
 data class ThemeSettings(
     val themeColor: String = DEFAULT_THEME_COLOR,
     val themeMode: String = THEME_MODE_SYSTEM,
-    val dynamicColor: Boolean = false,
+    val dynamicColor: Boolean = DEFAULT_DYNAMIC_COLOR,
     val amoled: Boolean = false,
 )
 

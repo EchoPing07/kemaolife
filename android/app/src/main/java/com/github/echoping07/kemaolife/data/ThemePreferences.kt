@@ -20,7 +20,8 @@ class ThemePreferences(context: Context) {
         preferences.getString(KEY_THEME_MODE, THEME_MODE_SYSTEM),
     )
 
-    fun loadDynamicColor(): Boolean = preferences.getBoolean(KEY_DYNAMIC_COLOR, false)
+    // 键不存在（新安装 / 清数据）时取全局默认；已显式存过 false 时尊重用户选择。
+    fun loadDynamicColor(): Boolean = preferences.getBoolean(KEY_DYNAMIC_COLOR, DEFAULT_DYNAMIC_COLOR)
 
     fun loadAmoled(): Boolean = preferences.getBoolean(KEY_AMOLED, false)
 

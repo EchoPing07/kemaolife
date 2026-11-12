@@ -91,7 +91,7 @@
     <string name="settings_personalization">个性化</string>
     <string name="settings_appearance">外观</string>
     <string name="settings_theme_color">主题色</string>
-    <string name="settings_theme_hint">选择会立即应用到整个应用，并保存在本机。</string>
+    <string name="settings_theme_hint">莫奈取色、AMOLED深色模式、主题</string>
     <string name="settings_about">关于</string>
     <string name="settings_about_hint">版本与开源信息</string>
 
@@ -101,7 +101,7 @@
     <string name="settings_logs_hint">正在记录请求，点开查看详情</string>
     <string name="settings_logs_idle">记录完整请求，便于排查</string>
     <string name="settings_share">分享</string>
-    <string name="settings_share_hint">发送应用名称与项目地址</string>
+    <string name="settings_share_hint">推荐本APP给朋友</string>
     <string name="settings_contact">交流</string>
     <string name="settings_contact_hint">QQ 群 %1$s</string>
     <string name="settings_contact_failed">没有找到可以打开 QQ 群的应用</string>
