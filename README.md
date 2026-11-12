@@ -107,15 +107,15 @@ Portal   ──探测 302──► 判态 ──► 登录 / 下线 / 重登（W
 
 ### 下载预编译包（推荐）
 
-Linux CLI 三个 `tar.gz`：`kemaolife_0.5.1_linux_amd64.tar.gz` / `kemaolife_0.5.1_linux_arm64.tar.gz` / `kemaolife_0.5.1_linux_armv7.tar.gz`；macOS CLI 两个 `tar.gz`：`kemaolife_0.5.1_darwin_amd64.tar.gz`（Intel Mac / x86_64）与 `kemaolife_0.5.1_darwin_arm64.tar.gz`（Apple Silicon / M1 及以后）。macOS 包与 Linux 包同构，包内含 `kemaolife` / `LICENSE` / `INSTALL.txt`；文件名用 `darwin`（仓库 GOOS 口径），展示名用 macOS。
+Linux CLI 三个 `tar.gz`：`kemaolife_0.5.2_linux_amd64.tar.gz` / `kemaolife_0.5.2_linux_arm64.tar.gz` / `kemaolife_0.5.2_linux_armv7.tar.gz`；macOS CLI 两个 `tar.gz`：`kemaolife_0.5.2_darwin_amd64.tar.gz`（Intel Mac / x86_64）与 `kemaolife_0.5.2_darwin_arm64.tar.gz`（Apple Silicon / M1 及以后）。macOS 包与 Linux 包同构，包内含 `kemaolife` / `LICENSE` / `INSTALL.txt`；文件名用 `darwin`（仓库 GOOS 口径），展示名用 macOS。
 
 ```bash
 # Linux：解压后安装
-tar -xzf kemaolife_0.5.1_linux_amd64.tar.gz
+tar -xzf kemaolife_0.5.2_linux_amd64.tar.gz
 install -m 0755 kemaolife ~/.local/bin/kemaolife
 
 # macOS：Apple Silicon 用 arm64；Intel Mac 把 arm64 换成 amd64
-tar -xzf kemaolife_0.5.1_darwin_arm64.tar.gz
+tar -xzf kemaolife_0.5.2_darwin_arm64.tar.gz
 xattr -d com.apple.quarantine kemaolife        # 解压后、首次运行前；或按 Gatekeeper 提示处理
 install -m 0755 kemaolife ~/.local/bin/kemaolife
 

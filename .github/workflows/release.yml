@@ -67,7 +67,7 @@ jobs:
             exit 1
           fi
 
-          # Android versionCode 由 tag 派生：major*10000 + minor*100 + patch（v0.5.1 → 501）。
+          # Android versionCode 由 tag 派生：major*10000 + minor*100 + patch（v0.5.2 → 502）。
           # 必须跨版本严格递增，否则 Android 拒绝覆盖安装。
           IFS='.' read -r MAJOR MINOR PATCH <<< "$VERSION"
           VERSION_CODE=$(( 10#$MAJOR * 10000 + 10#$MINOR * 100 + 10#$PATCH ))
@@ -551,31 +551,19 @@ jobs:
 
           三端（CLI / Windows 托盘 / Android App）共用一份 Go `core` 的校园工具：课表查询、电费余额与每日用量、校园网认证。本版产物为五类：Linux CLI 纯 Go 二进制（三架构，`CGO_ENABLED=0`）、**macOS CLI 预编译包（darwin amd64 / arm64，`CGO_ENABLED=0`）**、Windows 托盘便携包（两架构）、Android 四 ABI 已签名 APK、独立的 agent skill，另附 `SHA256SUMS`。windows CLI 为后续计划；桌面端仅 Windows、移动端仅 Android。macOS 二进制由 Linux CI 交叉编译，**未经 Apple Developer ID 签名、未经 Apple 公证**，且 **macOS CLI 未经过实机测试**（详见下方安装小节）。源码版本 `internal/version.Version` = `__VERSION__`；Android `versionCode` = `__VERSION_CODE__`；构建提交 `__SHORT_SHA__`（完整提交号见 `kemaolife --version --json`）。
 
-          ### 本版变更（__TAG__，自 v0.4.1）
+          ### 本版变更（__TAG__，自 v0.5.1）
 
-          > [!IMPORTANT]
-          > **课表快照已升级到 `Version 2`。** 本版修复了「同一门课全部教室都显示在当节」与「连堂课时间只覆盖起始大节」，旧快照不做兼容迁移、直接丢弃重拉。CLI 的课表查询本来就会先联网刷新一次；Android 打开 App 会自动同步一次。**升级后请联网打开一次 App（或执行一次 `kemaolife timetable sync`）让课表重新生成**；未刷新成功前，课表会显示空态或提示需要重新同步。Android 直接覆盖安装即可（`versionCode` = `__VERSION_CODE__`），不要先卸载（会清掉 Keystore 凭据与应用私有目录里的快照）。
+          本版是 `0.5.1` 的修订版，只修一处 Android 呈现问题，不含功能与契约变化：
 
-          **课表**
+          - **修复浅色界面下部分厂商（小米 / 澎湃）在系统手势提示线区域叠加白色导航栏背景**：该白色对比度遮罩本只用于三键导航，却盖住了底栏延伸到屏幕底边的部分。`MainActivity.onCreate` 在 `enableEdgeToEdge()` 之后按 API 29+ 关闭 `window.isNavigationBarContrastEnforced`（顺序不可颠倒），让底栏的 `surfaceContainer` 色（含莫奈动态取色）透出，使提示线背景与页面整体背景一致。仅 Kotlin 呈现层对 Window 的一次性设置，不新增依赖、不新增厂商判断分支、不读门面。
+          - 莫奈动态取色 / 预设色板 / 深浅色配色、底栏高度、系统栏图标深浅、三个功能域的查询与认证行为均不变；CLI 命令 / 参数 / 退出码 `0/1/2/3/4`、JSON 信封、DTO 字段名、错误码、门面 `op` 与快照 `Version` 均未变，Linux / macOS CLI 与 Windows 托盘产物与 `0.5.1` 一致。
 
-          - 连堂课程的 `entries[].time` 改为覆盖 `periods` 全部小节的起止时间，如 `5-8` 不再只显示 `14:00~15:20`；补齐 1..12 全部连续区间的回归测试。
-          - `sktime` / `skddmc` 按时段片段配对，`Lesson.Location` / `Entry.location` 只返回当节真实教室，`weeksText` 按所属时段生成；片段数无法配对时按 `4002` 报错，不静默丢课。
-          - `timetable.week` 的 `data` 新增**可选**字段 `lastWeek`（学期最后一周，缺省 0 = 未知），供 Android 横向翻页判边界；老客户端忽略即可。
+          > [!NOTE]
+          > **从 `0.5.1` 升级**：直接覆盖安装同架构 APK 即可（`versionCode` = `__VERSION_CODE__`），不要先卸载（会清掉 Keystore 凭据与应用私有目录里的快照）；快照 `Version` 未变，不需要重新同步课表。
+          >
+          > **从 `0.4.1` 或更早版本升级**：`0.5.1` 已把课表快照升到 `Version 2`（修复「同一门课全部教室都显示在当节」与「连堂课时间只覆盖起始大节」），旧快照不做兼容迁移、直接丢弃重拉。请联网打开一次 App（或执行一次 `kemaolife timetable sync`）让课表重新生成；未刷新成功前课表会显示空态或提示需要重新同步。该版完整变更清单见 [v0.5.1 Release](https://github.com/EchoPing07/kemaolife/releases/tag/v0.5.1)。
 
-          **Android**
-
-          - 课表改为单页周视图 + 横向翻页 + 周次弹窗；新增课表导出为 WakeUp 课程表 CSV（只读本地快照、0 请求，经系统文件选择器保存，不需要存储权限）。
-          - 查询语义收口：打开 App 先出课表 / 电费缓存，再无条件尝试联网覆盖（特殊自动，不受最小查询间隔约束）；其余自动触发按间隔节流，课表与电费各自默认 5 分钟、下限 1 分钟、上限 1440 分钟；手动刷新与设置页「测试」不受限；切周 / 选日期不联网（`CacheOnly`，`stale` 恒 `false`）。
-          - 设置拆为总览 + 教务 / 电费 / 校园网 / 外观 / 关于 / 日志二级页；电费学号可独立配置（默认继承教务学号）；三个功能域详情页新增「测试」弹窗（`*.probe`，回报脱敏）。
-          - MD3 Expressive 呈现：滚动收起大标题、药丸底栏、连体钮颜色模式、AOSP 8 个基础色预设、莫奈动态取色默认开启（Android 12+）、AMOLED深色模式、连续曲率圆角与浅色「淡灰底 + 纯白卡片」；刷新与校园网动作补结果反馈。
-          - 设置页新增「日志」（请求记录默认关闭、只存 Go 进程内存、环形窗口 100 条、标头与正文按原始字节保留，**含凭据与 Cookie，请勿把日志内容外发或贴进 Issue**）、「交流」（QQ 官方一键加群）与「分享」（系统分享面板发送固定公开项目名与仓库地址两行纯文本）。
-          - 冷启动首帧由 Kotlin 侧展示镜像立即渲染，镜像与 Go 快照同样按版本失效；电费请求失败不再弹 snackbar；更多页今日概览补手动刷新；校园网卡片不再渲染上游的历史提示。
-
-          **契约与其余端**
-
-          - 门面新增 `op`：`timetable.export`、`timetable.probe` / `electricity.probe` / `campusnet.probe`、`log.enable` / `log.list` / `log.detail` / `log.clear`；`Init` 新增可选 `resetSnapshot` / `requestLog`，`CampusStatus` 新增五项可选接入详情（仅本人设备折叠展示）。新增字段均可选、零值有明确语义，老客户端可忽略。
-          - CLI 命令 / 参数 / 退出码 `0/1/2/3/4`、JSON 信封既有字段、既有 DTO 字段名与错误码数值均未变；Windows 托盘本版只清理未引用的 Win32 绑定，行为不变。
-          - 电费数据仍约 1 天延迟，「数据截至」是采集时刻，不是实时值；三端功能边界与不做项见 `docs/002 §5`。
+          电费数据仍约 1 天延迟，「数据截至」是采集时刻，不是实时值；三端功能边界与不做项见 `docs/002 §5`。
 
           ### 产物
 
