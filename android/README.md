@@ -1,7 +1,7 @@
 # Android 构建说明
 
 > 状态：M3 已在 Android 15 真机跑通课表、电费与校园网手动动作的基础链路；单页周视图 / 横向翻页、WakeUp 课程表 CSV 导出、多级设置与外观页由 Go 单测、Kotlin 纯函数单测及构建流程覆盖，增量未在真机复验。
-> `v0.3.0` 起 `release.yml` 自动产出四个已签名 APK；当前源码版本为 `v0.5.2`（见 `../internal/version/version.go`）。同版 Release 另有 macOS 预编译 CLI 两个包（darwin amd64 / arm64，未经 Apple 签名 / 公证、未经过实机测试），本文件只说明 Android APK 的构建。
+> `v0.3.0` 起 `release.yml` 自动产出四个已签名 APK；当前源码版本为 `v0.5.3`（见 `../internal/version/version.go`）。同版 Release 另有 macOS 预编译 CLI 两个包（darwin amd64 / arm64，未经 Apple 签名 / 公证、未经过实机测试），本文件只说明 Android APK 的构建。
 > 契约以 `docs/002` 为准，本文件只说「怎么把 APK 造出来」；呈现层行为详见 `docs/002 §5.3`。
 
 ## 1. 前置工具

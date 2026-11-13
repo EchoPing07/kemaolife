@@ -67,7 +67,7 @@ jobs:
             exit 1
           fi
 
-          # Android versionCode 由 tag 派生：major*10000 + minor*100 + patch（v0.5.2 → 502）。
+          # Android versionCode 由 tag 派生：major*10000 + minor*100 + patch（v0.5.3 → 503）。
           # 必须跨版本严格递增，否则 Android 拒绝覆盖安装。
           IFS='.' read -r MAJOR MINOR PATCH <<< "$VERSION"
           VERSION_CODE=$(( 10#$MAJOR * 10000 + 10#$MINOR * 100 + 10#$PATCH ))
@@ -551,19 +551,31 @@ jobs:
 
           三端（CLI / Windows 托盘 / Android App）共用一份 Go `core` 的校园工具：课表查询、电费余额与每日用量、校园网认证。本版产物为五类：Linux CLI 纯 Go 二进制（三架构，`CGO_ENABLED=0`）、**macOS CLI 预编译包（darwin amd64 / arm64，`CGO_ENABLED=0`）**、Windows 托盘便携包（两架构）、Android 四 ABI 已签名 APK、独立的 agent skill，另附 `SHA256SUMS`。windows CLI 为后续计划；桌面端仅 Windows、移动端仅 Android。macOS 二进制由 Linux CI 交叉编译，**未经 Apple Developer ID 签名、未经 Apple 公证**，且 **macOS CLI 未经过实机测试**（详见下方安装小节）。源码版本 `internal/version.Version` = `__VERSION__`；Android `versionCode` = `__VERSION_CODE__`；构建提交 `__SHORT_SHA__`（完整提交号见 `kemaolife --version --json`）。
 
-          ### 本版变更（__TAG__，自 v0.5.1）
+          ### 本版变更（__TAG__，自 v0.5.2）
 
-          本版是 `0.5.1` 的修订版，只修一处 Android 呈现问题，不含功能与契约变化：
+          本版只改 Android 呈现层，共三项，不含三个功能域的逻辑或对外契约变化：
 
-          - **修复浅色界面下部分厂商（小米 / 澎湃）在系统手势提示线区域叠加白色导航栏背景**：该白色对比度遮罩本只用于三键导航，却盖住了底栏延伸到屏幕底边的部分。`MainActivity.onCreate` 在 `enableEdgeToEdge()` 之后按 API 29+ 关闭 `window.isNavigationBarContrastEnforced`（顺序不可颠倒），让底栏的 `surfaceContainer` 色（含莫奈动态取色）透出，使提示线背景与页面整体背景一致。仅 Kotlin 呈现层对 Window 的一次性设置，不新增依赖、不新增厂商判断分支、不读门面。
-          - 莫奈动态取色 / 预设色板 / 深浅色配色、底栏高度、系统栏图标深浅、三个功能域的查询与认证行为均不变；CLI 命令 / 参数 / 退出码 `0/1/2/3/4`、JSON 信封、DTO 字段名、错误码、门面 `op` 与快照 `Version` 均未变，Linux / macOS CLI 与 Windows 托盘产物与 `0.5.1` 一致。
+          **外观：新增「连续曲率圆角」开关**
+
+          - 「设置 → 外观 → 显示与色彩」第三个开关，默认**关闭**使用标准圆弧（`RoundedCornerShape`），开启后全 App 改用连续曲率（`SmoothCornerShape`）；两种模式共用完全相同的半径层级，`MaterialTheme.shapes` 五个槽位、tab1 课程块、连体钮、弹窗与底部弹层都跟随，圆形与连体钮 morph 动效不变。
+          - 偏好只存本机 `appearance`，不做升级迁移：从旧版覆盖安装后仍按默认的标准圆弧显示，需要时自行打开开关。
+
+          **关于：新增纯手动「检查更新」**
+
+          - 「设置 → 关于」在 `GitHub` / `开源许可` 之后独立成组新增一行，点击打开半屏底部弹层，展示当前版本、最新发布版本与一句结论，底部常驻「前往 Releases」外链。
+          - 只取 GitHub `/releases/latest` 的公开 `tag_name` 与本机 `BuildConfig.VERSION_NAME` 按 `v?X.Y.Z` 白名单做三段数值比较；**不自动检查、不后台定时、不应用内下载或安装 APK**，不展示 Release notes 或资产列表，失败用本地固定文案、不给重试按钮。
+          - 该查询走 Kotlin `HttpURLConnection`（JDK 标准库，不新增第三方依赖），只发一次手动请求、走系统 CA，不携带凭据 / Cookie / 学号 / 设备标识，不读本机快照，不经 Go 门面（故不进「设置 → 日志」），上游正文与错误文案不进 UI。
+
+          **课表：修正头部文字被圆角裁切**
+
+          - 日期 / 周次点击区补 8dp 水平内边距，避免默认标准圆弧裁掉贴边的年份与「第」字；点击热区、圆角形状、头部高度与贴顶 / 贴底关系不变。
 
           > [!NOTE]
-          > **从 `0.5.1` 升级**：直接覆盖安装同架构 APK 即可（`versionCode` = `__VERSION_CODE__`），不要先卸载（会清掉 Keystore 凭据与应用私有目录里的快照）；快照 `Version` 未变，不需要重新同步课表。
+          > **从 `0.5.2` 升级**：直接覆盖安装同架构 APK 即可（`versionCode` = `__VERSION_CODE__`），不要先卸载（会清掉 Keystore 凭据与应用私有目录里的快照）；快照 `Version` 未变，不需要重新同步课表。
           >
-          > **从 `0.4.1` 或更早版本升级**：`0.5.1` 已把课表快照升到 `Version 2`（修复「同一门课全部教室都显示在当节」与「连堂课时间只覆盖起始大节」），旧快照不做兼容迁移、直接丢弃重拉。请联网打开一次 App（或执行一次 `kemaolife timetable sync`）让课表重新生成；未刷新成功前课表会显示空态或提示需要重新同步。该版完整变更清单见 [v0.5.1 Release](https://github.com/EchoPing07/kemaolife/releases/tag/v0.5.1)。
+          > **从 `0.4.1` 或更早版本升级**：`0.5.1` 已把课表快照升到 `Version 2`（修复「同一门课全部教室都显示在当节」与「连堂课时间只覆盖起始大节」），旧快照不做兼容迁移、直接丢弃重拉。请联网打开一次 App（或执行一次 `kemaolife timetable sync`）让课表重新生成；未刷新成功前课表会显示空态或提示需要重新同步。更早版本变更见 [v0.5.1](https://github.com/EchoPing07/kemaolife/releases/tag/v0.5.1) 与 [v0.5.2](https://github.com/EchoPing07/kemaolife/releases/tag/v0.5.2) Release。
 
-          电费数据仍约 1 天延迟，「数据截至」是采集时刻，不是实时值；三端功能边界与不做项见 `docs/002 §5`。
+          CLI 命令 / 参数 / 退出码 `0/1/2/3/4`、JSON 信封、DTO 字段名、错误码、门面 `op` 与快照 `Version` 均未变；Linux / macOS CLI、Windows 托盘与 agent skill 产物与 `0.5.2` 一致。电费数据仍约 1 天延迟，「数据截至」是采集时刻，不是实时值；三端功能边界与不做项见 `docs/002 §5`。
 
           ### 产物
 
