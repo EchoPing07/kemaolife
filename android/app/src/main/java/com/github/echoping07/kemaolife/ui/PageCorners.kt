@@ -22,7 +22,7 @@ internal object PageCorners {
     /** 卡片内的指标块、展开区与详情块。 */
     val Nested: Dp = 28.dp
 
-    /** 输入框、开关行与 44dp 高的按钮（恰好成连续曲率胶囊）。 */
+    /** 输入框、开关行与 44dp 高的按钮（恰好成胶囊）。 */
     val Field: Dp = 22.dp
 
     /** 关于页 104dp 方形图标。 */

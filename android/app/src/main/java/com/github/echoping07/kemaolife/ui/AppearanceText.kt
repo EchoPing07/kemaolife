@@ -17,6 +17,10 @@ internal object AppearanceText {
     const val AmoledActiveSummary = "深色背景使用纯黑，保留清晰的色彩层次"
     const val AmoledInactiveSummary = "可随时开启，纯黑背景仅在深色界面生效"
 
+    const val ContinuousCorners = "连续曲率圆角"
+    const val ContinuousCornersEnabledSummary = "卡片与按钮使用连续曲率圆角"
+    const val ContinuousCornersDisabledSummary = "当前使用标准圆弧圆角，开启后全 App 改为连续曲率"
+
     const val Preview = "配色预览"
     const val SystemPalette = "系统动态配色"
     const val PreviewBackground = "界面背景"

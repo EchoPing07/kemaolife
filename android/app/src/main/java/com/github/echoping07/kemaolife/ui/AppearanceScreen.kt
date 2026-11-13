@@ -36,7 +36,7 @@ import com.github.echoping07.kemaolife.data.isDarkTheme
 import com.github.echoping07.kemaolife.data.normalizeThemeColor
 import com.github.echoping07.kemaolife.ui.theme.AppThemeColor
 import com.github.echoping07.kemaolife.ui.theme.previewColorScheme
-import com.github.echoping07.kemaolife.ui.theme.smoothShape
+import com.github.echoping07.kemaolife.ui.theme.appShape
 import kotlin.math.min
 
 /** 外观页只提供内容；滚动由 CollapsingScreen 的单一 verticalScroll 负责。 */
@@ -64,7 +64,7 @@ internal fun AppearanceScreen(state: AppState, viewModel: AppViewModel) {
             )
         }
         GroupGap()
-        GroupSurface(GroupPosition.LAST, modifier = Modifier.fillMaxWidth()) {
+        GroupSurface(GroupPosition.MIDDLE, modifier = Modifier.fillMaxWidth()) {
             AppearanceSwitchRow(
                 title = AppearanceText.Amoled,
                 summary = if (dark && state.amoled) AppearanceText.AmoledActiveSummary
@@ -73,6 +73,17 @@ internal fun AppearanceScreen(state: AppState, viewModel: AppViewModel) {
                 // 偏好随时可设；纯黑背景只由 KemaolifeTheme 在深色下应用。
                 enabled = true,
                 onCheckedChange = viewModel::setAmoled,
+            )
+        }
+        GroupGap()
+        GroupSurface(GroupPosition.LAST, modifier = Modifier.fillMaxWidth()) {
+            AppearanceSwitchRow(
+                title = AppearanceText.ContinuousCorners,
+                summary = if (state.continuousCorners) AppearanceText.ContinuousCornersEnabledSummary
+                else AppearanceText.ContinuousCornersDisabledSummary,
+                checked = state.continuousCorners,
+                enabled = true,
+                onCheckedChange = viewModel::setContinuousCorners,
             )
         }
 
@@ -162,7 +173,7 @@ private fun ThemeDonutWheel(
     Column(
         horizontalAlignment = Alignment.CenterHorizontally,
         modifier = modifier
-            .clip(smoothShape(PageCorners.Field))
+            .clip(appShape(PageCorners.Field))
             .selectable(selected = selected, onClick = onClick, role = Role.RadioButton)
             .padding(vertical = 8.dp),
     ) {

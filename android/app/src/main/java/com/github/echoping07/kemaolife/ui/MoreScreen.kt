@@ -21,7 +21,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import com.github.echoping07.kemaolife.ui.theme.smoothShape
+import com.github.echoping07.kemaolife.ui.theme.appShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.KeyboardArrowDown
 import androidx.compose.material3.Button
@@ -257,7 +257,7 @@ private fun MetricGrid(left: Pair<String, String>, right: Pair<String, String>) 
             left.second,
             Modifier
                 .weight(1f)
-                .clip(smoothShape(PageCorners.Nested))
+                .clip(appShape(PageCorners.Nested))
                 .background(MaterialTheme.colorScheme.surfaceContainerHigh)
                 .padding(horizontal = 14.dp, vertical = 12.dp),
         )
@@ -266,7 +266,7 @@ private fun MetricGrid(left: Pair<String, String>, right: Pair<String, String>) 
             right.second,
             Modifier
                 .weight(1f)
-                .clip(smoothShape(PageCorners.Nested))
+                .clip(appShape(PageCorners.Nested))
                 .background(MaterialTheme.colorScheme.surfaceContainerHigh)
                 .padding(horizontal = 14.dp, vertical = 12.dp),
         )
@@ -319,7 +319,7 @@ private fun UsageSparkline(values: List<Double>) {
                 modifier = Modifier
                     .weight(1f)
                     .height((48 * ratio).dp)
-                    .clip(smoothShape(3.dp))
+                    .clip(appShape(3.dp))
                     .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.35f)),
             )
         }
@@ -395,7 +395,7 @@ private fun CampusCard(state: AppState, viewModel: AppViewModel) {
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .clip(smoothShape(PageCorners.Field))
+                    .clip(appShape(PageCorners.Field))
                     .clickable { showDetails = !showDetails }
                     .padding(vertical = 4.dp),
                 verticalAlignment = Alignment.CenterVertically,
@@ -496,7 +496,7 @@ private fun CampusButton(
         Button(
             onClick = onClick,
             enabled = enabled,
-            shape = smoothShape(PageCorners.Field),
+            shape = appShape(PageCorners.Field),
             modifier = modifier.height(44.dp),
             contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 8.dp),
             content = content,
@@ -505,7 +505,7 @@ private fun CampusButton(
         FilledTonalButton(
             onClick = onClick,
             enabled = enabled,
-            shape = smoothShape(PageCorners.Field),
+            shape = appShape(PageCorners.Field),
             modifier = modifier.height(44.dp),
             contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 8.dp),
             content = content,

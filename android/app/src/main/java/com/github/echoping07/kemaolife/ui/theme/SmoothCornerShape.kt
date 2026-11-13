@@ -101,26 +101,3 @@ internal class SmoothCornerShape(
         return result
     }
 }
-
-internal fun smoothShape(radius: Dp): CornerBasedShape = SmoothCornerShape(radius)
-
-/** 上下不同圆角（分组卡片的首行 / 末行）。 */
-internal fun smoothShape(top: Dp, bottom: Dp): CornerBasedShape = SmoothCornerShape(
-    CornerSize(top),
-    CornerSize(top),
-    CornerSize(bottom),
-    CornerSize(bottom),
-)
-
-/** 四角独立圆角（连体钮的首段 / 末段：外侧最大、内侧收窄）。 */
-internal fun smoothShape(
-    topStart: Dp,
-    topEnd: Dp,
-    bottomEnd: Dp,
-    bottomStart: Dp,
-): CornerBasedShape = SmoothCornerShape(
-    CornerSize(topStart),
-    CornerSize(topEnd),
-    CornerSize(bottomEnd),
-    CornerSize(bottomStart),
-)

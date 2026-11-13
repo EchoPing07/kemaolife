@@ -62,7 +62,7 @@ import com.github.echoping07.kemaolife.R
 import com.github.echoping07.kemaolife.data.DaySchedule
 import com.github.echoping07.kemaolife.data.Entry
 import com.github.echoping07.kemaolife.ui.theme.coursePalette
-import com.github.echoping07.kemaolife.ui.theme.smoothShape
+import com.github.echoping07.kemaolife.ui.theme.appShape
 import kotlinx.coroutines.launch
 
 private val RowHeight = 52.dp
@@ -632,7 +632,7 @@ private fun DayColumn(
                 Box(
                     modifier = Modifier
                         .padding(horizontal = 1.5.dp, vertical = 2.dp)
-                        .clip(smoothShape(10.dp))
+                        .clip(appShape(10.dp))
                         .background(palette.container)
                         .clickable(role = Role.Button) { day?.let { onCourseClick(it, block.entry) } }
                         .padding(horizontal = 4.dp, vertical = 4.dp),

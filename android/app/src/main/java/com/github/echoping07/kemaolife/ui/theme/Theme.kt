@@ -6,20 +6,20 @@ import androidx.compose.animation.core.tween
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.material3.ColorScheme
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Shapes
 import androidx.compose.material3.Typography
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.dynamicDarkColorScheme
 import androidx.compose.material3.dynamicLightColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.github.echoping07.kemaolife.ui.animationsEnabled
 import androidx.core.graphics.ColorUtils
+import com.github.echoping07.kemaolife.ui.animationsEnabled
+import com.github.echoping07.kemaolife.data.DEFAULT_CONTINUOUS_CORNERS
 import com.github.echoping07.kemaolife.data.DEFAULT_DYNAMIC_COLOR
 import com.github.echoping07.kemaolife.data.THEME_MODE_DARK
 import com.github.echoping07.kemaolife.data.THEME_MODE_LIGHT
@@ -243,14 +243,6 @@ private val AppTypography = Typography().let { base ->
     )
 }
 
-private val AppShapes = Shapes(
-    extraSmall = smoothShape(8.dp),
-    small = smoothShape(12.dp),
-    medium = smoothShape(16.dp),
-    large = smoothShape(24.dp),
-    extraLarge = smoothShape(28.dp),
-)
-
 @Composable
 fun KemaolifeTheme(
     themeColor: String = AppThemeColor.MONOCHROMATIC.name,
@@ -259,6 +251,7 @@ fun KemaolifeTheme(
     themeMode: String = if (darkTheme) THEME_MODE_DARK else THEME_MODE_LIGHT,
     dynamicColor: Boolean = DEFAULT_DYNAMIC_COLOR,
     amoled: Boolean = false,
+    continuousCorners: Boolean = DEFAULT_CONTINUOUS_CORNERS,
     content: @Composable () -> Unit,
 ) {
     val dark = isDarkTheme(themeMode, darkTheme)
@@ -276,10 +269,14 @@ fun KemaolifeTheme(
         }
         else -> presetColorScheme(theme, dark, amoled)
     }
-    MaterialTheme(
-        colorScheme = animatedColorScheme(target),
-        typography = AppTypography,
-        shapes = AppShapes,
-        content = content,
-    )
+    // 形状入口 appShape 读 LocalCornerStyle，必须包住整个 content。
+    // AlertDialog / ModalBottomSheet 的 shape 参数在父组合求值，不依赖子组合继承。
+    CompositionLocalProvider(LocalCornerStyle provides continuousCorners) {
+        MaterialTheme(
+            colorScheme = animatedColorScheme(target),
+            typography = AppTypography,
+            shapes = if (continuousCorners) SmoothShapes else RoundedShapes,
+            content = content,
+        )
+    }
 }

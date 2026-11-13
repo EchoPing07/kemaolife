@@ -29,7 +29,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.github.echoping07.kemaolife.R
 import com.github.echoping07.kemaolife.data.CampusState
-import com.github.echoping07.kemaolife.ui.theme.smoothShape
+import com.github.echoping07.kemaolife.ui.theme.appShape
 
 /**
  * 「测试」弹窗：打开即跑一次，展示耗时、结果与实际返回值。
@@ -57,7 +57,7 @@ internal fun ProbeDialog(state: ProbeState, onClose: () -> Unit, onRetry: () -> 
                 Text(stringResource(R.string.action_test_again))
             }
         },
-        shape = smoothShape(PageCorners.Card),
+        shape = appShape(PageCorners.Card),
         title = {
             Column {
                 Text(
@@ -144,7 +144,7 @@ internal fun ProbeDialog(state: ProbeState, onClose: () -> Unit, onRetry: () -> 
                                 colors = CardDefaults.cardColors(
                                     containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
                                 ),
-                                shape = smoothShape(PageCorners.Nested),
+                                shape = appShape(PageCorners.Nested),
                             ) {
                                 Column(modifier = Modifier.padding(14.dp)) {
                                     orderedDetails(result.detail).forEach { (key, value) ->

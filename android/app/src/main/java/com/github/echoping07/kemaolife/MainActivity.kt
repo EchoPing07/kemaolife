@@ -77,6 +77,7 @@ class MainActivity : ComponentActivity() {
                 themeMode = state.themeMode,
                 dynamicColor = state.dynamicColor,
                 amoled = state.amoled,
+                continuousCorners = state.continuousCorners,
             ) {
                 AppRoot(viewModel)
             }

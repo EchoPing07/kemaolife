@@ -45,7 +45,7 @@ import com.github.echoping07.kemaolife.data.THEME_MODE_DARK
 import com.github.echoping07.kemaolife.data.THEME_MODE_LIGHT
 import com.github.echoping07.kemaolife.data.THEME_MODE_SYSTEM
 import com.github.echoping07.kemaolife.data.normalizeThemeMode
-import com.github.echoping07.kemaolife.ui.theme.smoothShape
+import com.github.echoping07.kemaolife.ui.theme.appShape
 
 /**
  * 连体钮的尺寸与动效参数，对齐 MD3 Expressive 的 connected button group 与
@@ -174,7 +174,7 @@ private fun RowScope.ThemeModeSegment(
         label = "themeModeCorner",
     )
     // 内角（朝向相邻段那一侧）随选中态在 8dp 与半高之间 morph；首段 / 末段的外侧四角恒为最大。
-    val shape = smoothShape(
+    val shape = appShape(
         topStart = if (leading) ModeOuterCorner else corner,
         bottomStart = if (leading) ModeOuterCorner else corner,
         topEnd = if (trailing) ModeOuterCorner else corner,

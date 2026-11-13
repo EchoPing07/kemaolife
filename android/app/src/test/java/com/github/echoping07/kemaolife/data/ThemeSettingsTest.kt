@@ -10,9 +10,26 @@ class ThemeSettingsTest {
     @Test
     fun defaultAppearanceValues() {
         assertEquals(
-            ThemeSettings(themeColor = "MONOCHROMATIC", themeMode = "SYSTEM", dynamicColor = true, amoled = false),
+            ThemeSettings(
+                themeColor = "MONOCHROMATIC",
+                themeMode = "SYSTEM",
+                dynamicColor = true,
+                amoled = false,
+                continuousCorners = false,
+            ),
             ThemeSettings(),
         )
+    }
+
+    @Test
+    fun continuousCornersIsDisabledByDefault() {
+        assertFalse(DEFAULT_CONTINUOUS_CORNERS)
+        assertFalse(ThemeSettings().continuousCorners)
+    }
+
+    @Test
+    fun continuousCornersCanBeTurnedOnExplicitly() {
+        assertTrue(ThemeSettings(continuousCorners = true).continuousCorners)
     }
 
     @Test

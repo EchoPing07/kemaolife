@@ -8,12 +8,21 @@ const val DEFAULT_THEME_COLOR = "MONOCHROMATIC"
 /** 莫奈取色的唯一默认来源；偏好里已显式存过 false 时仍以本机值为准。 */
 const val DEFAULT_DYNAMIC_COLOR = true
 
+/**
+ * 连续曲率圆角的唯一默认来源：关闭时用标准圆弧。
+ *
+ * 键不存在时按本默认值处理，不区分新装与升级 —— 老版本没有这个键，
+ * 升级后也直接落到普通圆弧，不做偏好迁移（docs/002 §5.3 tab3）。
+ */
+const val DEFAULT_CONTINUOUS_CORNERS = false
+
 /** 本机外观偏好；字段与 AppState 的展示字段保持一一对应。 */
 data class ThemeSettings(
     val themeColor: String = DEFAULT_THEME_COLOR,
     val themeMode: String = THEME_MODE_SYSTEM,
     val dynamicColor: Boolean = DEFAULT_DYNAMIC_COLOR,
     val amoled: Boolean = false,
+    val continuousCorners: Boolean = DEFAULT_CONTINUOUS_CORNERS,
 )
 
 private val supportedThemeColors = setOf(

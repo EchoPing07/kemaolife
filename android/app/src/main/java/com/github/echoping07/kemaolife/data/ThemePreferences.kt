@@ -14,6 +14,7 @@ class ThemePreferences(context: Context) {
         themeMode = loadMode(),
         dynamicColor = loadDynamicColor(),
         amoled = loadAmoled(),
+        continuousCorners = loadContinuousCorners(),
     )
 
     fun loadMode(): String = normalizeThemeMode(
@@ -24,6 +25,10 @@ class ThemePreferences(context: Context) {
     fun loadDynamicColor(): Boolean = preferences.getBoolean(KEY_DYNAMIC_COLOR, DEFAULT_DYNAMIC_COLOR)
 
     fun loadAmoled(): Boolean = preferences.getBoolean(KEY_AMOLED, false)
+
+    /** 缺省值不做旧版本迁移：升级后与全新安装一样按默认关闭。 */
+    fun loadContinuousCorners(): Boolean =
+        preferences.getBoolean(KEY_CONTINUOUS_CORNERS, DEFAULT_CONTINUOUS_CORNERS)
 
     /** 兼容旧的主题色保存接口。 */
     fun save(theme: String) {
@@ -36,6 +41,7 @@ class ThemePreferences(context: Context) {
             .putString(KEY_THEME_MODE, normalizeThemeMode(settings.themeMode))
             .putBoolean(KEY_DYNAMIC_COLOR, settings.dynamicColor)
             .putBoolean(KEY_AMOLED, settings.amoled)
+            .putBoolean(KEY_CONTINUOUS_CORNERS, settings.continuousCorners)
             .apply()
     }
 
@@ -53,10 +59,15 @@ class ThemePreferences(context: Context) {
         preferences.edit().putBoolean(KEY_AMOLED, enabled).apply()
     }
 
+    fun saveContinuousCorners(enabled: Boolean) {
+        preferences.edit().putBoolean(KEY_CONTINUOUS_CORNERS, enabled).apply()
+    }
+
     private companion object {
         const val KEY_THEME = "theme_color"
         const val KEY_THEME_MODE = "theme_mode"
         const val KEY_DYNAMIC_COLOR = "dynamic_color"
         const val KEY_AMOLED = "amoled"
+        const val KEY_CONTINUOUS_CORNERS = "continuous_corners"
     }
 }

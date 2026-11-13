@@ -39,7 +39,7 @@ import androidx.compose.ui.unit.sp
 import com.github.echoping07.kemaolife.R
 import com.github.echoping07.kemaolife.data.LogEntry
 import com.github.echoping07.kemaolife.data.LogSummary
-import com.github.echoping07.kemaolife.ui.theme.smoothShape
+import com.github.echoping07.kemaolife.ui.theme.appShape
 
 /** 宽屏（平板 / 横屏）下把内容收在可读宽度内；手机竖屏保持满宽。 */
 private val LogsContentMaxWidth = 560.dp
@@ -92,7 +92,7 @@ internal fun LogsScreen(state: AppState, viewModel: AppViewModel) {
                     state.log == null -> LoadingBlock()
                     state.log.entries.isEmpty() -> EmptyHint(
                         text = stringResource(R.string.logs_empty),
-                        shape = smoothShape(PageCorners.Card),
+                        shape = appShape(PageCorners.Card),
                     )
                     else -> state.log.entries.forEachIndexed { index, entry ->
                         // 每条记录独立成卡：它们是并列的一次次请求，不是一组设置项。
@@ -213,7 +213,7 @@ private fun LogDetailSheet(entry: LogEntry, onDismiss: () -> Unit) {
     ModalBottomSheet(
         onDismissRequest = onDismiss,
         sheetState = sheetState,
-        shape = smoothShape(PageCorners.Card),
+        shape = appShape(PageCorners.Card),
         containerColor = MaterialTheme.colorScheme.surfaceContainerLow,
     ) {
         BoxWithConstraints(modifier = Modifier.fillMaxWidth()) {
@@ -318,7 +318,7 @@ private fun LogBlock(title: String, body: String) {
         Box(
             modifier = Modifier
                 .fillMaxWidth()
-                .clip(smoothShape(PageCorners.Field))
+                .clip(appShape(PageCorners.Field))
                 .background(MaterialTheme.colorScheme.surfaceContainerHighest)
                 .padding(12.dp),
         ) {

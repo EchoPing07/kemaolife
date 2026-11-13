@@ -91,7 +91,7 @@
     <string name="settings_personalization">个性化</string>
     <string name="settings_appearance">外观</string>
     <string name="settings_theme_color">主题色</string>
-    <string name="settings_theme_hint">莫奈取色、AMOLED深色模式、主题</string>
+    <string name="settings_theme_hint">莫奈取色、AMOLED深色模式、主题等</string>
     <string name="settings_about">关于</string>
     <string name="settings_about_hint">版本与开源信息</string>
 

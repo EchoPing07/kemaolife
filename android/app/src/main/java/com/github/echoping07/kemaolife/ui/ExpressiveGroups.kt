@@ -9,7 +9,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
-import com.github.echoping07.kemaolife.ui.theme.smoothShape
+import com.github.echoping07.kemaolife.ui.theme.appShape
 
 /** MD3 Expressive 组内条目位置：3dp 缝隙显露页面底色，不画分隔线。 */
 internal enum class GroupPosition { ONLY, FIRST, MIDDLE, LAST }
@@ -24,10 +24,10 @@ internal fun GroupSurface(
     val outer = PageCorners.GroupOuter
     val inner = PageCorners.GroupInner
     val shape = when (position) {
-        GroupPosition.ONLY -> smoothShape(outer)
-        GroupPosition.FIRST -> smoothShape(outer, inner)
-        GroupPosition.MIDDLE -> smoothShape(inner)
-        GroupPosition.LAST -> smoothShape(inner, outer)
+        GroupPosition.ONLY -> appShape(outer)
+        GroupPosition.FIRST -> appShape(outer, inner)
+        GroupPosition.MIDDLE -> appShape(inner)
+        GroupPosition.LAST -> appShape(inner, outer)
     }
     if (onClick == null) {
         Surface(

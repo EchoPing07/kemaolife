@@ -49,7 +49,7 @@ import com.github.echoping07.kemaolife.R
 import com.github.echoping07.kemaolife.data.CampusState
 import com.github.echoping07.kemaolife.data.Entry
 import com.github.echoping07.kemaolife.ui.theme.coursePalette
-import com.github.echoping07.kemaolife.ui.theme.smoothShape
+import com.github.echoping07.kemaolife.ui.theme.appShape
 import kotlin.math.cos
 import kotlin.math.min
 import kotlin.math.sin
@@ -59,7 +59,7 @@ import kotlin.math.sin
  *
  * 卡片使用 [MaterialTheme.colorScheme.surfaceContainerLow]（浅色模式下为纯白），
  * 与带当前主题色相的浅灰页面底色形成明暗对比，让内容区域成为视觉焦点。
- * 圆角取 [PageCorners.Card]（36dp 连续曲率），展现饱满包容的张力。
+ * 圆角取 [PageCorners.Card]（36dp），曲率由外观「连续曲率圆角」开关决定，展现饱满包容的张力。
  */
 @Composable
 internal fun SectionCard(
@@ -73,7 +73,7 @@ internal fun SectionCard(
         colors = CardDefaults.cardColors(
             containerColor = MaterialTheme.colorScheme.surfaceContainerLow,
         ),
-        shape = smoothShape(PageCorners.Card),
+        shape = appShape(PageCorners.Card),
     ) {
         Column(modifier = Modifier.padding(top = 10.dp, bottom = 14.dp)) {
             Row(
@@ -243,7 +243,7 @@ internal fun EntryRow(entry: Entry) {
             modifier = Modifier
                 .width(4.dp)
                 .height(34.dp)
-                .clip(smoothShape(2.dp))
+                .clip(appShape(2.dp))
                 .background(palette.container),
         )
         Spacer(Modifier.width(12.dp))

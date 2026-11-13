@@ -23,7 +23,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
-import com.github.echoping07.kemaolife.ui.theme.smoothShape
+import com.github.echoping07.kemaolife.ui.theme.appShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.KeyboardArrowRight
@@ -210,7 +210,7 @@ private fun SettingsOverview(
 
         SettingsGroupLabel(stringResource(R.string.settings_personalization))
         // 颜色模式放在外观入口上方：它是本组最常改的一项，可直接在总览切换，
-        // 外观页只保留配色类设置（莫奈取色 / AMOLED / 预设主题）。
+        // 外观页只保留配色类设置（莫奈取色 / AMOLED / 连续曲率圆角 / 预设主题）。
         ThemeModeSelector(themeMode = state.themeMode, onSelect = onThemeMode)
         GroupGap()
         SettingsDestination(
@@ -663,7 +663,7 @@ private fun SettingsSwitchRow(
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .clip(smoothShape(PageCorners.Field))
+            .clip(appShape(PageCorners.Field))
             .clickable { onCheckedChange(!checked) }
             .padding(vertical = 6.dp),
         verticalAlignment = Alignment.CenterVertically,
@@ -752,7 +752,7 @@ private fun AppTextField(
             focusedBorderColor = MaterialTheme.colorScheme.primary,
             unfocusedBorderColor = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f),
         ),
-        shape = smoothShape(PageCorners.Field),
+        shape = appShape(PageCorners.Field),
         modifier = Modifier.fillMaxWidth(),
     )
 }
