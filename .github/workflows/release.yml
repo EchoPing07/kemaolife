@@ -657,8 +657,8 @@ jobs:
           > `apksigner verify --print-certs <文件>` 比对；指纹不一致时**不要安装**，也不要在里面填任何凭据。
 
           > [!NOTE]
-          > 本仓库只发 GitHub Releases 的侧载 APK，不上架应用商店，也没有 Play 的自动更新。
-          > 升级请回到本页下载同架构的新版 APK 覆盖安装。
+          > 本仓库只发 GitHub Releases 的侧载 APK，不上架应用商店，不自动检查更新；
+          > 可在「设置 → 关于 → 检查更新」手动对比版本号。升级请回到本页下载同架构的新版 APK 覆盖安装。
 
           ### skill
 

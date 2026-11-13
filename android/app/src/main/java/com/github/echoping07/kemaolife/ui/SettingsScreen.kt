@@ -148,7 +148,7 @@ internal fun SettingsScreen(state: AppState, viewModel: AppViewModel) {
                         SettingsPage.ELECTRICITY -> ElectricitySettings(state, viewModel)
                         SettingsPage.CAMPUS -> CampusSettings(state, viewModel)
                         SettingsPage.APPEARANCE -> AppearanceScreen(state, viewModel)
-                        SettingsPage.ABOUT -> AboutScreen()
+                        SettingsPage.ABOUT -> AboutScreen(state, viewModel)
                         SettingsPage.LOGS -> LogsScreen(state, viewModel)
                     }
                 }

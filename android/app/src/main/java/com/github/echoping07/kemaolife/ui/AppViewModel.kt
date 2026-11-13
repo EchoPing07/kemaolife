@@ -3,6 +3,7 @@ package com.github.echoping07.kemaolife.ui
 import android.app.Application
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import com.github.echoping07.kemaolife.BuildConfig
 import com.github.echoping07.kemaolife.data.AppException
 import com.github.echoping07.kemaolife.data.AppPreferences
 import com.github.echoping07.kemaolife.data.Bridge
@@ -23,7 +24,9 @@ import com.github.echoping07.kemaolife.data.Repository
 import com.github.echoping07.kemaolife.data.ThemePreferences
 import com.github.echoping07.kemaolife.data.TimetableCache
 import com.github.echoping07.kemaolife.data.TimetableExport
+import com.github.echoping07.kemaolife.data.UpdateCheck
 import com.github.echoping07.kemaolife.data.WeekSchedule
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.async
@@ -79,6 +82,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     private var exportJob: Job? = null
     private var requestLogJob: Job? = null
     private var requestLogDetailJob: Job? = null
+    private var updateCheckJob: Job? = null
 
     // 图标结果态只跟随显式手动点击；自动查询共用 Job，但不能反复闪成功提示。
     internal val timetableFeedback = ActionFeedbackController()
@@ -106,6 +110,10 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     // 测试弹窗代次：关闭再开另一个功能域时，旧结果不得写回新弹窗。
     @Volatile
     private var probeSeq = 0L
+
+    // 更新检查代次：关闭再打开时，旧请求的结果不得写回新弹层。
+    @Volatile
+    private var updateSeq = 0L
 
     private val saveMutex = Mutex()
 
@@ -777,6 +785,64 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         _state.update { it.copy(probe = null) }
     }
 
+    // ---- 关于页「检查更新」 -----------------------------------------------
+
+    /**
+     * 点「检查更新」时发一次请求：打开 App / 进关于页都不检查，也无后台定时。
+     * 结果只放进独立的 `updateCheck`，不进 `state.error`（那会串到全局 Snackbar）。
+     */
+    fun openUpdateCheck() {
+        updateCheckJob?.cancel()
+        val id = ++updateSeq
+        val currentVersion = BuildConfig.VERSION_NAME
+        _state.update {
+            it.copy(
+                updateCheck = UpdateCheckState(
+                    id = id,
+                    currentVersion = currentVersion,
+                    status = UpdateCheckStatus.RUNNING,
+                ),
+            )
+        }
+        updateCheckJob = viewModelScope.launch {
+            try {
+                val tag = withContext(Dispatchers.IO) { UpdateCheck.fetchLatestTag() }
+                val current = UpdateCheck.parseVersion(currentVersion)
+                val remote = UpdateCheck.parseVersion(tag)
+                // 任一版本号不合白名单格式都归失败；上游文案不进 UI（P2）。
+                val status = when {
+                    current == null || remote == null -> UpdateCheckStatus.FAILED
+                    remote > current -> UpdateCheckStatus.UPDATE_AVAILABLE
+                    else -> UpdateCheckStatus.UP_TO_DATE
+                }
+                _state.update { s ->
+                    val sheet = s.updateCheck
+                    if (sheet?.id != id) return@update s
+                    s.copy(
+                        updateCheck = sheet.copy(
+                            remoteVersion = remote?.toString(),
+                            status = status,
+                        ),
+                    )
+                }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                _state.update { s ->
+                    val sheet = s.updateCheck
+                    if (sheet?.id != id) return@update s
+                    s.copy(updateCheck = sheet.copy(status = UpdateCheckStatus.FAILED))
+                }
+            }
+        }
+    }
+
+    fun closeUpdateCheck() {
+        updateCheckJob?.cancel()
+        updateCheckJob = null
+        _state.update { it.copy(updateCheck = null) }
+    }
+
     // ---- 设置 -------------------------------------------------------------
 
     /**
@@ -975,6 +1041,17 @@ data class ProbeState(
     val result: ProbeResult? = null,
 )
 
+/** 关于页「检查更新」的四种结果；只比版本号，不承载上游正文。 */
+enum class UpdateCheckStatus { RUNNING, UPDATE_AVAILABLE, UP_TO_DATE, FAILED }
+
+/** 半屏弹层的瞬时状态；非 null 即弹层打开，关掉即丢弃。 */
+data class UpdateCheckState(
+    val id: Long = 0L,
+    val currentVersion: String,
+    val remoteVersion: String? = null,
+    val status: UpdateCheckStatus,
+)
+
 data class AppState(
     val bridgeReady: Boolean = false,
     val bridgeError: String? = null,
@@ -1027,6 +1104,9 @@ data class AppState(
     val logDetailLoading: Boolean = false,
 
     val probe: ProbeState? = null,
+
+    /** 关于页「检查更新」弹层：非 null 时展示半屏结果；默认 null 不影响现有夹具。 */
+    val updateCheck: UpdateCheckState? = null,
 
     /** 导出弹层：非 null 时展示文件名 / 课节数 / 数据时间与「保存」。 */
     val exportSheet: ExportState? = null,

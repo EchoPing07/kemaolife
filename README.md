@@ -177,7 +177,7 @@ GOOS=windows GOARCH=amd64 go build -trimpath `
 
 从 Release 下载**一个**对应架构的 APK：多数近几年手机用 `arm64-v8a`，旧 32 位机用 `armeabi-v7a`，`x86` / `x86_64` 主要给模拟器用。系统需 Android 7.0（API 24）及以上。直接在手机上打开 APK 安装，首次侧载需要在系统提示里允许该来源的「安装未知应用」；也可 `adb install -r <APK>`。
 
-四个包共用同一把发布私钥与同一 `applicationId`，**新版直接覆盖安装即可**，设置页 Keystore 里的凭据与应用私有目录里的课表快照都会保留；不要先卸载再装。发布签名证书的 SHA-256 指纹写在每版 Release 说明里，可用 `apksigner verify --print-certs <文件>` 核对；指纹不一致时不要安装、不要填任何凭据。本仓库只发侧载 APK，不上架应用商店，也没有自动更新。
+四个包共用同一把发布私钥与同一 `applicationId`，**新版直接覆盖安装即可**，设置页 Keystore 里的凭据与应用私有目录里的课表快照都会保留；不要先卸载再装。发布签名证书的 SHA-256 指纹写在每版 Release 说明里，可用 `apksigner verify --print-certs <文件>` 核对；指纹不一致时不要安装、不要填任何凭据。本仓库只发侧载 APK，不上架应用商店，不自动检查更新；可在「设置 → 关于 → 检查更新」手动对比版本号，再回到 Releases 页下载同架构 APK 覆盖安装。
 
 ## 交流
 

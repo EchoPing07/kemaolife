@@ -323,12 +323,16 @@ private fun TimetableHeader(
         // 固定两行的头部高度：左侧日期与周次分别贴顶 / 贴底，右侧按钮与时间
         // 同样贴顶 / 贴底，两侧底边齐平；放大的日期只填补中间留白，不撑高头部。
         Row(modifier = Modifier.height(HeaderHeight)) {
+            // 标准圆弧比连续曲率在角部退让更多：贴边的日期 / 周次会被圆角 clip 啃掉
+            // 左上角的年份与左下角的「第」。水平内边距让文字离开裁切区；clip 与
+            // clickable 仍作用于外层整块，点击热区与 ripple 圆角不变，贴顶 / 贴底也不变。
             Column(
                 modifier = Modifier
                     .weight(1f)
                     .fillMaxHeight()
                     .clip(MaterialTheme.shapes.medium)
-                    .clickable(role = Role.Button, onClick = onOpenWeekPicker),
+                    .clickable(role = Role.Button, onClick = onOpenWeekPicker)
+                    .padding(horizontal = 8.dp),
                 verticalArrangement = Arrangement.SpaceBetween,
             ) {
                 Text(
