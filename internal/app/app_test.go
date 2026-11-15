@@ -38,6 +38,9 @@ func testDeps(clock *porttest.FakeClock) (app.Deps, *porttest.MemStore, *porttes
 }
 
 // seedSnapshot 写入一份「上周」的快照，用于验证「刷新成功会替换」。
+//
+// Cookies 故意用假值：fakeSchool 只认 sess-1 / srv-1，所以这份快照的会话
+// 在假学校里处于「已过期」状态，正好覆盖「旧 Cookie 失效 → 自动重登」链路。
 func seedSnapshot(t *testing.T, store *porttest.MemStore) {
 	t.Helper()
 	snap := &timetable.Snapshot{
@@ -204,6 +207,59 @@ func TestGetWeekScheduleOutsideSemesterIsSuccess(t *testing.T) {
 	// 学期开始前也必须按「今天所在周」返回 7 天；Go 整除向零截断会错给第 1 周。
 	if got := result.Days[0].Date; got.String() != "2026-06-29" {
 		t.Errorf("学期前的当周 = %s, want 2026-06-29（今天所在周）", got)
+	}
+}
+
+// 旧快照里的会话已失效（jsxsd 回 200 + JS 跳转桩页）时，刷新必须自动重登一次并成功，
+// 而不是把「锚点页解析失败」当 4002 直接返回。
+//
+// 这是 2026-11 真机上的真实故障：桩页不含任何登录页标记，旧判据认为会话还活着，
+// 于是跳过重登；重登只在 3002 时触发，结果会话过期后永久无法自愈（docs/002 §1.3）。
+func TestSyncTimetableReloginsWhenSessionExpiredStub(t *testing.T) {
+	clock := testClock()
+	deps, store, _ := testDeps(clock)
+	seedSnapshot(t, store) // 快照里的 Cookie 在假学校里已失效
+
+	fake := newFakeSchool(t)
+	deps.HTTP = fake.client
+	deps.CASBaseURL = fake.casURL
+	deps.JSBBaseURL = fake.jsbURL
+
+	result, err := app.SyncTimetable(context.Background(), deps, testConfig())
+	if err != nil {
+		t.Fatalf("会话失效应自动重登并成功, got %v (code=%d)", err, model.CodeOf(err))
+	}
+	if result.LessonCount == 0 {
+		t.Errorf("重登后的同步应拿到课表, got %+v", result)
+	}
+
+	// 快照被新会话覆盖：Cookie 已换成新登录下发的值。
+	snap, err := timetable.LoadSnapshot(store)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if snap.Cookies[timetable.SessionCookie] != "sess-1" {
+		t.Errorf("快照 Cookie 未更新为登录后的值: names=%v", cookieNames(snap.Cookies))
+	}
+	if !snap.SyncedAt.Equal(clock.Now()) {
+		t.Errorf("SyncedAt = %v, want 本次同步时间", snap.SyncedAt)
+	}
+}
+
+// 没有旧快照时首次同步也一样：登录 → 锚点 → 课表。
+func TestSyncTimetableFirstRunLogins(t *testing.T) {
+	deps, _, _ := testDeps(testClock())
+	fake := newFakeSchool(t)
+	deps.HTTP = fake.client
+	deps.CASBaseURL = fake.casURL
+	deps.JSBBaseURL = fake.jsbURL
+
+	result, err := app.SyncTimetable(context.Background(), deps, testConfig())
+	if err != nil {
+		t.Fatalf("首次同步应成功: %v", err)
+	}
+	if result.Week1Monday != "2026-08-31" {
+		t.Errorf("week1Monday = %q", result.Week1Monday)
 	}
 }
 
@@ -713,4 +769,12 @@ func TestExportTimetableCSVDoesNotRequireHTTP(t *testing.T) {
 	if _, err := app.ExportTimetableCSV(context.Background(), deps, testConfig()); err != nil {
 		t.Fatalf("导出不应要求 HTTP 端口: %v", err)
 	}
+}
+
+func cookieNames(m map[string]string) []string {
+	out := make([]string, 0, len(m))
+	for k := range m {
+		out = append(out, k)
+	}
+	return out
 }

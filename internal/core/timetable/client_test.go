@@ -127,17 +127,31 @@ func newFakeSchool(t *testing.T, opts fakeOpts) *fakeSchool {
 	t.Cleanup(jsb.Close)
 
 	// cas 侧：登录页 + 登录 POST。登录成功的判定只看凭据。
-	mux.HandleFunc("/cas_server/login", func(w http.ResponseWriter, r *http.Request) {
+	//
+	// /cas_server/logout 必须存在且真的清掉 SSO 会话：实测带旧 `CAS_SessionId`
+	// 请求 login 时 CAS 不会给登录表单，而是直接 302 发 ticket。不模拟这一行为
+	// 就测不出「重新登录前必须先登出」这条约束（也测不出换账号时的串号风险）。
+	mux.HandleFunc(CASLogoutPath, func(w http.ResponseWriter, r *http.Request) {
+		// 登出：清除 CAS 会话 Cookie（值给空 + 立即过期）。
+		http.SetCookie(w, &http.Cookie{
+			Name: CASSessionCookie, Value: "", Path: "/", MaxAge: -1,
+		})
+		if opts.noLogoutEndpoint {
+			w.WriteHeader(http.StatusNotFound)
+			return
+		}
+		http.Redirect(w, r, CASLoginPath, http.StatusFound)
+	})
+	mux.HandleFunc(CASLoginPath, func(w http.ResponseWriter, r *http.Request) {
 		if r.Method == http.MethodGet {
-			fmt.Fprint(w, `<title>统一身份认证平台</title>
-<form id="form1">
-<input type="hidden" id="__VIEWSTATE" value="vs-token" />
-<input type="hidden" id="__VIEWSTATEGENERATOR" value="gen" />
-<input type="hidden" id="__EVENTVALIDATION" value="ev-token" />
-<input name="signupInputUserName" />
-<input name="signupInputPassword" type="password" />
-<input type="submit" name="btn_login" />
-</form>`)
+			// 带有效 SSO 会话时实测直接 302 发 ticket，不给登录表单。
+			if !opts.ignoreSSO {
+				if ck, err := r.Cookie(CASSessionCookie); err == nil && ck.Value != "" {
+					http.Redirect(w, r, jsb.URL+"/jsxsd/?ticket=ST-SSO", http.StatusFound)
+					return
+				}
+			}
+			fmt.Fprint(w, casLoginFormHTML)
 			return
 		}
 		_ = r.ParseForm()
@@ -145,11 +159,11 @@ func newFakeSchool(t *testing.T, opts fakeOpts) *fakeSchool {
 			t.Errorf("登录表单未回传 __VIEWSTATE: %v", r.Form)
 		}
 		if r.Form.Get(CASFieldUser) != testUser || r.Form.Get(CASFieldPass) != testPass {
-			// 凭据错误：CAS 原样返回登录页，HTTP 200（必须靠内容判定）。
-			fmt.Fprint(w, `<title>统一身份认证平台</title><input name="signupInputUserName" />`)
+			fmt.Fprint(w, casWrongCredentialHTML)
 			return
 		}
-		// 成功：302 到 service（jsb 的 /jsxsd/ + ticket）。
+		// 登录成功：下发 CAS SSO 会话，并 302 到 service（jsb 的 /jsxsd/ + ticket）。
+		http.SetCookie(w, &http.Cookie{Name: CASSessionCookie, Value: "cas-sso-1", Path: "/"})
 		http.Redirect(w, r, jsb.URL+"/jsxsd/?ticket=ST-1", http.StatusFound)
 	})
 
@@ -162,7 +176,26 @@ func newFakeSchool(t *testing.T, opts fakeOpts) *fakeSchool {
 type fakeOpts struct {
 	anchorBody  string
 	coursesBody string
+	// ignoreSSO = true 时 CAS 不认 SSO 会话，总是回登录表单（默认行为反过来：认）。
+	ignoreSSO bool
+	// noLogoutEndpoint = true 时 /cas_server/logout 返回 404，验证登出失败不阻断登录。
+	noLogoutEndpoint bool
 }
+
+const (
+	casLoginFormHTML = `<title>统一身份认证平台</title>
+<form id="form1">
+<input type="hidden" id="__VIEWSTATE" value="vs-token" />
+<input type="hidden" id="__VIEWSTATEGENERATOR" value="gen" />
+<input type="hidden" id="__EVENTVALIDATION" value="ev-token" />
+<input name="signupInputUserName" />
+<input name="signupInputPassword" type="password" />
+<input type="submit" name="btn_login" />
+</form>`
+
+	// 凭据错误：CAS 原样返回登录页，HTTP 200（必须靠内容判定）。
+	casWrongCredentialHTML = `<title>统一身份认证平台</title><input name="signupInputUserName" />`
+)
 
 func (f *fakeSchool) client() *Client {
 	// 实测链路跨两个主机：CAS 302 到 jsb 并带上 ticket，jsb 再下发会话 Cookie。
@@ -205,10 +238,78 @@ func TestIsAliveDetectsLoginPage(t *testing.T) {
 		t.Errorf("登录页应判为失效: alive=%v err=%v", alive, err)
 	}
 
-	body = `<html><body>教务首页 课表</body></html>`
+	body = `<html><body><div class="jsxsd-main">教务首页 课表</div></body></html>`
 	if alive, err := c.IsAlive(context.Background()); err != nil || !alive {
 		t.Errorf("教务内页应判为有效: alive=%v err=%v", alive, err)
 	}
+}
+
+// 会话失效时 jsxsd 返回 HTTP 200 + 一层 JS 跳转桩页（实测 188 字节）。
+// 它不含任何登录页标记，所以旧判据会把它当有效页。
+const sessionExpiredStub = `<script languge='javascript'>window.location.href='https://aic.gdkm.edu.cn/cas_server/?service=http%3A%2F%2Fjw.gdkm.edu.cn%2Fjsxsd%2Fframework%2FxsMainV.htmlx'</script>`
+
+// 没有会话时 jsxsd 返回 179 字节的同形桩页（跳回 CAS 首页）。
+const noSessionStub = `<script languge='javascript'>window.location.href='https://aic.gdkm.edu.cn/cas_server/?service=http%3A%2F%2Fjw.gdkm.edu.cn%2Fjsxsd%2F'</script>`
+
+// 桩页的 service 参数里含 jsxsd / xsMainV 字样，但页面本身没有任何教务内容。
+func TestLooksLikeJsxsdPageRejectsRedirectStub(t *testing.T) {
+	for _, body := range []string{sessionExpiredStub, noSessionStub, `<title>统一身份认证平台</title>`} {
+		if looksLikeJsxsdPage(body) {
+			t.Errorf("跳转桩页 / 登录页不得判为教务内页: %q", truncateForLog(body))
+		}
+		if !looksLoggedOut(body) {
+			t.Errorf("跳转桩页 / 登录页应判为已登出: %q", truncateForLog(body))
+		}
+	}
+	// 空响应不是「登录页」也不是「教务页」：属于响应异常，由调用方按 4002 处理。
+	if looksLikeJsxsdPage("") {
+		t.Error("空响应不得判为教务内页")
+	}
+	if looksLoggedOut("") {
+		t.Error("空响应不应被当成已登出")
+	}
+}
+
+// 真实教务页（哪怕带 window.location.reload() 与登出链接）不能被误判成失效。
+func TestLooksLikeJsxsdPageAcceptsRealPage(t *testing.T) {
+	body := `<html><body><div class="jsxsd-nav">课表</div>` +
+		strings.Repeat(`<table class="qz-weeklyTable"><tr><td>08-31</td></tr></table>`, 200) +
+		`<a href="https://aic.gdkm.edu.cn/cas_server/logout">退出</a>` +
+		`<script>window.location.reload()</script></body></html>`
+	if !looksLikeJsxsdPage(body) {
+		t.Error("真实教务页应判为有效")
+	}
+	if looksLoggedOut(body) {
+		t.Error("真实教务页不得判为已登出")
+	}
+}
+
+// 会话失效的真实形状：IsAlive 必须返回 false，Sync 必须返还 3002 而不是 4002。
+// 只有 3002 才会触发 app 层重登（docs/002 §1.3），4002 会让链路永久卡死。
+func TestSyncSessionExpiredStubIs3002(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// 旧 Cookie 一律被回成 188 字节桩页，HTTP 200。
+		fmt.Fprint(w, sessionExpiredStub)
+	}))
+	defer srv.Close()
+
+	c := NewClient(srv.Client(), fixedClock(), srv.URL, srv.URL)
+	c.SetCookies(map[string]string{SessionCookie: "stale", ServerCookie: "stale"})
+
+	if alive, err := c.IsAlive(context.Background()); err != nil || alive {
+		t.Errorf("跳转桩页必须判为会话失效: alive=%v err=%v", alive, err)
+	}
+	if _, err := c.Sync(context.Background()); model.CodeOf(err) != model.CodeSessionExpired {
+		t.Errorf("Sync code = %d, want %d", model.CodeOf(err), model.CodeSessionExpired)
+	}
+}
+
+// truncateForLog 只给失败断言用：正文不超过 120 字符，避免测试输出噪音。
+func truncateForLog(s string) string {
+	if len(s) > 120 {
+		return s[:120] + "..."
+	}
+	return s
 }
 
 func TestIsAliveWithoutCookiesIsFalse(t *testing.T) {
@@ -336,6 +437,50 @@ func TestSyncKeepsRepeatedLocationPerSlot(t *testing.T) {
 		if lesson.Location != "<地点A>" {
 			t.Errorf("Lessons[%d].Location = %q, want <地点A>", i, lesson.Location)
 		}
+	}
+}
+
+// 快照里带着仍有效的 CAS SSO 会话（`CAS_SessionId`）时，Login 必须先登出。
+//
+// 实测：带有效 `CAS_SessionId` 访问 `/cas_server/login` 不会给登录表单，
+// 而是直接 302 发一个不校验帐号的 ticket。不先登出会有两个后果：
+//   - 报 4002（旧实现的「必须拿到登录表单」直接失败）；
+//   - 更危险：拿旧账号的 SSO 会话换票，写出别人的课表。
+func TestLoginLogsOutStaleCASSession(t *testing.T) {
+	school := newFakeSchool(t, fakeOpts{})
+	c := school.client()
+	// 模拟快照里的旧会话：jsxsd 两个 Cookie 已失效，但 CAS SSO 仍然有效。
+	c.SetCookies(map[string]string{CASSessionCookie: "cas-stale"})
+
+	if err := c.Login(context.Background(), testUser, testPass); err != nil {
+		t.Fatalf("带旧 SSO 会话时登录应先登出并成功, got %v (code=%d)", err, model.CodeOf(err))
+	}
+	if !c.HasSession() {
+		t.Fatalf("登录后应拿到 jsxsd 会话, got %v", c.sessionCookieNames())
+	}
+}
+
+// 登出端点不可用（404 / 网络错）不能拖死登录：由随后的登录表单判据给出结论。
+func TestLoginSucceedsWhenLogoutEndpointUnavailable(t *testing.T) {
+	school := newFakeSchool(t, fakeOpts{noLogoutEndpoint: true, ignoreSSO: true})
+	c := school.client()
+	c.SetCookies(map[string]string{CASSessionCookie: "cas-stale"})
+
+	if err := c.Login(context.Background(), testUser, testPass); err != nil {
+		t.Fatalf("登出失败不应阻断登录, got %v (code=%d)", err, model.CodeOf(err))
+	}
+}
+
+// 连登录表单都拿不到（既不是表单也不是可用跳转）时仍报 4002，不静默成功。
+func TestLoginRejectsPageWithoutForm(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		fmt.Fprint(w, `<html>维护中</html>`)
+	}))
+	defer srv.Close()
+
+	c := NewClient(srv.Client(), fixedClock(), srv.URL, srv.URL)
+	if err := c.Login(context.Background(), testUser, testPass); model.CodeOf(err) != model.CodeMalformedResponse {
+		t.Errorf("code = %d, want %d", model.CodeOf(err), model.CodeMalformedResponse)
 	}
 }
 

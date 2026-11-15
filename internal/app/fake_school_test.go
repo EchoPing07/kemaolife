@@ -35,6 +35,10 @@ const fakeCoursesJSON = `{"msg":"","code":0,"count":1,"data":[
   "skddmc":"<地点A>;<地点B>","skxqmc":"<校区>","kt_mc":"<教学班>"}
 ]}`
 
+// 实测会话失效响应：HTTP 200 + 一层 JS 跳转到 CAS，既不含登录页标记也不含教务内容。
+// 旧实现在这里会误判成「会话仍有效」，导致会话过期后永不重登（docs/002 §1.3）。
+const expiredSessionStub = `<script languge='javascript'>window.location.href='https://aic.gdkm.edu.cn/cas_server/?service=http%3A%2F%2Fjw.gdkm.edu.cn%2Fjsxsd%2Fframework%2FxsMainV.htmlx'</script>`
+
 func newFakeSchool(t *testing.T) *fakeSchool {
 	t.Helper()
 
@@ -54,21 +58,23 @@ func newFakeSchool(t *testing.T) *fakeSchool {
 	})
 	jsbMux.HandleFunc("/jsxsd/framework/xsMainV.htmlx", func(w http.ResponseWriter, r *http.Request) {
 		if !hasFakeSession(r) {
-			fmt.Fprint(w, `<title>统一身份认证平台</title>`)
+			// 实测失效响应：HTTP 200 + JS 跳转桩页（不是登录页 HTML）。
+			// 若这里回登录页，就测不出「桩页被误判成有效会话」的缺陷。
+			fmt.Fprint(w, expiredSessionStub)
 			return
 		}
-		fmt.Fprint(w, `<html><body>教务首页 课表</body></html>`)
+		fmt.Fprint(w, `<html><body><div class="jsxsd">教务首页 课表</div></body></html>`)
 	})
 	jsbMux.HandleFunc("/jsxsd/framework/mainV_index_loadkb.htmlx", func(w http.ResponseWriter, r *http.Request) {
 		if !hasFakeSession(r) {
-			fmt.Fprint(w, `<title>统一身份认证平台</title>`)
+			fmt.Fprint(w, expiredSessionStub)
 			return
 		}
 		fmt.Fprint(w, fakeAnchorHTML)
 	})
 	jsbMux.HandleFunc("/jsxsd/xskb/xskb_list.do", func(w http.ResponseWriter, r *http.Request) {
 		if !hasFakeSession(r) {
-			fmt.Fprint(w, `<title>统一身份认证平台</title>`)
+			fmt.Fprint(w, expiredSessionStub)
 			return
 		}
 		w.Header().Set("Content-Type", "text/html;charset=utf-8")
@@ -111,10 +117,14 @@ func newFakeSchool(t *testing.T) *fakeSchool {
 	}
 }
 
+// hasFakeSession 只把登录下发的 sess-1 / srv-1 当成有效会话。
+//
+// 不能只判「有 Cookie」：种子快照里的 Cookie 必须被当成已失效，
+// 才能复现「旧会话过期 → 自动重登」链路（与真实 jsxsd 行为一致）。
 func hasFakeSession(r *http.Request) bool {
 	a, e1 := r.Cookie(timetable.SessionCookie)
 	b, e2 := r.Cookie(timetable.ServerCookie)
-	return e1 == nil && e2 == nil && a.Value != "" && b.Value != ""
+	return e1 == nil && e2 == nil && a.Value == "sess-1" && b.Value == "srv-1"
 }
 
 // fakeDoer 同时实现 Do 与 DoNoRedirect，模拟 platform.HTTPDoer。

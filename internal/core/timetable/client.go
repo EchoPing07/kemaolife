@@ -91,11 +91,21 @@ func (c *Client) Login(ctx context.Context, user, password string) error {
 
 	loginURL := c.casBase + CASLoginPath + "?service=" + url.QueryEscape(JSBTimetableService)
 
+	// 必须先登出 CAS SSO 会话（实测 2026-11）。
+	//
+	// CAS 会把快照里的 `CAS_SessionId` 当成有效 SSO 会话：带着它请求 `login`
+	// 不但拿不到登录表单，而是直接 302 给一个不带帐号校验的 ticket。
+	// 不登出会有两个坏后果：
+	//  1. 误报 4002（拿不到登录表单就当上游改版）；
+	//  2. 更危险——换账号时拿旧账号的 SSO 会话换票，写出别人的课表。
+	// 登出不要求账号密码，失败也不阻断（此时下一步会自然拿到登录表单）。
+	c.logoutCAS(ctx)
+
 	page, err := c.get(ctx, c.casBase, CASLoginPath+"?service="+url.QueryEscape(JSBTimetableService))
 	if err != nil {
 		return err
 	}
-	if strings.Contains(page, "signupInputUserName") == false && strings.Contains(page, "统一身份认证") == false {
+	if !looksLikeCASLoginForm(page) {
 		return model.NewError(model.CodeMalformedResponse,
 			"CAS 登录页结构不符合预期，可能接口已变更")
 	}
@@ -151,7 +161,30 @@ func (c *Client) sessionCookieNames() []string {
 	return out
 }
 
+// looksLikeCASLoginForm 判断 CAS 登录页是否真的给了可提交的登录表单。
+//
+// 不能只找「统一身份认证」字样：CAS 带着有效 SSO 会话时返回的 302 / 跳转桩页
+// 也可能带这个词，或者干脆只有一段 JS。必须有账号输入框才算拿对页面
+// （这是「可以提交登录」的唯一硬条件）。
+func looksLikeCASLoginForm(page string) bool {
+	return strings.Contains(page, CASFieldUser) || strings.Contains(strings.ToLower(page), "signupinputusername")
+}
+
+// logoutCAS 销毁 CAS 侧的 SSO 会话（不要求凭据），避免旧会话换票。
+//
+// 失败一律忽略：在没有 SSO 会话时登出端点可能返回 302 / 404 / 错页，
+// 那不代表登录会失败；由随后的登录页判据给出真实结论。
+// 本步不把响应写回 cookies：登出要清除的正好是本包手里的 CAS 会话。
+func (c *Client) logoutCAS(ctx context.Context) {
+	if _, err := c.getAllowError(ctx, c.casBase, CASLogoutPath); err != nil {
+		return
+	}
+	delete(c.cookies, CASSessionCookie)
+}
+
 // IsAlive 探测会话是否仍然有效：会话失效也返回 200，必须判响应内容。
+//
+// 判据必须是「拿到了真实教务内容」而不是「不是登录页」—— 见 looksLoggedOut 的说明。
 func (c *Client) IsAlive(ctx context.Context) (bool, error) {
 	if !c.HasSession() {
 		return false, nil
@@ -160,10 +193,7 @@ func (c *Client) IsAlive(ctx context.Context) (bool, error) {
 	if err != nil {
 		return false, err
 	}
-	if looksLikeLoginPage(page) {
-		return false, nil
-	}
-	return true, nil
+	return looksLikeJsxsdPage(page), nil
 }
 
 // looksLikeLoginPage 判断响应内容是否是登录页。
@@ -182,6 +212,68 @@ func looksLikeLoginPage(body string) bool {
 	return false
 }
 
+// looksLoggedOut 判断响应体是否说明「会话已失效、但 HTTP 仍是 200」。
+//
+// jsxsd 的失效响应有两种形状，都必须识别（实测 2026-11）：
+//
+//  1. 179 / 188 字节的 JS 跳转桩页：
+//     `<script languge='javascript'>window.location.href='https://aic.../cas_server/?service=...'</script>`
+//     它既不含 `signupInputUserName` 也不含「统一身份认证」，只看登录页标记会漏判；
+//  2. CAS 登录页 HTML（凭据错误 / 直接回跳登录页时）。
+//
+// 漏判的后果不是「报错难看」而是链路卡死：IsAlive 会一直返回 true，
+// app 层因此跳过重登，Sync 再以 4002（锚点页解析失败）失败——而重登只在
+// 3002 时触发，于是会话过期后永久无法自愈（docs/002 §1.3）。
+func looksLoggedOut(body string) bool {
+	if looksLikeLoginPage(body) {
+		return true
+	}
+	// 桩页的定义就是「只做一层 JS 跳转、目标是 CAS」。真实教务页虽然也会在
+	// 登出链接里出现 cas_server，但整页有几十 KB 内容，不会被判为跳转桩页。
+	return strings.Contains(strings.ToLower(body), "cas_server") && looksLikeJsRedirect(body)
+}
+
+// looksLikeJsRedirect 判断页面是不是「只做跳转」的一层皮（不含真实内容）。
+func looksLikeJsRedirect(body string) bool {
+	lower := strings.ToLower(body)
+	if !strings.Contains(lower, "window.location") && !strings.Contains(lower, "location.href") {
+		return false
+	}
+	// 真实教务页可能带 `window.location.reload()`，但一定还有表格 / 脚本等内容，
+	// 长度远超一个跳转桩页；桩页实测 168~188 字节。
+	return len(body) < jsRedirectStubLimit
+}
+
+// jsRedirectStubLimit 是跳转桩页的长度上限（实测 168~188 字节，留 5 倍余量）。
+const jsRedirectStubLimit = 1024
+
+// jsRealPageMinBytes 是「有真实内容」的最小长度：实测课表锚点页 50 KB、
+// 教务主页 100 KB 量级，而任何跳转桩页 / 错误页都远小于 8 KB。
+//
+// 为什么要看长度：不能只靠类名 / 标题标记判活 —— 上游改一次样式类名就会
+// 把所有会话误判为失效（每轮同步多一次完整 CAS 登录，且可能被限流）；
+// 「要么有内容标记、要么体量够大」两个入口一起判，两边都不会错。
+const jsRealPageMinBytes = 8 << 10
+
+// looksLikeJsxsdPage 判断响应体是不是真实的教务内页。
+//
+// 用「正向特征」而不是「不是登录页」：会话失效时 jsxsd 会返回 200 的跳转桩页，
+// 反向判据会把它当成有效页面 —— 而桩页的 `service` 参数里恰好也含 `jsxsd` /
+// `xsMainV` 字样，所以必须先排除跳转桩页，再看内容（2026-11 真机复现）。
+func looksLikeJsxsdPage(body string) bool {
+	if body == "" || looksLikeLoginPage(body) || looksLikeJsRedirect(body) {
+		return false
+	}
+	lower := strings.ToLower(body)
+	for _, marker := range []string{"qz-weeklytable", "jsxsd", "xsmainv"} {
+		if strings.Contains(lower, marker) {
+			return true
+		}
+	}
+	// 没有可识别标记但体量明显是整页内容：按「会话仍有效」处理，不去误触发重登。
+	return len(body) >= jsRealPageMinBytes
+}
+
 // Sync 拉取第 1 周锚点与课表 JSON，产出一份快照。
 func (c *Client) Sync(ctx context.Context) (*Snapshot, error) {
 	now := c.clock.Now()
@@ -190,7 +282,7 @@ func (c *Client) Sync(ctx context.Context) (*Snapshot, error) {
 	if err != nil {
 		return nil, err
 	}
-	if looksLikeLoginPage(anchorHTML) {
+	if looksLoggedOut(anchorHTML) {
 		return nil, model.NewError(model.CodeSessionExpired, "会话失效，需要重新登录")
 	}
 
@@ -343,7 +435,7 @@ func (c *Client) fetchCourses(ctx context.Context) ([]courseRow, error) {
 	if err != nil {
 		return nil, model.WrapError(model.CodeNetworkDown, "读取课表响应失败", err)
 	}
-	if looksLikeLoginPage(string(raw)) {
+	if looksLoggedOut(string(raw)) {
 		return nil, model.NewError(model.CodeSessionExpired, "会话失效，需要重新登录")
 	}
 	return ParseCourseList(raw)

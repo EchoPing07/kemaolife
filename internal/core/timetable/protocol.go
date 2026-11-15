@@ -21,6 +21,12 @@ const (
 	// CASLoginPath 是 CAS 登录端点，service 参数指向 JSBTimetableService。
 	CASLoginPath = "/cas_server/login"
 
+	// CASLogoutPath 是 CAS 的 SSO 登出端点（不需要凭据）。
+	//
+	// 实测：带旧 `CAS_SessionId` 请求 `/cas_server/login` 不会给登录表单，而是直接
+	// 302 发一个 ticket；先打这个端点把 SSO 会话销毁，login 才会回表单。
+	CASLogoutPath = "/cas_server/logout"
+
 	// JSBTimetableService 是 CAS 登录成功后回跳的教务入口。
 	//
 	// 必须是 http（实测为明文 http），且主机是 jw 而不是 aic：
@@ -46,6 +52,13 @@ const (
 	// SessionCookie / ServerCookie 是 jsxsd 的两个会话 Cookie（实测，缺一不可）。
 	SessionCookie = "bzb_jsxsd"
 	ServerCookie  = "SERVERID_jsxsd"
+
+	// CASSessionCookie 是 CAS 侧的 SSO 会话 Cookie（实测）。
+	//
+	// 它也会被存进快照，因为它能直接换票；必须和 jsxsd 的两个 Cookie 区分开：
+	// jsxsd 失效时它可能仍然有效（反之亦然）。重新登录前要主动登出它，
+	// 否则会拿旧账号的 SSO 会话换新账号的票。
+	CASSessionCookie = "CAS_SessionId"
 
 	// CourseListFormFields 是课表 POST 的固定表单字段（实测）。
 	formFieldViewType = "viweType"

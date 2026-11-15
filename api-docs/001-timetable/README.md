@@ -13,6 +13,7 @@
 
 | 步骤 | 动作 | 产出 |
 |---|---|---|
+| ⓪ | `GET https://aic.gdkm.edu.cn/cas_server/logout`（不带凭据） | 销毁 CAS SSO 会话；失败忽略 |
 | ① | `GET https://aic.gdkm.edu.cn/cas_server/login?service=<见下>` | 登录页 HTML（ASP.NET WebForms 隐藏域） |
 | ② | `POST` 同一 URL（带隐藏域 + 账号密码） | 302 → `http://jw.gdkm.edu.cn/jsxsd/?ticket=...` |
 | ③ | 跟随 302 → `/jsxsd/` | 302 → `/jsxsd/;bzb_jsxsd=...` 再 302 → 主页 |
@@ -30,8 +31,31 @@
 > `service` 参数必须是 **`http://jw.gdkm.edu.cn/jsxsd/`**：
 > 用 `https` 或指向 `aic` 主机会被 CAS 直接跳到 `/cas_server/error?host=...`。
 
+> ⚠️ **登录前必须先登出 CAS SSO 会话**（实测 2026-11）：
+> CAS 侧的会话 Cookie 是 `CAS_SessionId`，它同样会被存进快照。带着它请求 `/cas_server/login`
+> **不会返回登录表单**，而是直接 `302` 跳转到 `http://jw.gdkm.edu.cn/jsxsd/?ticket=...` —— 即
+> **不校验账号密码就发一个 ticket**。两个后果：
+>
+> 1. 严格校验「必须拿到登录表单」的实现会误报 `4002`，把 CAS 的正常行为当成上游改版；
+> 2. 更危险：换账号时拿**旧账号的 SSO 会话**换票，写出别人的课表。
+>
+> 因此 `Login` 的第一步是 `GET /cas_server/logout`（不需要凭据）把 SSO 会话销毁，再取登录页。
+> 登出失败（404 / 网络错）**不阻断**登录，由后续「是否拿到登录表单」给出结论。
+> 登出后同一请求即可拿到 14 KB 量级的登录表单（含三组隐藏域）。
+
 **会话 Cookie 有两个，缺一不可**：`bzb_jsxsd`（业务会话）、`SERVERID_jsxsd`（后端粘性）。
 只有前者时，后续所有请求都会被回退成登录页（HTTP 200，约 179 字节）。
+
+> ⚠️ **会话失效返回 200 + JS 跳转桩页，不是登录页 HTML**（实测 2026-11）：
+> 失效后请求任何 `jw` 页面都会得到 168~188 字节的
+> `<script languge='javascript'>window.location.href='https://aic.../cas_server/?service=...'</script>`，
+> 里面**既没有** `signupInputUserName`、也**没有**「统一身份认证」、也**没有** `__VIEWSTATE`。
+> 只看登录页标记会把这种响应误判成「会话仍有效」，进而跳过重登 —— 而重登只在 `3002` 时触发，
+> 结果是会话过期后**永久无法自愈**（只能改凭据触发一次清快照）。
+> 判据必须是「拿到了真实教务内容」：排除跳转桩页后，页面含 `qz-weeklyTable` / `jsxsd` / `xsMainV`
+> 等标记，或体量达到整页级别（锚点页约 50 KB、主页约 100 KB）。
+> 跳转桩页的 `service` 参数里恰好也含 `jsxsd` / `xsMainV` 字样，所以**不能**直接用它判活。
+> 实现见 `internal/core/timetable/client.go` 的 `looksLoggedOut` / `looksLikeJsxsdPage`。
 
 > ⚠️ 中间跳 `GET /jsxsd/` 的 `Location` 把 Cookie 拼在**路径参数**里：
 > `/jsxsd/;<Cookie 名>=<会话值>`。标准 `Set-Cookie` 头里也有一份，但若 HTTP 客户端
@@ -45,8 +69,21 @@
 - 学号 + 教务密码。密码**明文提交、无验证码**，不得写入仓库或日志。
 - 客户端须**禁用 IPv6**：`aic` 与 `jw` 的 DNS 都返回 AAAA 记录，但服务器没有 IPv6 监听，走 v6 只能等连接超时（约 10s）再回退，每次请求都白等。
 - **User-Agent 必须设置**（实测缺失会被拦）。
+- 登录前须先登出 CAS SSO 会话（见 §1 的 ⚠️），否则拿不到登录表单。
 - 当前 CLI / Android 的 `Deps.HTTP` 是教务与电费共用的单一 `HTTPDoer`，强制 IPv4 的 `tcp4` 会同时作用于两者；Portal 探测 / 认证使用独立平台适配器，不在此客户端内。
 - 会话 Cookie 可复用；快照内含 Cookie，视同凭据。
+
+---
+
+### 2.1 三个会话 Cookie 的分工
+
+| Cookie | 所属 | 作用 | 失效表现 |
+|---|---|---|---|
+| `bzb_jsxsd` | jsxsd | 业务会话 | `jw` 页面回 188 字节 JS 跳转桩页 |
+| `SERVERID_jsxsd` | jsxsd | 后端粘性 | 同上（缺一个就失配） |
+| `CAS_SessionId` | CAS | SSO 会话 | `aic` 的 `login` 给登录表单；**有效时反而直接发 ticket** |
+
+三者都会进快照。**CAS 会话可能比 jsxsd 活得久**（反之亦然），所以「重新登录」必须先把 CAS 侧登出，不能只看 jsxsd 是否失效。
 
 ---
 
@@ -307,12 +344,12 @@ if !alive {
 
 ## 7. 必须记住的七条
 
-1. **两个主机** —— CAS 在 `aic`，教务在 `jw`；`service` 必须是 `http://jw.gdkm.edu.cn/jsxsd/`（http，不是 https）。
+1. **两个主机 + 先登出** —— CAS 在 `aic`，教务在 `jw`；`service` 必须是 `http://jw.gdkm.edu.cn/jsxsd/`（http，不是 https）；**登录前先 `GET /cas_server/logout`**，否则旧 `CAS_SessionId` 会让 CAS 直接发 ticket 而不给登录表单。
 2. **两个 Cookie** —— `bzb_jsxsd` + `SERVERID_jsxsd`，缺一不可。
 3. **手动跟随重定向** —— 中间跳把 Cookie 塞在 `Location` 的路径参数里（`/jsxsd/;bzb_jsxsd=...`）；自动跟随会丢掉它。
 4. **小节 ≠ 大节** —— `sktime` 用 1..12 小节号，教务只有 6 个大节，要 `ceil(n/2)` 换算。
 5. **地点 ≠ 整门课汇总** —— `skddmc` 的非空片段与 `sktime` 的非空时段按下标配对，重复地点必须保留到各自课节。
-6. **会话失效也返回 200** —— 判响应内容（是否含 `signupInputUserName` / `统一身份认证`），不能只看状态码。
+6. **会话失效也返回 200** —— 并且失效形状是「JS 跳转桩页（168~188 字节）」，**不含**登录页标记；判据要看「是否拿到真实教务内容」，不能只看状态码，也不能只找登录页标记。
 7. **强制 IPv4 + 设 UA** —— 两台服务器都没监听 v6；缺 UA 会被拦。共用 `HTTPDoer` 时该客户端发出的电费请求也走 `tcp4`。
 
 ---
@@ -335,3 +372,4 @@ if !alive {
 |---|---|
 | 2026-11-05 | 重写为实测协议：CAS 在 aic、jsxsd 在 jw，`service` 必须指向 jw；两个会话 Cookie；手动跟随重定向并解析 `;name=value` 路径参数；课表改 `xskb_list.do` POST；`sktime` 语法与小节/大节换算；锚点页只有 `MM-DD`；补 6 个大节实测时间 |
 | 2026-11-14 | 协议实测确认 `sktime` / `skddmc` 的非空片段按下标一一对应；`Lesson.Location` 改为该课节的单一真实地点，`WeeksText` 改为该课节所属时段；片段数无法配对时按 `4002` 处理。快照 `Version` 升为 `2`，旧快照直接丢弃重拉。验证只记录片段数与结构，不保留响应正文、Cookie 或凭据 |
+| 2026-11-16 | 补记会话失效的实测形状：`jw` 在会话失效时返回 HTTP 200 + 168~188 字节 JS 跳转桩页，**不含** `signupInputUserName` / 「统一身份认证」/ `__VIEWSTATE`；因此判据改为「是否拿到真实教务内容」（排除桩页 + 内容标记或整页体量）。只记录字节数与标记存在性，不保留响应正文与会话值 |
