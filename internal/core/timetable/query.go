@@ -6,11 +6,11 @@ import (
 	"github.com/EchoPing07/kemaolife/internal/core/model"
 )
 
-// Query 是纯函数：由快照与日期算出当天课表，0 请求、0 副作用（R1 验收）。
-// M1 起查询用例会先刷新快照再调用本函数；本函数本身不含任何网络动作。
+// Query 是纯函数：由快照与日期算出当天课表，0 请求、0 副作用。
+// CLI 查询用例会先刷新快照再调用本函数（docs/contract.md §4）；本函数本身不含任何网络动作。
 //
 // 周次公式（api-docs/001 §1）：week = floor((目标日 − 第 1 周周一) / 7) + 1。
-// 越界周次不报错，返回 InSemester:false 与空 entries（docs/002 §1.1）。
+// 越界周次不报错，返回 InSemester:false 与空 entries（docs/contract.md §2）。
 func Query(snap *Snapshot, date model.Date) model.DaySchedule {
 	out := model.DaySchedule{
 		Date:    date,
@@ -72,7 +72,7 @@ func Query(snap *Snapshot, date model.Date) model.DaySchedule {
 
 // QueryRange 返回 [from, to] 的逐日课表（含首含尾）。
 //
-// 只供 core 内部「当周 7 日」计算使用，不暴露为 CLI 命令（docs/002 §1.1）。
+// 只供 core 内部「当周 7 日」计算使用，不暴露为 CLI 命令（docs/contract.md §2）。
 func QueryRange(snap *Snapshot, from, to model.Date) []model.DaySchedule {
 	if from.After(to) {
 		return nil

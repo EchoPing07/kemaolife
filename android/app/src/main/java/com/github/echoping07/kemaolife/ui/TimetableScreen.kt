@@ -80,7 +80,7 @@ private data class CourseTarget(val day: DaySchedule, val entry: Entry)
  *
  * 网格区是**横向翻页容器**，不是「松手才切」的抽手手势：[HorizontalPager]
  * 拖动过程中相邻周已经在同一屏幕上跟手位移，用户能看到下一周的课程随手指滑进来
- * （docs/002 §5.3 tab1）。邻居页内容由 ViewModel 预取进内存，否则拖到一半只有留白。
+ * （docs/android.md tab1）。邻居页内容由 ViewModel 预取进内存，否则拖到一半只有留白。
  */
 @Composable
 internal fun TimetableScreen(state: AppState, viewModel: AppViewModel) {
@@ -158,7 +158,7 @@ internal fun TimetableScreen(state: AppState, viewModel: AppViewModel) {
 
         // 星期日期行在翻页容器**内部**：它与下面的网格属于同一周，
         // 拖动时日期必须跟着课表一起走，否则日期停在旧周而课表滑到新周，两者错位。
-        // 网格区 = 横向翻页容器：拖动时两侧课表同屏跟手位移，松手吸附（docs/002 §5.3 tab1）。
+        // 网格区 = 横向翻页容器：拖动时两侧课表同屏跟手位移，松手吸附（docs/android.md tab1）。
         // 没有课表时不给 pager 任何页，直接走空态 / 加载态，避免「0 页 0 号页」边界问题。
         val showPager = week != null && pages.isNotEmpty()
         Box(modifier = Modifier.weight(1f)) {
@@ -298,7 +298,7 @@ private fun PageContent(
  * 头部第二行：浏览周 + 今天周几（本周）/ 当前为第 N 周（非本周）。
  *
  * 本周时右侧只有周几：这时「浏览周」与「当前周」是同一个数，再显示「当前为第 N 周」
- * 就是同一句话重复两遍；换成今天周几才提供了新信息（docs/002 §5.3 tab1）。
+ * 就是同一句话重复两遍；换成今天周几才提供了新信息（docs/android.md tab1）。
  *
  * 左右两列共享固定头部高度：日期贴顶、周次贴底，底边与右侧同步时间齐平；
  * 中间多出的留白由 SpaceBetween 分配，日期字号放大一档填补这块空位。
@@ -541,7 +541,7 @@ private fun WeekStrip(
         for (index in 0 until 7) {
             val day = days.getOrNull(index)
             val isToday = day != null && day.date == todayDate
-            // 今天只靠字重强调，不改颜色、不加背景（docs/002 §5.3 tab1）。
+            // 今天只靠字重强调，不改颜色、不加背景（docs/android.md tab1）。
             // 取 ExtraBold(800)。
             // 字号保持全列一致，否则今天那列变高、上下两个字会与邻列错位。
             val todayWeight = FontWeight.ExtraBold
@@ -612,7 +612,7 @@ private fun WeekGrid(
                     .fillMaxHeight(),
             ) {
                 // 网格不画行间横线：12 行背景横线在课程块之间反复穿插，视觉噪音大于引导，
-                // 行列定位改由左侧节次数字与星期条承担（docs/002 §5.3 tab1）。
+                // 行列定位改由左侧节次数字与星期条承担（docs/android.md tab1）。
                 val blocks = remember(day?.date, day?.entries) { layoutCourseBlocks(day?.entries.orEmpty()) }
                 DayColumn(day = day, blocks = blocks, rowHeight = RowHeight, onCourseClick = onCourseClick)
             }

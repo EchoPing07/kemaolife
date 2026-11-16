@@ -68,7 +68,7 @@ private fun shapeFor(
  * `MaterialTheme.shapes` 的五个槽位是 `CornerBasedShape` 常量，不能在组合期读
  * [LocalCornerStyle]，所以由 [KemaolifeTheme] 按开关整体选择一套。
  *
- * 两套半径逐项相同：切换只影响曲率，不影响布局与裁切范围（docs/002 §5.3 圆角层级）。
+ * 两套半径逐项相同：切换只影响曲率，不影响布局与裁切范围（docs/android.md 圆角层级）。
  */
 internal val SmoothShapes = Shapes(
     extraSmall = SmoothCornerShape(8.dp),

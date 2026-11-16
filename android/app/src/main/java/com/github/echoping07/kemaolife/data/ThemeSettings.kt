@@ -12,7 +12,7 @@ const val DEFAULT_DYNAMIC_COLOR = true
  * 连续曲率圆角的唯一默认来源：关闭时用标准圆弧。
  *
  * 键不存在时按本默认值处理，不区分新装与升级 —— 老版本没有这个键，
- * 升级后也直接落到普通圆弧，不做偏好迁移（docs/002 §5.3 tab3）。
+ * 升级后也直接落到普通圆弧，不做偏好迁移（docs/android.md tab3）。
  */
 const val DEFAULT_CONTINUOUS_CORNERS = false
 

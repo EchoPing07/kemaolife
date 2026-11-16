@@ -1,13 +1,13 @@
 //go:build windows
 
-// kemaolife-agent 是 Windows 常驻托盘程序（docs/000 §3.2、docs/002 §5.2）。
+// kemaolife-agent 是 Windows 常驻托盘程序（docs/windows.md）。
 //
 // 职责边界（AGENTS §3）：
 //   - 本包只做「触发器 + 呈现 + 平台组装」：托盘菜单、设置窗口、轮询循环；
 //   - 业务逻辑来自 internal/app / internal/core / internal/agent；
 //   - 平台能力（DPAPI / 注册表自启 / Portal 认证）来自 internal/platform。
 //
-// 明确不做（000 §3.2）：课表主界面、保活 / 守护、多账号、云端同步、浏览器内核。
+// 明确不做（docs/windows.md §10）：课表主界面、保活 / 守护、多账号、云端同步、浏览器内核。
 package main
 
 import (
@@ -27,7 +27,7 @@ import (
 	buildversion "github.com/EchoPing07/kemaolife/internal/version"
 )
 
-// 版本号取自仓库唯一来源 internal/version.Version，与 CLI 版同源（docs/002 §1.1）。
+// 版本号取自仓库唯一来源 internal/version.Version，与 CLI 版同源（docs/contract.md §2）。
 const version = buildversion.Version
 
 var commit = "unknown"
@@ -70,7 +70,7 @@ func main() {
 	}
 	defer release()
 
-	// D4 已定稿为系统通知：进程级 AUMID 必须在托盘图标创建前设置一次，
+	// 系统通知渠道：进程级 AUMID 必须在托盘图标创建前设置一次，
 	// 否则系统通知不会归到 Kemaolife.Agent。具体呈现样式随 Windows 版本变化，
 	// 不承诺 WinRT Toast 或操作中心归档；失败只降级提示，不阻断轮询。
 	if err := ui.SetAppUserModelID(); err != nil {
@@ -193,7 +193,7 @@ func run() (err error) {
 
 	// 首轮立即查一次：开机自启后用户马上能看到数据，不必等一个轮询周期。
 	go a.engine.Run(ctx, a.stop, func(error) {
-		// 失败只更新托盘状态，不弹余额通知（docs/002 §6 规则 5）。
+		// 失败只更新托盘状态，不弹余额通知（docs/windows.md §6 规则 5）。
 		ui.PostTrigger(trayWnd, ui.WM_QUERY_DONE)
 	})
 
@@ -258,7 +258,7 @@ func (a *agentApp) settingsHint(err error) (string, bool) {
 
 // buildMenu 按当前状态与模式生成托盘右键菜单。
 //
-// 两行只读状态在上，按钮组按模式切换（docs/002 §5.2）：
+// 两行只读状态在上，按钮组按模式切换（docs/windows.md）：
 // 手动模式给 登录 / 下线 / 重登；自动模式只给 重登。
 func (a *agentApp) buildMenu() []ui.MenuItem {
 	s := a.currentSettings()
@@ -279,7 +279,7 @@ func (a *agentApp) buildMenu() []ui.MenuItem {
 		)
 	}
 	// 自动模式仍保留重登：自动登录只在未认证时触发，
-	// 顶号 / 换账号这类情况必须由用户主动发起（000 §3.2）。
+	// 顶号 / 换账号这类情况必须由用户主动发起（docs/windows.md §10）。
 	items = append(items,
 		ui.MenuItem{Title: "重登", ID: ui.IDRelogin},
 		ui.MenuItem{Title: "立即探测校园网", ID: ui.IDProbe},

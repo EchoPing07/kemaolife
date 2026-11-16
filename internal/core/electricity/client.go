@@ -20,7 +20,7 @@ import (
 	"github.com/EchoPing07/kemaolife/internal/core/model"
 )
 
-// Client 通过 HTTPDoer 访问水电后端；无鉴权，身份凭证只有学号（api-docs/002 §1）。
+// Client 通过 HTTPDoer 访问水电后端；无鉴权，身份凭证只有学号（api-docs/contract.md §1）。
 type Client struct {
 	doer     core.HTTPDoer
 	endpoint string
@@ -36,7 +36,7 @@ func NewClient(doer core.HTTPDoer, endpoint string) *Client {
 
 // GetBindRoom 取已绑定房间与余额概况，返回 status 与 roomverify。
 //
-// roomverify 是后续查询必用的房间编码；属个人信息，不进日志（api-docs/002 §6.1）。
+// roomverify 是后续查询必用的房间编码；属个人信息，不进日志（api-docs/windows.md §6.1）。
 func (c *Client) GetBindRoom(ctx context.Context, account, schoolCode string) (model.ElectricityStatus, string, error) {
 	body, err := c.call(ctx, CmdGetBindRoom, account, schoolCode, nil)
 	if err != nil {
@@ -91,7 +91,7 @@ func (c *Client) GetBindRoom(ctx context.Context, account, schoolCode string) (m
 // 实测 `getstuindexpage` 的 `collecdate` 形如 `2026-11-05 22:24:52`，才是真实采集时刻。
 //
 // 注意：`getstuindexpage` 的 `odd` / `todayuse` 实测**缺失**，不得用作余额或用量来源
-// （api-docs/002 §6.3）。本方法只读时间字段，读不到就返回空串，由调用方降级。
+// （api-docs/windows.md §6.3）。本方法只读时间字段，读不到就返回空串，由调用方降级。
 func (c *Client) GetIndexPage(ctx context.Context, account, schoolCode string) (string, error) {
 	body, err := c.call(ctx, CmdGetStuIndexPage, account, schoolCode, nil)
 	if err != nil {
@@ -172,7 +172,7 @@ func (c *Client) call(ctx context.Context, cmd, account, schoolCode string, extr
 			"学校代码为空，请检查配置")
 	}
 
-	// param 是 JSON 字符串，account 必须由客户端注入（api-docs/002 §3.2）。
+	// param 是 JSON 字符串，account 必须由客户端注入（api-docs/contract.md §7.3）。
 	payload := map[string]any{"cmd": cmd, "account": account}
 	for k, v := range extra {
 		payload[k] = v
@@ -185,7 +185,7 @@ func (c *Client) call(ctx context.Context, cmd, account, schoolCode string, extr
 	form := url.Values{
 		"param":        {string(paramJSON)},
 		"customercode": {schoolCode},
-		"method":       {cmd}, // 必须与 param.cmd 一致（api-docs/002 §3.1）
+		"method":       {cmd}, // 必须与 param.cmd 一致（api-docs/contract.md §7.1）
 	}
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, c.endpoint,
@@ -217,7 +217,7 @@ func (c *Client) call(ctx context.Context, cmd, account, schoolCode string, extr
 		return nil, model.WrapError(model.CodeMalformedResponse, "电费外层 JSON 解析失败", err)
 	}
 	if !bool(outer.Result) {
-		// 上游文案可能夹带个人信息（api-docs/002 §10）：只用于错误分类，不外传。
+		// 上游文案可能夹带个人信息（api-docs/contract.md §10）：只用于错误分类，不外传。
 		msg := outer.Message
 		if msg == "" {
 			msg = outer.Exception
@@ -232,7 +232,7 @@ func (c *Client) call(ctx context.Context, cmd, account, schoolCode string, extr
 		return nil, model.NewError(model.CodeMalformedResponse, "电费响应 body 为空")
 	}
 
-	// 关键：外层成功不代表成功，必须解 body 再判 body.result（api-docs/002 §4）。
+	// 关键：外层成功不代表成功，必须解 body 再判 body.result（api-docs/contract.md §8）。
 	var body map[string]any
 	if err := json.Unmarshal([]byte(bodyText), &body); err != nil {
 		return nil, model.WrapError(model.CodeMalformedResponse, "电费内层 JSON 解析失败", err)
@@ -245,7 +245,7 @@ func (c *Client) call(ctx context.Context, cmd, account, schoolCode string, extr
 	return body, nil
 }
 
-// codeForResult 把 body.result 映射到错误码域（api-docs/002 §8）。
+// codeForResult 把 body.result 映射到错误码域（api-docs/contract.md §8）。
 func codeForResult(result string) model.ErrorCode {
 	switch result {
 	case "-20003", "-1":
@@ -257,7 +257,7 @@ func codeForResult(result string) model.ErrorCode {
 
 // codeForOuterFailure 把外层 result_!=true 映射到错误码域。
 //
-// api-docs/002 §4 只描述了字段，未穷举错误码。已知 8099 的两种 message 语义不同：
+// api-docs/contract.md §8 只描述了字段，未穷举错误码。已知 8099 的两种 message 语义不同：
 //   - 「客户学校不存在」→ 学校代码配错，用户可自己改（3001）
 //   - 「客户未配置完美校园前置地址」→ 代码存在但该学校未开通本接口，用户改不了（4001）
 //
@@ -277,7 +277,7 @@ func codeForOuterFailure(code int, msg string) model.ErrorCode {
 }
 
 // maskRoomVerify 对房间编码脱敏（个人隐私，P1）；roomName 属本人宿舍标识，
-// 允许在本机 CLI 输出（docs/002 §3.2），但不进日志 / 错误信息。
+// 允许在本机 CLI 输出（docs/contract.md §7.3），但不进日志 / 错误信息。
 func maskRoomVerify(raw string) string {
 	if raw == "" {
 		return ""

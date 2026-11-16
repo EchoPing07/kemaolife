@@ -9,7 +9,7 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 /**
- * 冷启动首帧用的课表缓存（docs/002 §5.3「每次打开」）：
+ * 冷启动首帧用的课表缓存（docs/android.md「每次打开」）：
  * Kotlin 侧与电费缓存同口径，只写 UI 必需字段，不含 Cookie / 凭据。
  */
 class TimetableCacheTest {

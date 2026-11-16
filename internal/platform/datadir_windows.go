@@ -8,7 +8,7 @@ import (
 	"path/filepath"
 )
 
-// WindowsDataDir 返回数据目录 %LOCALAPPDATA%\Kemaolife\（docs/002 §0）。
+// WindowsDataDir 返回数据目录 %LOCALAPPDATA%\Kemaolife\（docs/contract.md §1）。
 //
 // 用 LOCALAPPDATA 而不是 APPDATA：配置含加密凭据，属于本机数据，
 // 不应随漫游配置文件同步到别的机器（换来的是「换机后 DPAPI 也解不开」的一致性）。

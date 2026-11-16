@@ -37,7 +37,7 @@ const fakeCoursesJSON = `{"msg":"","code":0,"count":1,"data":[
 ]}`
 
 // 实测会话失效响应：HTTP 200 + 一层 JS 跳转到 CAS，既不含登录页标记也不含教务内容。
-// 旧实现在这里会误判成「会话仍有效」，导致会话过期后永不重登（docs/002 §1.3）。
+// 旧实现在这里会误判成「会话仍有效」，导致会话过期后永不重登（docs/contract.md §4）。
 const expiredSessionStub = `<script languge='javascript'>window.location.href='https://aic.gdkm.edu.cn/cas_server/?service=http%3A%2F%2Fjw.gdkm.edu.cn%2Fjsxsd%2Fframework%2FxsMainV.htmlx'</script>`
 
 func newFakeSchool(t *testing.T) *fakeSchool {

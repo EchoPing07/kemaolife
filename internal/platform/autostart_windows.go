@@ -11,14 +11,14 @@ import (
 	"unsafe"
 )
 
-// 自启动走 HKCU\...\Run（AGENTS §5 / 001 §6.4：登录时自启一次，不保活）。
+// 自启动走 HKCU\...\Run（docs/windows.md §8：登录时自启一次，不保活）。
 //
 // 不用「任务计划程序」也不用服务：后者要求管理员权限，且属于守护语义，
 // 与「被用户退出或杀掉后不重启」的约定冲突。
 
 const (
 	runKeyPath = `Software\Microsoft\Windows\CurrentVersion\Run`
-	// AutoStartValueName 是自启项的注册表值名（docs/002 §0：KemaolifeAgent）。
+	// AutoStartValueName 是自启项的注册表值名（docs/contract.md §1：KemaolifeAgent）。
 	AutoStartValueName = "KemaolifeAgent"
 )
 

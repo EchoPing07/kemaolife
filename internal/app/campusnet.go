@@ -9,7 +9,7 @@ import (
 
 // CampusDeps 是校园网用例需要的端口。
 //
-// 单独一组而不是塞进 Deps：CLI 版没有校园网能力（000 §3.1），
+// 单独一组而不是塞进 Deps：CLI 版没有校园网能力（docs/cli.md），
 // 让 Deps 常带一个必填的校园网端口，只会逼 CLI 版塞一个只会报错的桩。
 type CampusDeps struct {
 	Clock core.Clock
@@ -17,7 +17,7 @@ type CampusDeps struct {
 	Ready core.NetworkReady
 }
 
-// GetCampusNetworkStatus 判态（docs/002 §3.3）。
+// GetCampusNetworkStatus 判态（docs/contract.md §7.4）。
 //
 // 探测失败在网络适配器里已被归为 offline，所以这里不把 offline 当错误：
 // 「不在校园网」是正常状态，只有真正的内部故障才返回错误。
@@ -59,9 +59,9 @@ func ReloginCampusNetwork(ctx context.Context, d CampusDeps) error {
 	return d.Net.Relogin(ctx)
 }
 
-// EnsureCampusNetwork 是自动模式的轮询前置：确保网络可用。
+// EnsureCampusNetwork 是自动模式的轮询前置：确认身在校园网、未认证则先认证。
 //
-// 只在 Windows 自动模式调用（001 §5）；手动模式调它会违反「不自动登录」。
+// 只在 Windows 自动模式调用（docs/architecture.md §5）；手动模式调它会违反「不自动登录」。
 func EnsureCampusNetwork(ctx context.Context, d CampusDeps) error {
 	if err := ensureCampusDeps(d); err != nil {
 		return err

@@ -12,6 +12,6 @@ contact_links:
   - name: 社区行为准则
     url: https://github.com/EchoPing07/kemaolife/blob/main/CODE_OF_CONDUCT.md
     about: 参与讨论的行为期望与违规报告渠道
-  - name: 需求与契约基线
+  - name: 文档与对外契约
     url: https://github.com/EchoPing07/kemaolife/tree/main/docs
-    about: 开 Issue 前先查 R 项、D 项、功能矩阵与共享契约
+    about: 开 Issue 前先查端文档、对外契约与架构设计

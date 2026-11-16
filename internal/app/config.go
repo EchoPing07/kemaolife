@@ -52,7 +52,7 @@ func CustomerCodeSource(d Deps, cfg model.Config) string {
 	}
 }
 
-// MaskSecret 把敏感值脱敏为 ****；空值也显示 ****（docs/002 §1.1：恒脱敏）。
+// MaskSecret 把敏感值脱敏为 ****；空值也显示 ****（docs/contract.md §2：恒脱敏）。
 func MaskSecret(string) string { return "****" }
 
 // ensureDeps 是各用例的共同前置检查，避免 nil 端口在运行期 panic。

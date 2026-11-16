@@ -4,7 +4,7 @@ import org.json.JSONArray
 import org.json.JSONObject
 
 /**
- * 三端共享 DTO 的 Kotlin 只读镜像（docs/002 §3）。
+ * 三端共享 DTO 的 Kotlin 只读镜像（docs/contract.md §3）。
  *
  * 这里**只做字段投影**，不做任何计算：周次、均量、可用天数全部来自 Go 侧 `core`，
  * 保证三端不会各算一遍算出不同结果（AGENTS A3 / A6）。
@@ -59,7 +59,7 @@ data class WeekSchedule(val week: Int, val days: List<DaySchedule>) {
     }
 }
 
-/** `timetable.export` 的 data：整学期 CSV + 文件名 + 数据时间（docs/002 §2.1）。 */
+/** `timetable.export` 的 data：整学期 CSV + 文件名 + 数据时间（docs/contract.md §6）。 */
 data class TimetableExport(
     val csv: String,
     val filename: String,
@@ -116,7 +116,7 @@ data class ElectricityStatus(
             balance = obj.optDouble("balance", 0.0),
             unit = obj.optString("unit"),
             collectedAt = obj.optString("collectedAt"),
-            // null 有明确语义：「无数据」/「无法估算」（docs/002 §3.2），不能用 0 代替。
+            // null 有明确语义：「无数据」/「无法估算」（docs/contract.md §7.3），不能用 0 代替。
             dailyAvg = if (obj.isNull("dailyAvg")) null else obj.optDouble("dailyAvg"),
             estimatedDays = if (obj.isNull("estimatedDays")) null else obj.optInt("estimatedDays"),
         )
@@ -143,7 +143,7 @@ data class ElectricityUsage(
 
 data class DayUsage(val date: String, val use: Double)
 
-/** 校园网三态。`offline` 是正常状态，不是错误（docs/002 §3.3）。 */
+/** 校园网三态。`offline` 是正常状态，不是错误（docs/contract.md §7.4）。 */
 enum class CampusState(val wire: String) {
     ONLINE("online"),
     UNAUTH("unauth"),
@@ -240,7 +240,7 @@ data class ProbeResult(
  * `log.list` / `log.enable` / `log.clear` 的 `data`：开关状态 + 条数 + 摘要列表。
  *
  * 列表项刻意不含正文：一次抓十几条请求，把整份正文都塞进 state 会让首帧变慢，
- * 而且看列表时并不需要它。正文走 [LogEntry]，点开某条时才取（docs/002 §2.1 规则 10）。
+ * 而且看列表时并不需要它。正文走 [LogEntry]，点开某条时才取（docs/contract.md §6 规则 10）。
  */
 data class LogState(
     val enabled: Boolean,

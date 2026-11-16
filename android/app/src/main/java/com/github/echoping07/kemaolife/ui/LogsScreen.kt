@@ -46,7 +46,7 @@ private val LogsContentMaxWidth = 560.dp
 private val LogsWideBreakpoint = 600.dp
 
 /**
- * 设置 → 日志（docs/002 §5.3 tab3）。
+ * 设置 → 日志（docs/android.md tab3）。
  *
  * 两件事：一根「记录请求」开关，和开关打开后才有的请求列表。
  * 记录完全在 Go 侧完成（`internal/platform.RequestLog`），这里只呈现 ——

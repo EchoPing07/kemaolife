@@ -6,7 +6,7 @@ package com.github.echoping07.kemaolife.data
  * 所有方法都是阻塞调用，**必须在 IO 调度器上执行**（ViewModel 负责切换）。
  * 返回的 [Result] 要么带 DTO，要么带可展示的错误文案。
  *
- * 调用方必须先区分「读缓存」与「联网」两条链路（docs/002 §5.3）：
+ * 调用方必须先区分「读缓存」与「联网」两条链路（docs/android.md）：
  *  - [week] 纯读本地快照，0 请求，用于打开 App 与切周；
  *  - [sync] 联网刷新一次，成功后 UI 再调 [week] 回来。
  * 课表查询**不再**隐式带刷新，切周不会把整份课表重拉一遍。
@@ -35,7 +35,7 @@ class Repository(private val bridge: Bridge) {
                 WeekView(
                     schedule = WeekSchedule.from(data),
                     syncedAt = env.syncedAt,
-                    // 可选字段：缺省 0 = 未知，翻页容器不得据此拦截翻页（docs/002 §3.1）。
+                    // 可选字段：缺省 0 = 未知，翻页容器不得据此拦截翻页（docs/contract.md §7.1）。
                     lastWeek = data.optInt("lastWeek"),
                 ),
             )
@@ -87,7 +87,7 @@ class Repository(private val bridge: Bridge) {
 
     // ---- 请求记录（设置页「日志」） ---------------------------------------
 
-    /** `log.enable`：开关请求记录；关闭会同时清空已记录内容（docs/002 §2.1 规则 10）。 */
+    /** `log.enable`：开关请求记录；关闭会同时清空已记录内容（docs/contract.md §6 规则 10）。 */
     fun setRequestLog(enabled: Boolean): Result<LogState> =
         bridge.call("log.enable", "enabled" to enabled).toResult { LogState.from(it) }
 
@@ -119,8 +119,8 @@ class Repository(private val bridge: Bridge) {
 /**
  * 课表响应：DTO + 数据时间。
  *
- * `syncedAt` 是查询语义的一部分（docs/002 §2），必须和 DTO 一起传给 UI；
- * 离线标记只由 `timetable.sync` 的事务维护，纯读缓存不覆写它（docs/002 §5.3）。
+ * `syncedAt` 是查询语义的一部分（docs/contract.md §5），必须和 DTO 一起传给 UI；
+ * 离线标记只由 `timetable.sync` 的事务维护，纯读缓存不覆写它（docs/android.md）。
  */
 data class WeekView(
     val schedule: WeekSchedule,

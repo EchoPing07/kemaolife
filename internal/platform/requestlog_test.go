@@ -27,7 +27,7 @@ func fixedClock() func() time.Time {
 func TestRequestLogDisabledByDefault(t *testing.T) {
 	l := NewRequestLog(fixedClock())
 	if l.Enabled() {
-		t.Fatal("请求记录必须默认关闭（docs/002 §5.3）")
+		t.Fatal("请求记录必须默认关闭（docs/android.md）")
 	}
 
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

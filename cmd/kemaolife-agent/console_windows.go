@@ -11,7 +11,7 @@ import (
 //	go build -ldflags "-H=windowsgui" -o kemaolife-agent.exe ./cmd/kemaolife-agent
 //
 // 默认的 console 子系统（subsystem = 3）会让系统为它分配一个终端窗口，用户关掉
-// 那个窗口就等于结束进程，「擦掉窗口仍在托盘运行」这一条验收直接不成立（docs/002 §5.2）。
+// 那个窗口就等于结束进程，「擦掉窗口仍在托盘运行」这一条验收直接不成立（docs/windows.md）。
 //
 // 构建参数是人写的，漏一次就退化成「带黑框的托盘程序」，所以启动时自己再兜一层：
 // 若当前确实挂着一个控制台窗口，就主动 FreeConsole 摘掉。这样即使忘记加

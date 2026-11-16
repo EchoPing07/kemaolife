@@ -30,7 +30,7 @@ func (localCampusNet) EnsureCampusNetwork(context.Context) error {
 	return nil
 }
 
-// 门面是最窄的对外契约（docs/002 §2.1）。测试全程不得碰真实学校接口（AGENTS §7）：
+// 门面是最窄的对外契约（docs/contract.md §6）。测试全程不得碰真实学校接口（AGENTS §7）：
 // 只用「无凭据 / 无快照」的本地失败路径与可注入的 session 成功路径。
 
 func testSession(t *testing.T, cfg initConfig) *session {
@@ -88,7 +88,7 @@ func TestInitPingAndUnknownOp(t *testing.T) {
 		t.Fatalf("ping 失败: %v", env)
 	}
 	if env["ts"] == "" {
-		t.Error("信封必须带 ts（docs/002 §2）")
+		t.Error("信封必须带 ts（docs/contract.md §5）")
 	}
 	if _, has := env["error"]; has {
 		t.Error("成功信封不应出现 error")
@@ -474,7 +474,7 @@ func TestInitResetSnapshotClearsOldData(t *testing.T) {
 	}
 }
 
-// timetable.export：只读缓存的导出 op，回带 CSV 正文 + 文件名 + 数据时间（docs/002 §2.1）。
+// timetable.export：只读缓存的导出 op，回带 CSV 正文 + 文件名 + 数据时间（docs/contract.md §6）。
 func TestTimetableExportReturnsCSVAndDataTime(t *testing.T) {
 	s := testSession(t, initConfig{})
 	syncedAt := time.Date(2026, 11, 9, 21, 10, 2, 0, time.Local)
@@ -536,7 +536,7 @@ func TestTimetableExportWithoutSnapshotReturns3001(t *testing.T) {
 // —— 请求记录（设置页「日志」） ——
 //
 // 四个 log.* op 是排查用的：开关默认关闭，开启后记录完整的请求 / 响应形状，
-// 但 Cookie 与凭据字段必须恒遮罩（docs/002 §5.3、P1 / P2 / P6）。
+// 但 Cookie 与凭据字段必须恒遮罩（docs/android.md、P1 / P2 / P6）。
 // 记录器是进程级共享的，每个用例自行开关 + 清空，互不串味。
 
 func resetRequestLog(t *testing.T) {

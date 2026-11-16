@@ -9,7 +9,7 @@ import (
 	"github.com/EchoPing07/kemaolife/internal/core/model"
 )
 
-// defaultTimeout 是 --timeout 未指定时的单次网络超时上限（docs/002 §1.1）。
+// defaultTimeout 是 --timeout 未指定时的单次网络超时上限（docs/contract.md §2）。
 const defaultTimeout = 30 * time.Second
 
 // defaultCustomerCode 是本项目的学校代码内置默认值（学校事实，非个人隐私）。
@@ -17,7 +17,7 @@ const defaultTimeout = 30 * time.Second
 // 用户还能用 config set customercode 再覆盖。
 var defaultCustomerCode = "3126"
 
-// options 是全局参数解析结果（docs/002 §1.1「全局参数」）。
+// options 是全局参数解析结果（docs/contract.md §2「全局参数」）。
 type options struct {
 	json       bool
 	configPath string
@@ -98,7 +98,7 @@ func parseGlobalFlags(args []string) (options, []string, error) {
 
 // extractTrailingGlobals 把子命令参数里的全局开关摘走，其余保持原序。
 // 带值参数（--config / --timeout）也支持放在末尾，agent 不必记住参数位置；
-// -v / --version 与 -- 在子命令前后均可生效，-- 之后按子命令原样参数处理（docs/002 §1.1）。
+// -v / --version 与 -- 在子命令前后均可生效，-- 之后按子命令原样参数处理（docs/contract.md §2）。
 func extractTrailingGlobals(opts *options, args []string) ([]string, error) {
 	if len(args) == 0 {
 		return args, nil

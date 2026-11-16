@@ -6,7 +6,7 @@ import (
 	"strings"
 )
 
-// 目录布局（docs/002 §0）：
+// 目录布局（docs/contract.md §1）：
 //
 //	配置  ~/.config/kemaolife/config.json  （0600）
 //	缓存  ~/.cache/kemaolife/              （遵循 XDG_CACHE_HOME）

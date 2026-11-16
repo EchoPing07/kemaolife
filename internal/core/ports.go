@@ -57,7 +57,7 @@ type Notifier interface {
 	Notify(title, body string) error
 }
 
-// NetworkReady 是自动模式的恢复入口：确保网络可用（Windows 自动轮询前置）。
+// NetworkReady 是自动模式的恢复入口：确认身在校园网、未认证则先认证（Windows 自动轮询前置）。
 type NetworkReady interface {
 	EnsureCampusNetwork(ctx context.Context) error
 }

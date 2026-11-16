@@ -9,11 +9,11 @@ import (
 	"github.com/EchoPing07/kemaolife/internal/core/model"
 )
 
-// cmdElectricity 实现 `electricity [--month YYYY-MM]`（docs/002 §1.1）。
+// cmdElectricity 实现 `electricity [--month YYYY-MM]`（docs/contract.md §2）。
 //
 // 一次调用内部 2 个主请求 + 1 个采集时刻请求；主请求任一失败整体报错（R2）。
 // CLI 人类可读输出必须标注「数据截至」：电表约 1 天延迟，不能当实时值；
-// Windows 托盘两处 UI 按 docs/002 §5.2 不展示采集时刻。
+// Windows 托盘两处 UI 按 docs/windows.md 不展示采集时刻。
 func cmdElectricity(ctx context.Context, opts options, rt *session, args []string) error {
 	yearMonth := ""
 	for i := 0; i < len(args); i++ {

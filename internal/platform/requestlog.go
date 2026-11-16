@@ -13,7 +13,7 @@ import (
 )
 
 // RequestLog 是可开关的请求记录器：把每次 HTTP 往返的方法、URL、标头、正文与响应元数据
-// 留在**进程内存**里，供 Android 设置页「日志」查看（docs/002 §5.3）。
+// 留在**进程内存**里，供 Android 设置页「日志」查看（docs/android.md）。
 //
 // 为什么落在 platform 而不是 core：记录是传输层能力（它包住 http.RoundTripper），
 // core 不该知道「有没有人在看请求」；也不该为了记录多一层参数（AGENTS §3）。
@@ -175,7 +175,7 @@ func (l *RequestLog) clip(s string) string {
 // Wrap 把记录能力套在既有 RoundTripper 外层。
 //
 // 只包装而不替换：强制 IPv4 的 DialContext、超时、连接池都仍由原 Transport 决定
-// （api-docs/001-timetable §2、§6.3），记录不影响真实请求行为。
+// （api-docs/001-timetable §2、§7），记录不影响真实请求行为。
 func (l *RequestLog) Wrap(next http.RoundTripper) http.RoundTripper {
 	if l == nil {
 		return next

@@ -5,7 +5,7 @@ import java.net.HttpURLConnection
 import java.net.URL
 
 /**
- * 关于页「检查更新」的版本号来源与比较（docs/002 §5.3 tab3）。
+ * 关于页「检查更新」的版本号来源与比较（docs/android.md tab3）。
  *
  * 为什么不走 Go 门面：这是第 4 类外部目标，与三个功能域无关，也不读本机快照 /
  * 凭据；新增门面 `op` 会把一个纯呈现层的公开信息查询塞进 core 的契约面。

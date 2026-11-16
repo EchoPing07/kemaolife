@@ -171,7 +171,7 @@ func defaultSettings() agent.Settings {
 	return s
 }
 
-// 手动模式：轮询不得触发任何自动登录（000 §3.2 / 验收 8）。
+// 手动模式：轮询不得触发任何自动登录（docs/windows.md §4）。
 func TestPollManualModeDoesNotTouchCampusNetwork(t *testing.T) {
 	campus := newFakeCampus(model.CampusUnauth)
 	srv := electricityServer(t, 50, 1)
@@ -217,7 +217,7 @@ func TestPollAutoModeEnsuresCampusNetwork(t *testing.T) {
 	}
 }
 
-// 自动模式前置失败：只记到托盘状态，不阻断电费查询与余额提醒（docs/002 §6 规则 5）。
+// 自动模式前置失败：只记到托盘状态，不阻断电费查询与余额提醒（docs/windows.md §6 规则 5）。
 func TestPollAutoModePreflightFailureDoesNotBlockElectricity(t *testing.T) {
 	campus := newFakeCampus(model.CampusUnauth)
 	campus.setEnsureErr(model.NewError(model.CodeNetworkDown, "不在校园网环境"))
@@ -616,7 +616,7 @@ func TestDoCampusRecordsError(t *testing.T) {
 	}
 }
 
-// 网络探测失败归 offline：不写 LastError、不触发认证动作（docs/002 §5.2）。
+// 网络探测失败归 offline：不写 LastError、不触发认证动作（docs/windows.md）。
 func TestProbeCampusNetworkFailureIsOffline(t *testing.T) {
 	campus := newFakeCampus(model.CampusOnline)
 	campus.statusErr = model.NewError(model.CodeNetworkDown, "探测超时")

@@ -39,7 +39,7 @@ func IsTerminal() bool {
 // 关闭失败时的取舍：macOS 的 ioctl 本期没有真机验证，若直接拒绝读取，
 // 某些受限 pty / 虚拟终端会让 config init 完全无法录入凭据；因此改为
 // 在 stderr 给出不带个人信息的明确警告后继续读，同时把交互提示改成中性文案，
-// 不再承诺「不回显」（000 §5 不静默降级）。agent 的管道输入 echoOff=false，
+// 不再承诺「不回显」（docs/cli.md §2：不静默降级）。agent 的管道输入 echoOff=false，
 // 完全不走这条分支。密码用完即弃，不落盘、不进日志。
 func ReadSecret(r io.Reader, echoOff bool) (string, error) {
 	br, ok := r.(*bufio.Reader)

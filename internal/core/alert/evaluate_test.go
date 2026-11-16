@@ -37,7 +37,7 @@ func defaultCfg() alert.Config {
 	}
 }
 
-// 跌破阈值只提醒一次（docs/002 §6 规则 2）。
+// 跌破阈值只提醒一次（docs/windows.md §6 规则 2）。
 func TestEvaluateNotifiesOncePerThreshold(t *testing.T) {
 	cfg := defaultCfg()
 	var state alert.State

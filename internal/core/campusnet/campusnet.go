@@ -2,7 +2,7 @@
 //
 // 这里只做两件事：把探测响应判成三态 + 构造登录 / 下线表单。
 // 探测与 POST 的 HTTP I/O、自签证书策略、网关地址全部留在 internal/platform，
-// core 不持有客户端、不知道服务器在哪（001 §4）。
+// core 不持有客户端、不知道服务器在哪（docs/architecture.md §4）。
 package campusnet
 
 import (
@@ -36,7 +36,7 @@ type Probe struct {
 //
 // 判定依据只有 302 的 `act`：`LOGINSUCC` = 已在线；跳 `/portal/webauth`
 // 且无 act = 未认证；其余（超时、非 302、无 Location、非 Portal 路径）
-// 一律视为不在校园网，**不是错误**（docs/002 §3.3）。
+// 一律视为不在校园网，**不是错误**（docs/contract.md §7.4）。
 func ParseProbe(statusCode int, location string) Probe {
 	if statusCode != 302 || strings.TrimSpace(location) == "" {
 		return Probe{State: model.CampusOffline}
@@ -68,7 +68,7 @@ func ParseProbe(statusCode int, location string) Probe {
 }
 
 // SanitizeMessage 只放行已知的短安全短语：上游 Location 或 POST 响应可能夹带账号、IP 等
-// 个人信息，不得原样进入 CampusStatus / 错误输出（P2 / docs/002 §3.3）。
+// 个人信息，不得原样进入 CampusStatus / 错误输出（P2 / docs/contract.md §7.4）。
 func SanitizeMessage(raw string) string {
 	m := strings.TrimSpace(raw)
 	if m == "" {

@@ -6,7 +6,7 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 /**
- * 最小查询间隔的判定与钳制（docs/000 §5.6、docs/002 §5.3）。
+ * 最小查询间隔的判定与钳制（docs/android.md）。
  *
  * 直接调用生产实现 `AppPreferences.clamped` / `isDueAt`（两者都是 companion
  * 纯函数，不依赖 Android frame），禁止在测试里复刻一份钳制逻辑 —— 那会变成

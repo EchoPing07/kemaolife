@@ -13,7 +13,7 @@ import (
 	"github.com/EchoPing07/kemaolife/internal/core/model"
 )
 
-// Status 是托盘要展示的两行只读状态（docs/002 §5.2「托盘右键」）。
+// Status 是托盘要展示的两行只读状态（docs/windows.md「托盘右键」）。
 type Status struct {
 	Campus          model.CampusState
 	CampusMsg       string
@@ -120,7 +120,7 @@ func (e *Engine) DoCampus(ctx context.Context, action CampusAction) error {
 //
 // 应用层已经把「网络探测失败」归为 offline；这里再对 4001 做一次兜底，
 // 让 Windows 的判态轮询在临时网络故障时只显示「不在校园网」，不把失败原因
-// 当异常塞进悬浮提示（docs/002 §5.2：探测失败归 offline，不退避）。
+// 当异常塞进悬浮提示（docs/windows.md：探测失败归 offline，不退避）。
 func (e *Engine) RefreshCampusStatus(ctx context.Context) {
 	status, err := app.GetCampusNetworkStatus(ctx, e.campus)
 	if model.CodeOf(err) == model.CodeNetworkDown {
@@ -173,7 +173,7 @@ func (e *Engine) ProbeCampus(ctx context.Context) (model.CampusState, error) {
 
 // PollOnce 完整执行一轮：自动模式先恢复网络 → 查电费 → 判告警 → 通知。
 //
-// 失败只走退避与状态更新，不弹余额通知（docs/002 §6 规则 5）。
+// 失败只走退避与状态更新，不弹余额通知（docs/windows.md §6 规则 5）。
 func (e *Engine) PollOnce(ctx context.Context) error {
 	cfg := e.settings()
 	var preflightErr error
@@ -217,7 +217,7 @@ func (e *Engine) PollOnce(ctx context.Context) error {
 		s.CollectedAt = report.Status.CollectedAt
 		s.EstimatedDays = report.Status.EstimatedDays
 		// 前置认证失败与电费查询是独立链路：电费成功不能把它从托盘提示里抹掉，
-		// 但下一轮前置成功时要清掉旧提示（docs/002 §6 规则 5）。
+		// 但下一轮前置成功时要清掉旧提示（docs/windows.md §6 规则 5）。
 		if preflightErr != nil {
 			s.LastError = model.MessageOf(preflightErr)
 		} else {
@@ -238,11 +238,11 @@ func (e *Engine) PollOnce(ctx context.Context) error {
 	return nil
 }
 
-// Run 是常驻循环：成功按轮询间隔，连续失败按指数退避（docs/002 §6 规则 6）。
+// Run 是常驻循环：成功按轮询间隔，连续失败按指数退避（docs/windows.md §6 规则 6）。
 //
 // stop 关闭后立即退出；ctx 用于随进程退出取消在途请求。
 func (e *Engine) Run(ctx context.Context, stop <-chan struct{}, onErr func(error)) {
-	// 校园网判态轮询与电费轮询是两个独立周期（docs/002 §5.2）：
+	// 校园网判态轮询与电费轮询是两个独立周期（docs/windows.md）：
 	// 判态只是 1 个探测请求，可以密得多，单独跑才不会把电费接口拉上。
 	go e.runCampusProbe(ctx, stop)
 
@@ -280,7 +280,7 @@ func (e *Engine) Run(ctx context.Context, stop <-chan struct{}, onErr func(error
 // 只调 Status（1 个探测请求）：不发登录、不改凭据，也不因失败退避 ——
 // 网络探测失败（4001）由 ProbeCampus 归一为 offline，是正常结果而不是故障；
 // 内部故障仍会进 LastError 供悬浮提示显示，但不改变探测周期
-// （docs/002 §5.2 / §3.3）。间隔每轮重读设置，设置窗口保存后立即生效。
+// （docs/windows.md / §3.3）。间隔每轮重读设置，设置窗口保存后立即生效。
 func (e *Engine) runCampusProbe(ctx context.Context, stop <-chan struct{}) {
 	// 首轮立即探：否则托盘上的校园网状态要等一个完整周期才有值。
 	for {
@@ -300,7 +300,7 @@ func (e *Engine) runCampusProbe(ctx context.Context, stop <-chan struct{}) {
 	}
 }
 
-// TrayLine 返回托盘右键的两行只读状态文本（docs/002 §5.2）。
+// TrayLine 返回托盘右键的两行只读状态文本（docs/windows.md）。
 //
 // 这里是纯格式化，不含 IO。每行必须单行放得下（菜单项不换行，过长会被吃掉），
 // 因此只留状态与余额：

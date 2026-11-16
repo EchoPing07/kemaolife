@@ -96,7 +96,7 @@ func testCred() PortalCredential {
 	return PortalCredential{UserID: "<学号>", Password: "<密码>", Fingerprint: "<指纹>"}
 }
 
-// 探测失败（连不上）归 offline，不返回错误（docs/002 §3.3）。
+// 探测失败（连不上）归 offline，不返回错误（docs/contract.md §7.4）。
 func TestPortalStatusOfflineOnProbeFailure(t *testing.T) {
 	// 关闭的 fixture：请求必然失败。
 	dead := httptest.NewServer(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {}))

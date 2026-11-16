@@ -14,7 +14,7 @@ import (
 	buildversion "github.com/EchoPing07/kemaolife/internal/version"
 )
 
-// 版本号取自仓库唯一来源 internal/version.Version（docs/002 §1.1）：改版本只改那一行，
+// 版本号取自仓库唯一来源 internal/version.Version（docs/contract.md §2）：改版本只改那一行，
 // 不用构建参数覆盖，避免三端版本漂移；commit 是构建产物信息，仍由编译期注入：
 //
 //	go build -ldflags "-X main.commit=<提交号>"
@@ -121,7 +121,7 @@ func failWith(opts options, rt *session, err error) int {
 // withCLIHint 给凭据类错误补上「在本端怎么修」的指引。
 //
 // 为什么放在 cmd 层：core / app 是共用的，它们不知道用户在用 CLI 还是托盘，
-// 所以只报中性原因（「未配置学号」），由各端自己补命令（docs/002 §7 失败处理）。
+// 所以只报中性原因（「未配置学号」），由各端自己补命令（docs/cli.md §7 失败处理）。
 func withCLIHint(err error) error {
 	if model.CodeOf(err) != model.CodeCredentialMissing {
 		return err

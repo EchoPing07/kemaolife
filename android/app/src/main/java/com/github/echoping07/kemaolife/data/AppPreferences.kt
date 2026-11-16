@@ -36,7 +36,7 @@ class AppPreferences(context: Context) {
             putInt(KEY_TIMETABLE_INTERVAL, clamped(value, MIN_INTERVAL))
         }
 
-    /** 电费自动查询的最小间隔（分钟）。与课表同下限、同默认值（docs/002 §5.3）。 */
+    /** 电费自动查询的最小间隔（分钟）。与课表同下限、同默认值（docs/android.md）。 */
     var electricityIntervalMinutes: Int
         get() = clamped(prefs.getInt(KEY_ELECTRICITY_INTERVAL, DEFAULT_INTERVAL), MIN_INTERVAL)
         set(value) = prefs.editCommit {
@@ -49,7 +49,7 @@ class AppPreferences(context: Context) {
         set(value) = prefs.editCommit { putBoolean(KEY_CAMPUS_WIFI_ONLY, value) }
 
     /**
-     * 请求记录开关（默认关闭，docs/002 §2.1 规则 10）。
+     * 请求记录开关（默认关闭，docs/contract.md §6 规则 10）。
      *
      * 为什么要落盘：Go 侧记录器只存进程内存，进程被系统杀死后内容就没了；
      * 开关状态必须跨进程存活，否则每次冷启动都要用户重新打开。
@@ -75,7 +75,7 @@ class AppPreferences(context: Context) {
     /**
      * 上一次电费结果（UI 必需字段的 JSON）。
      *
-     * 为什么要落盘：电费页冷启动时也要「先出缓存再联网」（docs/002 §5.3）。
+     * 为什么要落盘：电费页冷启动时也要「先出缓存再联网」（docs/android.md）。
      * 由 Kotlin 白名单重建，不含 `roomName` / `roomVerify` / 学号 / Cookie。
      */
     var electricityCacheJson: String
@@ -86,13 +86,13 @@ class AppPreferences(context: Context) {
      * 上次课表周视图的展示镜像（[TimetableCache] 编码）。
      *
      * 冷启动首帧要在门面 Init 之前就渲染课表：正本快照含 Cookie 只能由 Go 读，
-     * 而 Init 是 JNI 调用，排在 IO 协程里。这里只存 DTO 展示字段（docs/002 §5.3）。
+     * 而 Init 是 JNI 调用，排在 IO 协程里。这里只存 DTO 展示字段（docs/android.md）。
      */
     var timetableCacheJson: String
         get() = prefs.getString(KEY_TIMETABLE_CACHE, "").orEmpty()
         set(value) = prefs.editCommit { putString(KEY_TIMETABLE_CACHE, value) }
 
-    /** 换账号时与电费缓存一起清掉，避免旧账号课表先显示（docs/002 §2.1 规则 2）。 */
+    /** 换账号时与电费缓存一起清掉，避免旧账号课表先显示（docs/contract.md §6 规则 2）。 */
     fun clearTimetableCache() {
         prefs.editCommit { putString(KEY_TIMETABLE_CACHE, "") }
     }
@@ -113,7 +113,7 @@ class AppPreferences(context: Context) {
         isDueAt(last, minutes, now)
 
     companion object {
-        /** 课表与电费的最小间隔：默认一致，均为 5 分钟（docs/002 §5.3）。 */
+        /** 课表与电费的最小间隔：默认一致，均为 5 分钟（docs/android.md）。 */
         const val DEFAULT_INTERVAL = 5
         const val DEFAULT_TIMETABLE_INTERVAL = DEFAULT_INTERVAL
         const val DEFAULT_ELECTRICITY_INTERVAL = DEFAULT_INTERVAL

@@ -9,7 +9,7 @@ import (
 
 // flexBool 兼容上游两种写法：`"result_":"true"` 与 `"result_":true`。
 //
-// api-docs/002 §4 记录的是字符串形式，但实测上游在拒绝分支会给布尔值
+// api-docs/contract.md §8 记录的是字符串形式，但实测上游在拒绝分支会给布尔值
 // （`{"code_":8099,"result_":false,...}`）。用 bool 直接解码会让整个响应
 // 解析失败并被误报成「响应格式异常」，把配置问题伪装成协议问题。
 type flexBool bool

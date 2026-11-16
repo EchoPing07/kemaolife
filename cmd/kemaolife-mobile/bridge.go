@@ -1,10 +1,10 @@
 // Package kemaolife 是 Android 侧的唯一门面：只导出两个字符串入口
-// Init / Call（docs/002 §2.1、001 §6.1）。
+// Init / Call（docs/contract.md §6）。
 //
 // 为什么只有字符串：gobind 对导出类型限制很严（结构体切片、跨 JNI 接口都不行），
 // 所以领域对象一律不跨边界，Go 内部保持强类型，只在边界付一次 JSON 编解码。
 //
-// 构建（TODO(D13)：工具链待定稿）：
+// 构建：
 //
 //	gomobile bind -target=android -androidapi 24 \
 //	    -javapkg com.github.echoping07.kemaolife.bridge \
@@ -33,7 +33,7 @@ import (
 
 // defaultCustomerCode 是学校代码内置默认值（学校事实，非个人隐私）。
 //
-// 按 AGENTS §5.6 放在 cmd 层而不是 internal/core，用户可在设置页覆盖。
+// 按 AGENTS §5.7 放在 cmd 层而不是 internal/core，用户可在设置页覆盖。
 const defaultCustomerCode = "3126"
 
 // defaultTimeout 是单次网络请求上限；课表同步含 CAS 登录 + 2 个请求，留足余量。
@@ -50,12 +50,12 @@ type initConfig struct {
 	StudentID   string `json:"studentId"`
 	EduPassword string `json:"eduPassword"`
 
-	// 电费：学校代码 + 可选独立学号，无密码（api-docs/002 §1）。
+	// 电费：学校代码 + 可选独立学号，无密码（api-docs/contract.md §1）。
 	CustomerCode string `json:"customerCode"`
 	// ElectricityStudentID 为空表示继承教务学号（设置页默认打开该开关）。
 	ElectricityStudentID string `json:"electricityStudentId"`
 
-	// 校园网：独立凭据，不复用教务密码（D9 已定稿）。
+	// 校园网：独立凭据，不复用教务密码。
 	CampusUser        string `json:"campusUser"`
 	CampusPassword    string `json:"campusPassword"`
 	CampusFingerprint string `json:"campusFingerprint"`
@@ -69,11 +69,11 @@ type initConfig struct {
 	TimeZoneOffsetSeconds int    `json:"timeZoneOffsetSeconds"`
 
 	// ResetSnapshot 为 true 时先删除本地课表快照再替换会话：凭据身份变更时必须
-	// 防止旧账号的课表先显示出来（docs/002 §2.1 规则 2）。缺省 false，老客户端不受影响。
+	// 防止旧账号的课表先显示出来（docs/contract.md §6 规则 2）。缺省 false，老客户端不受影响。
 	ResetSnapshot bool `json:"resetSnapshot"`
 
 	// RequestLog 为 true 时记录每次 HTTP 往返的方法 / URL / 标头 / 正文 / 响应元数据，
-	// 供设置页「日志」查看（docs/002 §5.3）。缺省 false = 不记录。
+	// 供设置页「日志」查看（docs/android.md）。缺省 false = 不记录。
 	//
 	// 记录只存进程内存、不进 logcat；Cookie 与凭据类字段恒遮罩（P1 / P2 / P6）。
 	RequestLog bool `json:"requestLog"`
@@ -82,7 +82,7 @@ type initConfig struct {
 // session 是一次 Init 组装好的依赖；配置随 Init 更新，避免每次调用重复解析。
 //
 // ctx / cancel 绑定会话代次：设置页保存凭据后重新 Init 会取消上一代次的在途请求，
-// 避免旧账号的响应覆盖新会话写出的快照（docs/002 §2.1 规则 9）。
+// 避免旧账号的响应覆盖新会话写出的快照（docs/contract.md §6 规则 9）。
 type session struct {
 	deps   app.Deps
 	campus app.CampusDeps
@@ -105,7 +105,7 @@ var (
 
 	// sharedLog 是进程级请求记录器：设置页保存凭据会重新 Init，但已记录的内容
 	// 不应因为「换了一代会话」就消失 —— 用户排查的是这段时间的全部请求。
-	// 默认关闭；只有用户在设置页打开才记录（docs/002 §5.3）。
+	// 默认关闭；只有用户在设置页打开才记录（docs/android.md）。
 	sharedLogOnce sync.Once
 	sharedLog     *platform.RequestLog
 )
@@ -127,7 +127,7 @@ func currentRequestLog() *platform.RequestLog {
 var timeZoneOnce sync.Once
 
 // Init is called by Kotlin once at startup and again after the settings page
-// saves (docs/002 §2.1). It returns the §2 envelope as JSON.
+// saves (docs/contract.md §6). It returns the §2 envelope as JSON.
 //
 // gobind copies exported doc comments into generated Java sources, and javac
 // reads them with the platform default charset (GBK on the build machine).
@@ -135,7 +135,7 @@ var timeZoneOnce sync.Once
 // fails on non-ASCII bytes. Chinese rationale stays on the unexported helpers.
 //
 // A failed Init keeps the previous session alive: one bad call must not brick
-// a running app. TODO(D12): envelope unification still pending user decision.
+// a running app.
 func Init(configJSON string) string {
 	var cfg initConfig
 	if err := json.Unmarshal([]byte(configJSON), &cfg); err != nil {
@@ -232,7 +232,7 @@ func Init(configJSON string) string {
 //
 // 为什么需要它：context 取消只能拦住还在等网络的请求；已经拿到响应的旧同步
 // 仍会走到 SaveSnapshot。凭据变更后再 Init 时，旧会话写进来的 Cookie / 课表
-// 会污染新账号的本地状态（docs/002 §2.1 规则 9）。
+// 会污染新账号的本地状态（docs/contract.md §6 规则 9）。
 type generationStore struct {
 	inner core.KVStore
 	gen   uint64
@@ -260,7 +260,7 @@ func isCurrentGeneration(gen uint64) bool {
 	return cur != nil && cur.gen == gen
 }
 
-// callRequest 是门面请求（docs/002 §2.1）。op 之外的字段按 op 取用。
+// callRequest 是门面请求（docs/contract.md §6）。op 之外的字段按 op 取用。
 type callRequest struct {
 	Op    string `json:"op"`
 	Week  int    `json:"week"`
@@ -274,7 +274,7 @@ type callRequest struct {
 }
 
 // Call takes a request JSON and returns a response JSON. Unknown op yields
-// error code 2001 instead of an empty success (docs/002 §2.1 rule 5).
+// error code 2001 instead of an empty success (docs/contract.md §6 rule 5).
 //
 // ASCII-only comment on purpose: see Init.
 func Call(reqJSON string) string {
@@ -308,10 +308,10 @@ func Call(reqJSON string) string {
 	case "timetable.week":
 		return s.timetableWeek(req.Week)
 	case "timetable.export":
-		// 导出整学期课表（WakeUp 课程表 CSV）：只读缓存，0 请求（docs/002 §2.1）。
+		// 导出整学期课表（WakeUp 课程表 CSV）：只读缓存，0 请求（docs/contract.md §6）。
 		return s.timetableExport()
 	case "timetable.probe":
-		// 设置页测试按钮：同步一次并回报耗时与课时数（docs/002 §5.3）。
+		// 设置页测试按钮：同步一次并回报耗时与课时数（docs/android.md）。
 		return s.timetableProbe()
 	case "electricity.report":
 		return s.electricityReport(req.Month)
@@ -347,7 +347,7 @@ func currentSession() *session {
 
 // timetableSync 对应 CLI 的 `timetable sync`：只刷新、不查询。
 //
-// data.syncedAt 由用例给出；信封层 syncedAt 也必须给出，保持与 CLI 同构（docs/002 §2）。
+// data.syncedAt 由用例给出；信封层 syncedAt 也必须给出，保持与 CLI 同构（docs/contract.md §5）。
 func (s *session) timetableSync() string {
 	result, err := app.SyncTimetable(s.ctx, s.deps, s.cfg)
 	if err != nil {
@@ -360,8 +360,8 @@ func (s *session) timetableSync() string {
 
 // timetableDate 是 `timetable date` 的门面口径：**只读缓存**。
 //
-// 为什么与 CLI 不同：CLI 的查询动作自带刷新（docs/002 §1.3），而 Android 的
-// 刷新是 UI 另起的独立动作 `timetable.sync`（docs/002 §5.3）。查询直接读缓存，
+// 为什么与 CLI 不同：CLI 的查询动作自带刷新（docs/contract.md §4），而 Android 的
+// 刷新是 UI 另起的独立动作 `timetable.sync`（docs/android.md）。查询直接读缓存，
 // 切周、选日期、每次打开都不再联网，联网失败也照常出旧课表。
 //
 // 纯读缓存没有「刷新失败」这回事，所以 `stale` 恒为 false；
@@ -382,7 +382,7 @@ func (s *session) timetableWeek(week int) string {
 	}
 	data := map[string]any{"week": result.Week, "days": result.Days}
 	// lastWeek 是可选字段（0 = 未知）：Android 翻页容器用它确定翻页边界，
-	// 老客户端忽略即可（docs/002 §3.1）。
+	// 老客户端忽略即可（docs/contract.md §7.1）。
 	if result.LastWeek > 0 {
 		data["lastWeek"] = result.LastWeek
 	}
@@ -393,7 +393,7 @@ func (s *session) timetableWeek(week int) string {
 //
 // 与 timetable.week 同属 CacheOnly：导出的是「本机已有的课表」，不联网；
 // 数据时间由信封 syncedAt 给出，UI 必须一并展示——不能让用户误以为
-// 导出的是刚从教务拉下来的数据（docs/002 §5.3）。
+// 导出的是刚从教务拉下来的数据（docs/android.md）。
 func (s *session) timetableExport() string {
 	result, err := app.ExportTimetableCSV(s.ctx, s.deps, s.cfg)
 	if err != nil {
@@ -414,7 +414,7 @@ func (s *session) electricityReport(month string) string {
 	return success(s.clock.Now(), report)
 }
 
-// campusStatus 判态；offline 是正常状态，不是错误（docs/002 §3.3）。
+// campusStatus 判态；offline 是正常状态，不是错误（docs/contract.md §7.4）。
 func (s *session) campusStatus() string {
 	status, err := app.GetCampusNetworkStatus(s.ctx, s.campus)
 	if err != nil {
@@ -437,13 +437,13 @@ func (s *session) campusAction(action func(ctx context.Context, d app.CampusDeps
 	return success(s.clock.Now(), status)
 }
 
-// probeResult 是「测试」按钮的统一回报（docs/002 §5.3 tab1 / tab2）。
+// probeResult 是「测试」按钮的统一回报（docs/android.md tab1 / tab2）。
 //
 // 测试动作一定会有个结果，所以这里刻意让信封 `ok:true`、成败放在 `data.ok`：
 // 失败时也要能看到耗时与脱敏后的原因，才能在设置页判断是网络慢还是凭据错。
 //
 // Report / CampusStatus 是可选字段：让 UI 用**同一次请求**的结果刷新卡片，
-// 不再二次联网；老客户端忽略即可（docs/002 §2.1 规则 8）。
+// 不再二次联网；老客户端忽略即可（docs/contract.md §6 规则 7）。
 type probeResult struct {
 	OK           bool                     `json:"ok"`
 	ElapsedMs    int64                    `json:"elapsedMs"`
@@ -542,7 +542,7 @@ func (s *session) campusProbe() string {
 
 // —— 请求记录（设置页「日志」） ——
 //
-// 四个 op 只为 Android 设置页服务（docs/002 §5.3）：开关、列表（新的在前）、
+// 四个 op 只为 Android 设置页服务（docs/android.md）：开关、列表（新的在前）、
 // 单条详情（含已脱敏的标头与正文）、清空。数据全部来自进程内存，不落盘。
 
 // logEnable 打开 / 关闭记录。打开时清空旧内容：
@@ -592,7 +592,7 @@ func (s *session) logClear() string {
 	}))
 }
 
-// envelopeWithStale 组装带 stale / syncedAt 的课表信封（docs/002 §2）。
+// envelopeWithStale 组装带 stale / syncedAt 的课表信封（docs/contract.md §5）。
 func envelopeWithStale(now time.Time, data any, stale bool, syncedAt time.Time) string {
 	env := model.Success(now, data)
 	env.Stale = model.BoolPtr(stale)

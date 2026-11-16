@@ -1,8 +1,8 @@
 # Android 构建说明
 
-> 状态：M3 已在 Android 15 真机跑通课表、电费与校园网手动动作的基础链路；单页周视图 / 横向翻页、WakeUp 课程表 CSV 导出、多级设置与外观页由 Go 单测、Kotlin 纯函数单测及构建流程覆盖，增量未在真机复验。
-> `v0.3.0` 起 `release.yml` 自动产出四个已签名 APK；当前源码版本为 `v0.5.5`（见 `../internal/version/version.go`）。同版 Release 另有 macOS 预编译 CLI 两个包（darwin amd64 / arm64，未经 Apple 签名 / 公证、未经过实机测试），本文件只说明 Android APK 的构建。
-> 契约以 `docs/002` 为准，本文件只说「怎么把 APK 造出来」；呈现层行为详见 `docs/002 §5.3`。
+> 状态：课表、电费与校园网手动动作的基础链路已在 Android 15 真机跑通；单页周视图 / 横向翻页、WakeUp 课程表 CSV 导出、多级设置与外观页由 Go 单测、Kotlin 纯函数单测及构建流程覆盖，增量未在真机复验。
+> `release.yml` 自动产出四个已签名 APK；版本号以 `../internal/version/version.go` 为准，发布流程见 `../docs/release.md`。
+> 契约以 `../docs/contract.md` 为准，本文件只说「怎么把 APK 造出来」；呈现层行为详见 `../docs/android.md`。
 
 ## 1. 前置工具
 
@@ -29,8 +29,7 @@ gomobile init
 > `go.mod` 里出现 `golang.org/x/mobile` 是 gomobile 的硬要求（它要读模块里的
 > `bind` 包）；这条依赖只服务构建工具链，不进 App 的运行时逻辑。
 
-> 工具链版本（NDK / `gomobile` / JDK）仍属 `TODO(D13)` 待确认项；此处按描述性基线记录，
-> 不代表 D13 已定稿。`.github/actions/setup-android-gomobile/action.yml` 与本节保持同一版本。
+> 工具链版本（NDK / `gomobile` / JDK）与 `.github/actions/setup-android-gomobile/action.yml` 保持同一版本。
 
 ## 2. 生成 AAR（把 Go 门面编进 Android）
 
@@ -44,9 +43,9 @@ gomobile bind -target=android -androidapi 24 \
 产出的 Java 类是 `com.github.echoping07.kemaolife.bridge.kemaolife.Kemaolife`。
 
 > **注意多出来的一层 `kemaolife`**：`-javapkg` 只决定前缀，末段固定是该 Go 包的包名
-> （`package kemaolife`）。M0.5 spike 实测如此，Kotlin 的 import 已按实测写。
+> （`package kemaolife`）。实测如此，Kotlin 的 import 已按实测写。
 >
-> 改 `docs/002 §0` 里的包名时必须同步改这里与 `Bridge.kt` 的 import。
+> 改 `../docs/contract.md §1` 里的包名时必须同步改这里与 `Bridge.kt` 的 import。
 
 > `libs/*.aar` 是构建产物，**不入版本库**（见 `.gitignore`）；
 > 新克隆仓库后先跑一次上面的命令。
@@ -151,9 +150,9 @@ adb shell am start -n com.github.echoping07.kemaolife/.MainActivity
 - `10.0.128.3`（Portal 域另配仅该域生效的信任锚点；自签证书跳过校验由 Go 侧 Portal 专用 HTTPS 客户端完成）
 
 其余域名仍走系统默认策略；不设全局 `usesCleartextTraffic`，
-也不全局关闭 TLS 校验（001 §6.2、AGENTS §5.4）。
+也不全局关闭 TLS 校验（`../docs/architecture.md` §6、AGENTS §5.4）。
 
 Android 12+ 另有 `app/src/main/res/xml/data_extraction_rules.xml`：云备份与设备迁移
 排除 `root` / `database` / `sharedpref` / `external` 全部私有数据；
 配合 `AndroidManifest.xml` 的 `allowBackup=false`，凭据密文、Go 快照（含 Cookie）、
-课表展示镜像与电费缓存都不参与备份 / 迁移（002 §5.3）。
+课表展示镜像与电费缓存都不参与备份 / 迁移（`../docs/privacy.md` §6）。

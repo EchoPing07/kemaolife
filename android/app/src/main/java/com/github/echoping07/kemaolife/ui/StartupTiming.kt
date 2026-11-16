@@ -1,7 +1,7 @@
 package com.github.echoping07.kemaolife.ui
 
 /**
- * 启动时序的纯策略（docs/002 §5.3「每次打开」）。
+ * 启动时序的纯策略（docs/android.md「每次打开」）。
  *
  * 为什么单独抽出来：ViewModel 依赖 Android / JNI，JVM 单测跑不了，而「门面 Init
  * 慢于 ON_RESUME 时挂起、Init 完成后只补跑一次」是最容易回归的隐性契约。

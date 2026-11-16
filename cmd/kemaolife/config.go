@@ -17,7 +17,7 @@ import (
 // stdin 在测试里被替换，避免直接依赖终端。
 var stdin io.Reader = os.Stdin
 
-// cmdConfig 实现 config init / set customercode / show（docs/002 §1.1）。
+// cmdConfig 实现 config init / set customercode / show（docs/contract.md §2）。
 func cmdConfig(ctx context.Context, opts options, rt *session, args []string) error {
 	_ = ctx // 配置操作不联网，保留签名与其它子命令一致
 	if len(args) == 0 {
@@ -139,7 +139,7 @@ func configSet(opts options, rt *session, args []string) error {
 		return err
 	}
 
-	// 学校代码属敏感配置：对外只报来源，不回显取值（P1 / docs/002 §1.1）。
+	// 学校代码属敏感配置：对外只报来源，不回显取值（P1 / docs/contract.md §2）。
 	data := map[string]string{
 		"customerCode":       app.MaskSecret(value),
 		"customerCodeSource": app.CustomerCodeSource(rt.deps, cfg),
@@ -149,7 +149,7 @@ func configSet(opts options, rt *session, args []string) error {
 	})
 }
 
-// configShowSchema 是 config show 的 data（docs/002 §1.1）。
+// configShowSchema 是 config show 的 data（docs/contract.md §2）。
 type configShowSchema struct {
 	StudentID          string `json:"studentId"`
 	EduPassword        string `json:"eduPassword"`
@@ -207,7 +207,7 @@ func readLine(r *bufio.Reader) (string, error) {
 	return strings.TrimRight(line, "\r\n"), nil
 }
 
-// writePrompt 把交互提示写到 stderr：--json 时 stdout 必须只有信封（docs/002 §1.1）。
+// writePrompt 把交互提示写到 stderr：--json 时 stdout 必须只有信封（docs/contract.md §2）。
 func writePrompt(s string) { fmt.Fprint(stderr, s) }
 
 // formatNow 统一信封 ts；命令内部时间一律经 deps.Clock（AGENTS §6）。

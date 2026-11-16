@@ -6,7 +6,7 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 /**
- * 启动时序（docs/002 §5.3「每次打开」）：
+ * 启动时序（docs/android.md「每次打开」）：
  *  - 生命周期补发的初始 ON_RESUME 不算一次打开；
  *  - Init 未就绪时到来的打开要挂起，Init 完成后只补跑一次；
  *  - Init 失败时保留挂起，不能永久丢掉那一轮无条件联网。

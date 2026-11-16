@@ -127,7 +127,7 @@ H5 兜底是微信跳转用的公开入口（`extra_params=from_wx_jump%3D1`）�
 
 ## 6. 本仓库采用范围
 
-Android「更多」页 `取件码` 卡片只采用 **② 淘宝取件码 / ③ 拼多多身份码** 两个入口（完整回退链）；① 菜鸟身份码与 ④ 待取快递入口不实现，仅存档。实现位于 Kotlin 呈现层（`android/.../ui/PickupCode.kt`），不进 `core` / 门面、不新增 `op`；功能契约见 `docs/002` §5.3 tab2。
+Android「更多」页 `取件码` 卡片只采用 **② 淘宝取件码 / ③ 拼多多身份码** 两个入口（完整回退链）；① 菜鸟身份码与 ④ 待取快递入口不实现，仅存档。实现位于 Kotlin 呈现层（`android/.../ui/PickupCode.kt`），不进 `core` / 门面、不新增 `op`；功能行为见 [docs/android.md §4](../../docs/android.md#4-tab2-更多)。
 
 ---
 

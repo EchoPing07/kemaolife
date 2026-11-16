@@ -206,7 +206,7 @@ func (f *fakeSchool) client() *Client {
 	return NewClient(noRedirDoer{Client: &http.Client{}}, fixedClock(), f.cas.URL, f.jsb.URL)
 }
 
-// 会话失效也返回 200：必须判响应内容（api-docs/001 §6.1）。
+// 会话失效也返回 200：必须判响应内容（api-docs/001 §1 / §7）。
 func TestSyncSessionExpiredReturns3002(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
@@ -286,7 +286,7 @@ func TestLooksLikeJsxsdPageAcceptsRealPage(t *testing.T) {
 }
 
 // 会话失效的真实形状：IsAlive 必须返回 false，Sync 必须返还 3002 而不是 4002。
-// 只有 3002 才会触发 app 层重登（docs/002 §1.3），4002 会让链路永久卡死。
+// 只有 3002 才会触发 app 层重登（docs/contract.md §4），4002 会让链路永久卡死。
 func TestSyncSessionExpiredStubIs3002(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		// 旧 Cookie 一律被回成 188 字节桩页，HTTP 200。

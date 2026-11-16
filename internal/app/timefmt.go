@@ -8,7 +8,7 @@ import (
 // localZone 让时间格式化统一落在本地时区，避免 UTC 转日期差一天（AGENTS §6）。
 func localZone() *time.Location { return time.Local }
 
-// formatRFC3339 统一信封里的时间格式（docs/002 §2 `ts` / `syncedAt`）。
+// formatRFC3339 统一信封里的时间格式（docs/contract.md §5 `ts` / `syncedAt`）。
 func formatRFC3339(t time.Time) string {
 	if t.IsZero() {
 		return ""
@@ -18,7 +18,7 @@ func formatRFC3339(t time.Time) string {
 
 // normalizeTimestamp 把上游多种时间写法统一成 RFC3339（本地时区）。
 //
-// 电费的可选写法（api-docs/002）：
+// 电费的可选写法（api-docs/contract.md）：
 //   - `2026-11-04`（opdtdate，数据截止日）
 //   - `2026-11-04 22:41:37`（collecdate，采集时刻）
 //

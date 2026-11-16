@@ -5,9 +5,9 @@ import com.github.echoping07.kemaolife.bridge.kemaolife.Kemaolife
 import org.json.JSONObject
 
 /**
- * 门面调用的唯一入口（docs/002 §2.1）：Kotlin 只构造请求 JSON、解析响应信封。
+ * 门面调用的唯一入口（docs/contract.md §6）：Kotlin 只构造请求 JSON、解析响应信封。
  *
- * 为什么集中在 DataSource：`op` 是契约（改动要先改 docs/002），
+ * 为什么集中在 DataSource：`op` 是契约（改动要先改 docs/contract.md），
  * 散落在 UI 里迟早会拼错字符串或漏判 `ok`。
  *
  * 线程纪律：所有 `Call` 都会做网络 I/O，**必须在 IO 线程调用**（见 Repository）。
@@ -23,14 +23,14 @@ class Bridge(private val context: Context) {
     private var initError: String? = null
 
     /**
-     * 把「可写目录 + 解密后的凭据」交给 Go（001 §6.2）。
+     * 把「可写目录 + 解密后的凭据」交给 Go（docs/architecture.md §6）。
      *
      * Kotlin 负责 Keystore 加解密与持久化，Go 只处理内存里的凭据；
      * 设置页保存后重新调用本方法即可热更新，门面不提供 `config.*` op。
      */
     /**
      * `resetSnapshot = true` 用于凭据身份变更：Go 侧先删本地快照（含旧 Cookie）再换会话，
-     * 避免旧账号课表在 CacheOnly 路径上先显示出来（docs/002 §2.1 规则 2）。
+     * 避免旧账号课表在 CacheOnly 路径上先显示出来（docs/contract.md §6 规则 2）。
      */
     fun init(credentials: Credentials, resetSnapshot: Boolean = false, requestLog: Boolean = false): Envelope {
         // 时区必须由 Kotlin 传入：Go 在 Android 上找不到系统的 zoneinfo 目录，

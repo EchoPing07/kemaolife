@@ -17,11 +17,6 @@ import (
 	"github.com/EchoPing07/kemaolife/internal/core/model"
 )
 
-// TODO(D10): 待定 —— Windows 原生 UI 技术栈仍为待确认项；当前按
-// docs/001 §6.4 的描述性基线用标准库 syscall 直调 Win32，不代表 D10 定稿。
-// TODO(D11): 待定 —— 联网探测目标仍为待确认项；当前按 api-docs/003 的
-// 固定探测地址判 302，不按电费接口可达性触发自动登录。
-
 // Portal 端点（api-docs/003 §1）。属学校协议事实，允许入仓。
 const (
 	portalBase     = "https://10.0.128.3"
@@ -36,7 +31,7 @@ const (
 	settleDelay   = 3 * time.Second
 )
 
-// PortalCredential 是校园网凭据：独立字段，不复用教务密码（D9 已定稿）。
+// PortalCredential 是校园网凭据：独立字段，不复用教务密码。
 //
 // 只在内存里出现，落盘由调用方经 DPAPI 加密（P5）。
 type PortalCredential struct {
@@ -127,7 +122,7 @@ func (p *PortalNetwork) SetRequestLog(l *RequestLog) {
 	}
 }
 
-// Status 探测判态；探测失败归 offline，不返回错误（docs/002 §3.3）。
+// Status 探测判态；探测失败归 offline，不返回错误（docs/contract.md §7.4）。
 func (p *PortalNetwork) Status(ctx context.Context) (model.CampusStatus, error) {
 	probe, err := p.probeOnce(ctx)
 	if err != nil {
@@ -208,7 +203,6 @@ func (p *PortalNetwork) Relogin(ctx context.Context) error {
 // EnsureCampusNetwork 是自动模式下的电费轮询前置：已在线不动，未认证就登录，
 // 不在校园网就返回错误；失败不阻断本轮电费查询，也不单独重试。
 // 电费查询连续失败时的指数退避由 agent.Engine.Run 统一接管。
-// TODO(D11): 待定 —— 当前只按固定探测地址判态，未以电费接口可达性为准。
 func (p *PortalNetwork) EnsureCampusNetwork(ctx context.Context) error {
 	probe, err := p.probeOnce(ctx)
 	if err != nil || probe.State == model.CampusOffline {

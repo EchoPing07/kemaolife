@@ -21,9 +21,9 @@ type ScheduleResult struct {
 
 // CacheOption 控制查询是否先联网刷新快照。
 //
-// 为什么需要它：CLI 的查询动作是「先刷新再计算」（docs/002 §1.3，D15 已定稿），
+// 为什么需要它：CLI 的查询动作是「先刷新再计算」（docs/contract.md §4），
 // 而 Android 每次打开、切周、选日期只要**直接读缓存**——联网刷新由 UI 另起的
-// 独立 `timetable.sync` 负责，成功后再重新读缓存（docs/002 §5.3）。
+// 独立 `timetable.sync` 负责，成功后再重新读缓存（docs/android.md）。
 // 两者是同一份快照、两条链路，不能混成一个「查询即刷新」。
 type CacheOption int
 
@@ -36,7 +36,7 @@ const (
 )
 
 // validCacheOption 拒绝非法枚举值：裸 int 传入时 if mode == RefreshFirst 与
-// if mode != CacheOnly 会给出不一致行为（docs/002 §2.1 规则 7）。
+// if mode != CacheOnly 会给出不一致行为（docs/contract.md §6 规则 6）。
 func validCacheOption(mode CacheOption) error {
 	if mode != RefreshFirst && mode != CacheOnly {
 		return model.NewError(model.CodeInvalidArgument, "非法的课表查询模式")
@@ -46,13 +46,13 @@ func validCacheOption(mode CacheOption) error {
 
 // GetSchedule 查询某一天课表。
 //
-// RefreshFirst 语义（docs/002 §1.3、D15）：
+// RefreshFirst 语义（docs/contract.md §4）：
 //   - 刷新成功 → 用最新快照计算，Stale=false，SyncedAt=本次同步时间；
 //   - 刷新失败但有旧快照 → 用旧快照计算，Stale=true，SyncedAt=旧快照时间，
 //     不返回错误（查询照常可用，让调用方通过 Stale 告知用户数据时间）；
 //   - 刷新失败且无旧快照 → 返回错误，由调用方映射退出码。
 //
-// CacheOnly 语义（docs/002 §5.3）：不刷新，Stale 恒 false —
+// CacheOnly 语义（docs/android.md）：不刷新，Stale 恒 false —
 // 「旧快照」这个概念属于刷新失败，纯读缓存没有「旧」可言。
 func GetSchedule(ctx context.Context, d Deps, cfg model.Config, date model.Date, mode CacheOption) (ScheduleResult, error) {
 	if err := validCacheOption(mode); err != nil {
@@ -83,7 +83,7 @@ func GetSchedule(ctx context.Context, d Deps, cfg model.Config, date model.Date,
 	}, nil
 }
 
-// cacheMiss 决定「没有快照」时报什么错（docs/002 §2.1 规则 7）。
+// cacheMiss 决定「没有快照」时报什么错（docs/contract.md §6 规则 6）。
 //
 // 只有哨兵 ErrSnapshotAbsent（存储里从来没写入过快照）才在 CacheOnly 下映射为
 // 3001「请刷新一次」；损坏 / 版本不匹配 / 内容不完整 / IO 错误一律保留 3003，
@@ -97,7 +97,7 @@ func cacheMiss(mode CacheOption, loadErr error) error {
 
 // refreshSnapshot 尝试刷新快照，返回刷新是否失败。
 //
-// 缺教务凭据时不抛错：有旧快照时仍可查并标 stale（docs/002 §1.3）；
+// 缺教务凭据时不抛错：有旧快照时仍可查并标 stale（docs/contract.md §4）；
 // 无旧快照时由调用方拿到 refreshErr 并映射为退出码 3。
 func refreshSnapshot(ctx context.Context, d Deps, cfg model.Config) error {
 	if cfg.StudentID == "" || cfg.EduPassword == "" {
@@ -110,7 +110,7 @@ func refreshSnapshot(ctx context.Context, d Deps, cfg model.Config) error {
 // WeekResult 是某周查询结果。
 //
 // LastWeek 是快照推断出的学期最后一周，供 Android 翻页容器确定翻页边界
-// （docs/002 §3.1 的可选字段）；快照缺失时为 0 = 未知，调用方不得据此拦截翻页。
+// （docs/contract.md §7.1 的可选字段）；快照缺失时为 0 = 未知，调用方不得据此拦截翻页。
 type WeekResult struct {
 	Week     int
 	Days     []model.DaySchedule
@@ -151,7 +151,7 @@ func GetWeekSchedule(ctx context.Context, d Deps, cfg model.Config, week int, mo
 		} else {
 			// 假期 / 学期外：按「今天所在周」取 7 天并统一标 InSemester:false。
 			// 必须用向下取整：Go 的 / 对负数向零截断，学期前会算出第 1 周而不是
-			// 今天所在的那一周，把用户直接扔到开学第一周（docs/002 §1.1）。
+			// 今天所在的那一周，把用户直接扔到开学第一周（docs/contract.md §2）。
 			outsideSemester = true
 			today := model.NewDate(d.Clock.Now())
 			resolved = floorDiv(today.DaysSince(snap.Week1Monday), 7) + 1

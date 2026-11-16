@@ -23,12 +23,12 @@ var (
 	procSetAppUserModelID = shell32.NewProc("SetCurrentProcessExplicitAppUserModelID")
 )
 
-// AppUserModelID 是 Windows 系统通知的进程显式标识（docs/002 §0；D4 已定稿）。
+// AppUserModelID 是 Windows 系统通知的进程显式标识（docs/contract.md §1）。
 const AppUserModelID = "Kemaolife.Agent"
 
 // SetAppUserModelID 给进程设置显式 AppUserModelID。
 //
-// D4 已定稿为「系统通知为主」：进程级标识让 Shell 把 NIF_INFO 识别为
+// 系统通知为主：进程级标识让 Shell 把 NIF_INFO 识别为
 // Kemaolife.Agent 发出的系统通知；具体样式由 Windows 版本决定，不承诺
 // WinRT Toast 或操作中心归档（那需要 COM 激活器与快捷方式，另行决策）。
 // 必须在创建窗口 / 托盘图标之前调用，进程生命周期内只能设置一次。
@@ -148,7 +148,7 @@ func (t *Tray) SetTip(tip string) error {
 
 // Notify 弹一条系统通知（满足 core.Notifier）。
 //
-// D4 已定稿为「系统通知为主」：进程启动时设置显式 AppUserModelID
+// 系统通知为主：进程启动时设置显式 AppUserModelID
 // （见 SetAppUserModelID），Shell_NotifyIcon 的 NIF_INFO 由 Windows 以
 // 系统通知形式呈现；托盘状态与菜单仍作为辅助展示。具体样式随 Windows
 // 版本变化，不承诺 WinRT Toast 或操作中心归档；也不引入 COM / 快捷方式。
@@ -225,7 +225,7 @@ func NewTipSetter(t *Tray) *TipSetter { return &TipSetter{tray: t} }
 
 // Set 更新托盘悬浮提示。
 //
-// docs/002 §5.2 要求错误原因在悬浮提示里分行显示，因此保留 FormatStatus
+// docs/windows.md 要求错误原因在悬浮提示里分行显示，因此保留 FormatStatus
 // 生成的多行文本，不再压成一句话。NOTIFYICONDATAW.szTip 的 128 个 UTF-16
 // 码元上限由 copyUTF16 兜底（按码元截断并保证 NUL 结尾），既不会把中文
 // 截成半个字，也不会把错误行整体吞掉。

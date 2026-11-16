@@ -142,7 +142,7 @@ func TestUnknownFlagExit2(t *testing.T) {
 	}
 }
 
-// 课表查询在「无凭据 + 无快照」时必须退出码 3（docs/002 §1.3：
+// 课表查询在「无凭据 + 无快照」时必须退出码 3（docs/contract.md §4：
 // 无旧快照可回落时才失败）。
 func TestTimetableWithoutSnapshotExit3(t *testing.T) {
 	code, out, _ := runCLI(t, nil, "", "--json", "timetable")

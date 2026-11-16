@@ -17,7 +17,7 @@ type Deps struct {
 	// ConfigStore 存配置（0600）。
 	ConfigStore core.KVStore
 
-	// DefaultCustomerCode 由构建期注入或发行包配置提供，仓库内不出现真实值（AGENTS §5.6）。
+	// DefaultCustomerCode 由构建期注入或发行包配置提供，仓库内不出现真实值（AGENTS §5.7）。
 	DefaultCustomerCode string
 
 	// CASBaseURL / JSBBaseURL / ElectricityEndpoint 仅供测试覆盖，正常留空。

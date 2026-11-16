@@ -16,7 +16,7 @@ type ExportResult struct {
 	CSV      string `json:"csv"`
 	Filename string `json:"filename"`
 	// SyncedAt 是快照同步时间（RFC3339，本地时区）：CSV 内容来自这一份快照，
-	// 导出侧必须能说明数据时间（docs/002 §5.3）。
+	// 导出侧必须能说明数据时间（docs/android.md）。
 	SyncedAt string `json:"syncedAt"`
 	// LessonCount 是写进 CSV 的课节行数（不含表头），供 UI 回报「导出多少条」。
 	LessonCount int `json:"lessonCount"`
@@ -25,7 +25,7 @@ type ExportResult struct {
 // ExportTimetableCSV 把本地快照导出成 WakeUp 课程表可导入的 CSV。
 //
 // 只读缓存（CacheOnly，0 请求）：导出是「把这台机器上已有的课表带走」，
-// 不是一次查询；联网刷新仍由独立的 timetable.sync 承担（docs/002 §5.3）。
+// 不是一次查询；联网刷新仍由独立的 timetable.sync 承担（docs/android.md）。
 // 因此这里与课表查询一样不要求 HTTP 端口，也不需要 ctx / cfg。
 func ExportTimetableCSV(_ context.Context, d Deps, _ model.Config) (ExportResult, error) {
 	if err := ensureDeps(d, false, true); err != nil {

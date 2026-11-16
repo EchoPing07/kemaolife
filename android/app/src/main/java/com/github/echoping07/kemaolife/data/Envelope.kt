@@ -3,7 +3,7 @@ package com.github.echoping07.kemaolife.data
 import org.json.JSONObject
 
 /**
- * 门面响应信封（docs/002 §2）。
+ * 门面响应信封（docs/contract.md §5）。
  *
  * 与 CLI `--json` 同构：`ok` / `data` / `error{code,message}` / `ts` / `stale` / `syncedAt`。
  * Kotlin 侧只做反序列化与展示，不重新计算任何业务数据（AGENTS A3）。
@@ -51,5 +51,5 @@ data class Envelope(
     }
 }
 
-/** 错误对象；`code` 取 docs/002 §4 的 1001–5001 域。 */
+/** 错误对象；`code` 取 docs/contract.md §8 的 1001–5001 域。 */
 data class ApiError(val code: Int, val message: String)

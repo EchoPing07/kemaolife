@@ -1,7 +1,7 @@
 name: Setup Android + gomobile
 description: 安装 JDK 17 / Android SDK / NDK，生成 gomobile AAR；工具链版本取自 android/README.md 基线
 
-# TODO(D13): NDK / gomobile 工具链是否纳入仍是待确认项；这里按描述性基线落地，不代表定稿。
+# NDK / gomobile 工具链版本与 android/README.md 保持一致。
 # 版本与 android/README.md §1 保持一致：compileSdk 34 / build-tools 34.0.0 / NDK r27c。
 
 runs:

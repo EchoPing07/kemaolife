@@ -1,6 +1,6 @@
 # 安全与隐私报告
 
-本项目只处理使用者本人的校园数据。真实学号、姓名、宿舍房间号、密码、Cookie、课表快照内容、用户本机内网 IP、MAC、`distoken` 与指纹值，禁止出现在仓库、Issue、PR 与提交信息中。学校代码 `customercode`、学校公开的 Portal / 探测 IP 与 BRAS 名称属学校与协议事实，允许入仓。
+本项目的隐私与合规规则见 [docs/privacy.md](docs/privacy.md)（只查本人数据、个人隐私禁止入仓、凭据加密存储、日志脱敏）。本文只定义**报告渠道与处置流程**。
 
 ## 请报告
 
@@ -26,14 +26,5 @@
 1. 确认并移除公开可见内容，必要时改写历史并通知已 fork / clone 的使用者。
 2. 检查日志、测试夹具、构建产物与配置示例是否同源泄露。
 3. 如涉及凭据，按平台加密存储要求重新实现，并提示使用者轮换相关凭据。
-4. 在 `docs/` 对应变更记录追加一行，不记录原始值。
 
-## 合规边界
-
-- 电费接口无鉴权，仅限查询本人数据；不实现多账号、批量遍历或代查。
-- 不把电费 / 教务 / Portal 接口包装成 HTTP API、公开脚本或 SaaS。
-- 凭据只进平台加密存储：CLI（linux / darwin）0700 目录 / 0600 文件、Windows 托盘 DPAPI、Android Keystore。
-- 课表快照含 Cookie，等同凭据；日志只记录错误类别、耗时、状态码；上游错误文案必须先脱敏再输出。
-- macOS 预编译包（darwin amd64 / arm64）未经 Apple Developer ID 签名、未经 Apple 公证（notarization），也未在真实 Mac 上运行；下载后先核对 `SHA256SUMS` 再运行，按 README 的说明处理 `com.apple.quarantine`，不要为来历不明的二进制绕过 Gatekeeper。
-
-更完整的约束见 [README.md](README.md#安全与隐私) 与 [CONTRIBUTING.md](CONTRIBUTING.md#1-适用范围与隐私前置条件)。
+下载预编译产物时先核对 `SHA256SUMS` 再运行；macOS 包未签名未公证，处理 Gatekeeper 前请阅读 [CLI 手册 §6](docs/cli.md#6-macos-注意事项试验性支持)，不要为来历不明的二进制绕过 Gatekeeper。

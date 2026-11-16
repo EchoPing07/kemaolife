@@ -10,7 +10,7 @@ import (
 
 // SingleFileStore 是「整份内容存在一个文件里」的 KVStore，用于配置。
 //
-// 为什么不用 FileStore：docs/002 §0 把配置路径固定为
+// 为什么不用 FileStore：docs/contract.md §1 把配置路径固定为
 // `~/.config/kemaolife/config.json`，而不是按 key 分文件。
 // 只接受一个键（config），其余键一律报错，避免误用。
 type SingleFileStore struct {

@@ -1,4 +1,4 @@
-// Package alert 实现 Windows 端电费告警判定（docs/002 §6）。
+// Package alert 实现 Windows 端电费告警判定（docs/windows.md §6）。
 //
 // 这里只有纯函数：不读时钟、不发通知、不写文件。调用方（cmd/kemaolife-agent）
 // 负责把 Clock 取到的时间传进来、把通知交给 Notifier、把状态留在内存。
@@ -11,7 +11,7 @@ import (
 	"github.com/EchoPing07/kemaolife/internal/core/model"
 )
 
-// 默认值（docs/002 §6「默认值」表）。轮询间隔已定稿；阈值与静默时段待 D3 定稿。
+// 默认值（docs/windows.md §6「默认值」表）。阈值与静默时段可配置。
 const (
 	DefaultBalanceThreshold = 10.0
 	DefaultDaysThreshold    = 3
@@ -20,9 +20,9 @@ const (
 
 	// PollIntervalFloor 是轮询间隔硬下限（AGENTS §5.5：≥ 600 秒，不可放行）。
 	PollIntervalFloor = 10 * time.Minute
-	// DefaultPollInterval 是默认轮询间隔（docs/002 §6：4 小时）。
+	// DefaultPollInterval 是默认轮询间隔（docs/windows.md §6：4 小时）。
 	DefaultPollInterval = 4 * time.Hour
-	// MaxBackoff 是失败退避上限；TODO(D3): 上限数值待定稿，此处取「大于轮询间隔」的保守值。
+	// MaxBackoff 是失败退避上限，取「大于轮询间隔」的保守值。
 	MaxBackoff = 24 * time.Hour
 )
 
@@ -62,7 +62,7 @@ type Decision struct {
 
 // Evaluate 判定本轮是否要弹通知，并返回下一轮要保存的状态。
 //
-// 规则（docs/002 §6）：
+// 规则（docs/windows.md §6）：
 //  1. 余额 ≤ 阈值 或 可用天数 ≤ 阈值 触发；
 //  2. 同一触发原因只提醒一次，余额回升到阈值以上后重置；
 //  3. 静默时段内不发通知，但满足条件时**不置位**标记 —— 退出静默后补发一次；
@@ -174,7 +174,7 @@ func (c Config) withDefaults() Config {
 }
 
 // NormalizePollInterval 把用户配置的间隔钳制进 [600s, ∞)，并告知是否被钳制
-// （docs/002 §5.2：低于下限钳制到 600s 并提示，不可放行）。
+// （docs/windows.md：低于下限钳制到 600s 并提示，不可放行）。
 func NormalizePollInterval(d time.Duration) (time.Duration, bool) {
 	if d <= 0 {
 		return DefaultPollInterval, false
@@ -185,7 +185,7 @@ func NormalizePollInterval(d time.Duration) (time.Duration, bool) {
 	return d, false
 }
 
-// NextBackoff 计算连续失败后的下次重试间隔（docs/002 §6 规则 6）。
+// NextBackoff 计算连续失败后的下次重试间隔（docs/windows.md §6 规则 6）。
 //
 // 起点是轮询间隔，按次翻倍，上限 MaxBackoff；永远不小于成功路径的间隔，
 // 避免失败时反而更频繁地打学校接口。

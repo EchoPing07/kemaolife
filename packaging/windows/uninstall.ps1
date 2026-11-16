@@ -1,6 +1,6 @@
 ﻿#Requires -Version 5.1
 <#
-    科贸生活 Windows 便携包卸载脚本（docs/002 §5.2「分发与安装」）。
+    科贸生活 Windows 便携包卸载脚本（docs/windows.md §2「安装与卸载」）。
 
     删进程、快捷方式、自启项与安装目录；**保留** %LOCALAPPDATA%\Kemaolife\ 配置目录，
     因为里面是用户填过的学号与校园网凭据（DPAPI 加密），删掉后重装要重填。

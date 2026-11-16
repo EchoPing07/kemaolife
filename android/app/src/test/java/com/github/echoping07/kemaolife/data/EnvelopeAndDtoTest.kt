@@ -57,7 +57,7 @@ class EnvelopeAndDtoTest {
     @Test
     fun `电费 dailyAvg 为 null 时保持 null 而不是 0`() {
         // null 有明确语义（无数据 / 无法估算），用 0 代替会让 UI 显示「均量 0 度」，
-        // 进而把「没数据」误读成「没用电」（docs/002 §3.2）。
+        // 进而把「没数据」误读成「没用电」（docs/contract.md §7.3）。
         val report = ElectricityReport.from(
             JSONObject(
                 """{"status":{"roomName":"<房间>","balance":35.99,"unit":"度",
@@ -198,7 +198,7 @@ class EnvelopeAndDtoTest {
 
     @Test
     fun `日志开关默认关闭且列表为空`() {
-        // 请求记录默认关闭（docs/002 §2.1 规则 10）：UI 不能因为解析缺字段就显示「已开启」。
+        // 请求记录默认关闭（docs/contract.md §6 规则 10）：UI 不能因为解析缺字段就显示「已开启」。
         val state = LogState.from(JSONObject("""{"enabled":false,"count":0}"""))
         assertFalse(state.enabled)
         assertEquals(0, state.count)

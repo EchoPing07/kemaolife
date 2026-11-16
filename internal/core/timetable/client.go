@@ -82,7 +82,7 @@ var (
 
 // Login 走统一 CAS 登录，成功后应拿到 jsxsd 会话 Cookie。
 //
-// 不能只看 HTTP 状态码：CAS 与 jsxsd 在凭据错误时也可能返回 200（api-docs/001 §6.1），
+// 不能只看 HTTP 状态码：CAS 与 jsxsd 在凭据错误时也可能返回 200（api-docs/001 §1 / §7），
 // 所以判据是「是否拿到 SessionCookie」。
 func (c *Client) Login(ctx context.Context, user, password string) error {
 	if strings.TrimSpace(user) == "" || password == "" {
@@ -223,7 +223,7 @@ func looksLikeLoginPage(body string) bool {
 //
 // 漏判的后果不是「报错难看」而是链路卡死：IsAlive 会一直返回 true，
 // app 层因此跳过重登，Sync 再以 4002（锚点页解析失败）失败——而重登只在
-// 3002 时触发，于是会话过期后永久无法自愈（docs/002 §1.3）。
+// 3002 时触发，于是会话过期后永久无法自愈（docs/contract.md §4）。
 func looksLoggedOut(body string) bool {
 	if looksLikeLoginPage(body) {
 		return true

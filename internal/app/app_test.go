@@ -168,7 +168,7 @@ func TestGetWeekSchedule(t *testing.T) {
 	if len(result.Days) != 7 {
 		t.Fatalf("days = %d, want 7", len(result.Days))
 	}
-	// LastWeek 是 Android 翻页容器的边界（docs/002 §3.1 可选字段）。
+	// LastWeek 是 Android 翻页容器的边界（docs/contract.md §7.1 可选字段）。
 	if result.LastWeek != 16 {
 		t.Errorf("lastWeek = %d, want 16（快照推断的学期最后一周）", result.LastWeek)
 	}
@@ -214,7 +214,7 @@ func TestGetWeekScheduleOutsideSemesterIsSuccess(t *testing.T) {
 // 而不是把「锚点页解析失败」当 4002 直接返回。
 //
 // 这是 2026-11 真机上的真实故障：桩页不含任何登录页标记，旧判据认为会话还活着，
-// 于是跳过重登；重登只在 3002 时触发，结果会话过期后永久无法自愈（docs/002 §1.3）。
+// 于是跳过重登；重登只在 3002 时触发，结果会话过期后永久无法自愈（docs/contract.md §4）。
 func TestSyncTimetableReloginsWhenSessionExpiredStub(t *testing.T) {
 	clock := testClock()
 	deps, store, _ := testDeps(clock)
@@ -455,7 +455,7 @@ func writeOuter(w http.ResponseWriter, body string) {
 
 var _ = strings.TrimSpace
 
-// 纯读缓存：即使 HTTP 完全不可用也照常出数据，且不发任何请求（docs/002 §5.3）。
+// 纯读缓存：即使 HTTP 完全不可用也照常出数据，且不发任何请求（docs/android.md）。
 func TestGetScheduleCacheOnlyReadsLocalSnapshot(t *testing.T) {
 	clock := testClock()
 	deps, store, _ := testDeps(clock)
@@ -583,7 +583,7 @@ func TestElectricityStudentTrimsAndFallsBack(t *testing.T) {
 	}
 }
 
-// 只配电费独立学号、不填教务凭据也必须能查电费（docs/002 §5.3 tab3）。
+// 只配电费独立学号、不填教务凭据也必须能查电费（docs/android.md tab3）。
 func TestCheckElectricityOnlyWithOwnStudentID(t *testing.T) {
 	var seen []string
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -622,7 +622,7 @@ func TestCheckElectricityOnlyWithOwnStudentID(t *testing.T) {
 	}
 }
 
-// 电费独立学号：配置了就优先于教务学号（docs/002 §5.3 tab3 的「继承」开关）。
+// 电费独立学号：配置了就优先于教务学号（docs/android.md tab3 的「继承」开关）。
 func TestCheckElectricityUsesOwnStudentID(t *testing.T) {
 	clock := testClock()
 	var seen []string
@@ -672,7 +672,7 @@ func (c *countingFailHTTP) Do(*http.Request) (*http.Response, error) {
 	return nil, fmt.Errorf("network unreachable")
 }
 
-// 导出只读缓存：即使 HTTP 完全不可用也照常出 CSV，且不发任何请求（docs/002 §5.3）。
+// 导出只读缓存：即使 HTTP 完全不可用也照常出 CSV，且不发任何请求（docs/android.md）。
 // 真实同步链路必须把多时段地点分别写入快照，并按周查询返回当节真实地点。
 func TestSyncTimetableMapsLocationsPerSlot(t *testing.T) {
 	deps, _, _ := testDeps(testClock())

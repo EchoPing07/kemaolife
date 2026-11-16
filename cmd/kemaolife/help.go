@@ -7,7 +7,7 @@ import (
 	"github.com/EchoPing07/kemaolife/internal/core/model"
 )
 
-// 帮助文本是纯文本，不进 JSON 信封（docs/002 §1.1）。
+// 帮助文本是纯文本，不进 JSON 信封（docs/contract.md §2）。
 
 const rootHelp = `kemaolife —— 课表与电费查询（CLI，供 agent 使用；支持 linux / darwin）
 

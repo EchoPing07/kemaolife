@@ -84,7 +84,7 @@ var CourseListKeys = []string{"data", "rows"}
 // SlotTimes 是 6 个大节时间（实测于 loadkb 表格，供时间展示）。
 //
 // 教务不下发「大节时间表」字段，只在表格里渲染；这里按实测值固定，
-// 若学校调整作息需要更新（api-docs/001 §7 待验证）。
+// 若学校调整作息需要更新（api-docs/001 §8 待验证）。
 var SlotTimes = []string{
 	"08:30~10:00",
 	"10:20~11:50",

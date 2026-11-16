@@ -35,7 +35,7 @@ jobs:
           go-version-file: go.mod
           cache: true
 
-      # tag 是唯一发布入口，且必须与源码常量一致（docs/002 §1.1）。
+      # tag 是唯一发布入口，且必须与源码常量一致（docs/release.md §1）。
       - name: Resolve tag, version and commit
         id: meta
         env:
@@ -55,7 +55,7 @@ jobs:
             exit 1
           fi
           if [[ "$SRC_VERSION" != "$VERSION" ]]; then
-            echo "::error::tag $TAG 与 internal/version.Version $SRC_VERSION 不一致（docs/002 §1.1）"
+            echo "::error::tag $TAG 与 internal/version.Version $SRC_VERSION 不一致（docs/release.md §1）"
             exit 1
           fi
 
@@ -110,7 +110,7 @@ jobs:
           done
           echo 'privacy scan OK'
 
-      # TODO(D13): NDK / gomobile 工具链仍是待确认项；此处按 android/README.md 的描述性基线落地。
+      # NDK / gomobile 工具链版本与 android/README.md 保持一致。
       - name: Setup Android toolchain
         uses: ./.github/actions/setup-android-gomobile
 
@@ -200,7 +200,7 @@ jobs:
             if [[ -n "$goarm" ]]; then
               build_env+=("GOARM=${goarm}")
             fi
-            # 版本号取源码常量，不注入；只注入构建提交（docs/002 §1.1）。
+            # 版本号取源码常量，不注入；只注入构建提交（docs/release.md §1）。
             env "${build_env[@]}" go build -trimpath \
               -ldflags "-s -w -X main.commit=${COMMIT}" \
               -o "$stage/kemaolife" ./cmd/kemaolife
@@ -235,7 +235,7 @@ jobs:
           build_darwin amd64 amd64
           build_darwin arm64 arm64
 
-          # Windows 便携包：amd64 / arm64。GUI 子系统是形态要求（docs/002 §5.2），
+          # Windows 便携包：amd64 / arm64。GUI 子系统是形态要求（docs/windows.md），
           # 漏掉 -H=windowsgui 会挂控制台窗口，不符合托盘常驻形态。
           build_win() {
             arch="$1"
@@ -545,7 +545,7 @@ jobs:
             PY="$(command -v python)"
           fi
           # 下方「本版变更」按当前 tag 撰写；下次发版必须同步替换该段，
-          # 避免把旧版说明带进新 Release（docs/002 §9 追加变更记录同口径）。
+          # 避免把旧版说明带进新 Release。
           cat > dist/RELEASE_NOTES.md <<'EOF'
           ## kemaolife __TAG__
 

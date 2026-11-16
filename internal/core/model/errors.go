@@ -5,7 +5,7 @@ import (
 	"fmt"
 )
 
-// ErrorCode 是 docs/002 §4 定义的错误码域。
+// ErrorCode 是 docs/contract.md §8 定义的错误码域。
 type ErrorCode int
 
 const (
@@ -62,7 +62,7 @@ func CodeOf(err error) ErrorCode {
 	return CodeNetworkDown
 }
 
-// ExitCode 把错误码映射为 CLI 退出码（docs/002 §1.2）。
+// ExitCode 把错误码映射为 CLI 退出码（docs/contract.md §3）。
 func ExitCode(err error) int {
 	switch CodeOf(err) {
 	case CodeOK:
@@ -81,7 +81,7 @@ func ExitCode(err error) int {
 
 // MessageOf 取领域错误的展示文案；非领域错误（含裸 err、context.Canceled、
 // 反射 / JSON 内部错误）一律回落按码映射的固定中性文案，绝不把 err.Error()
-// 原样透出去 —— 上游原始文案可能夹带学号 / 房间号 / 内网地址（P2 / docs/002 §2.1 规则 8）。
+// 原样透出去 —— 上游原始文案可能夹带学号 / 房间号 / 内网地址（P2 / docs/contract.md §6 规则 7）。
 func MessageOf(err error) string {
 	code := CodeOf(err)
 	if code == CodeOK {
@@ -97,7 +97,7 @@ func MessageOf(err error) string {
 // CodeMessage 是错误码 → 固定中性文案的兜底表；不带任何上游原文。
 //
 // 门面的 `*.probe` 也直接用它：测试按钮失败时不展示领域错误自带的动态文案
-// （例如非法月份里夹着用户输入），只展示按码映射的固定中性原因（P2 / docs/002 §2.1 规则 8）。
+// （例如非法月份里夹着用户输入），只展示按码映射的固定中性原因（P2 / docs/contract.md §6 规则 7）。
 func CodeMessage(code ErrorCode) string {
 	switch code {
 	case CodeBusinessFailed:

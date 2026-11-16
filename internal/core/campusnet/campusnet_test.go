@@ -44,7 +44,7 @@ func TestParseProbeUnauth(t *testing.T) {
 	}
 }
 
-// 判态失败的各种形态都归 offline，且不是错误（docs/002 §3.3）。
+// 判态失败的各种形态都归 offline，且不是错误（docs/contract.md §7.4）。
 func TestParseProbeOffline(t *testing.T) {
 	cases := []struct {
 		name     string

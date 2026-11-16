@@ -20,13 +20,13 @@ const ConfigStoreKey = "agent/config"
 // 它不是失败：UI 要显示提示，不能按「保存失败」把窗口留在错误态。
 var ErrSettingsClamped = errors.New("设置间隔已钳制")
 
-// Settings 是 Windows 端的全部可配置项（docs/002 §5.2）。
+// Settings 是 Windows 端的全部可配置项（docs/windows.md）。
 //
 // 与 CLI 版的 model.Config 分开：Windows 不需要教务凭据（不做课表），
-// 但需要校园网凭据（独立字段，D9 已定稿）与轮询 / 告警参数。
+// 但需要校园网凭据（独立字段）与轮询 / 告警参数。
 // 落盘前由 DPAPI 加密（P5）。
 type Settings struct {
-	// 电费：学号 + 学校代码（电费接口无密码，api-docs/002 §1）。
+	// 电费：学号 + 学校代码（电费接口无密码，api-docs/contract.md §1）。
 	StudentID    string `json:"studentId"`
 	CustomerCode string `json:"customerCode,omitempty"`
 
@@ -35,7 +35,7 @@ type Settings struct {
 	CampusPassword    string `json:"campusPassword"`
 	CampusFingerprint string `json:"campusFingerprint"`
 
-	// 模式：默认手动（docs/002 §5.2）。
+	// 模式：默认手动（docs/windows.md）。
 	AutoMode bool `json:"autoMode"`
 
 	// AutoStart 与轮询 / 告警参数。
@@ -48,7 +48,7 @@ type Settings struct {
 	QuietEndHour     int     `json:"quietEndHour"`
 }
 
-// 校园网状态探测间隔的默认值与下限（docs/002 §5.2）。
+// 校园网状态探测间隔的默认值与下限（docs/windows.md）。
 //
 // 下限取 30s 而不是 0：每次探测都是一次真实 HTTP 请求，间隔过小等于
 // 持续打 Portal，既没必要也容易被判异常。与电费轮询的 600s 硬下限无关 ——
@@ -119,7 +119,7 @@ func (s Settings) CampusProbeInterval() time.Duration {
 // NormalizeCampusProbeInterval 把探测间隔钳制进 [30s, ∞)，零值取默认 120s。
 //
 // 零值取默认而不是报错：老配置里没有这个字段（omitempty），
-// 升级后必须能继续用默认 120s 跑起来（docs/002 §4 规则 2）。
+// 升级后必须能继续用默认 120s 跑起来（契约纪律：新增字段必须可选，见 docs/contract.md 开头）。
 func NormalizeCampusProbeInterval(d time.Duration) (time.Duration, bool) {
 	floor := CampusProbeFloorSeconds * time.Second
 	if d <= 0 {

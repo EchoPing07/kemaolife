@@ -3,7 +3,7 @@ package com.github.echoping07.kemaolife.ui
 import kotlin.math.abs
 
 /**
- * 课表横向翻页的页码 / 邻居周策略（docs/002 §5.3 tab1）。
+ * 课表横向翻页的页码 / 邻居周策略（docs/android.md tab1）。
  *
  * 这里**只做序列与索引换算**：周次本身由 Go 侧算（AGENTS A3），
  * UI 拿到的只是 `timetable.week` 返回的 `week` 与可选 `lastWeek`。

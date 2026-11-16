@@ -398,7 +398,7 @@ private fun EducationSettings(state: AppState, viewModel: AppViewModel) {
 }
 
 /**
- * 电费设置：与教务拆开（docs/002 §5.3 tab3）。
+ * 电费设置：与教务拆开（docs/android.md tab3）。
  *
  * 为什么单独一页：电费接口无独立密码，但用户可以只查电费、不配教务；
  * 学校代码也属于电费而不是教务。混在一页会让人以为「不填教务密码就查不了电费」。

@@ -4,7 +4,7 @@ import org.json.JSONArray
 import org.json.JSONObject
 
 /**
- * 冷启动首帧的课表镜像（docs/002 §5.3「每次打开」）。
+ * 冷启动首帧的课表镜像（docs/android.md「每次打开」）。
  *
  * 课表正本快照含 Cookie，只能由 Go 会话在门面 `Init` 之后读取；若把「打开即出」
  * 的缓存也押在 `Init` 上，课表位会先空一帧，甚至把未初始化的失败信封当成空态
@@ -24,7 +24,7 @@ object TimetableCache {
      * 展示镜像格式版本。
      *
      * v1 的 `location` 可能是整门课全部地点的汇总；课时段地点配对修正后，
-     * 旧镜像必须丢弃，不能继续作为冷启动首帧（docs/002 §5.3）。
+     * 旧镜像必须丢弃，不能继续作为冷启动首帧（docs/android.md）。
      */
     const val VERSION = 2
 

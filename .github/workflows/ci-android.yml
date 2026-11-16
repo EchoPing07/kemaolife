@@ -37,7 +37,7 @@ jobs:
           go-version-file: go.mod
           cache: true
 
-      # TODO(D13): NDK / gomobile 工具链仍是待确认项；此处按 android/README.md 的描述性基线落地。
+      # NDK / gomobile 工具链版本与 android/README.md 保持一致。
       - name: Setup Android toolchain
         uses: ./.github/actions/setup-android-gomobile
 

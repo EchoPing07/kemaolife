@@ -2,7 +2,7 @@ package model
 
 import "time"
 
-// Envelope 是 docs/002 §2 定义的统一 JSON 信封，CLI --json 与 Android 门面共用。
+// Envelope 是 docs/contract.md §5 定义的统一 JSON 信封，CLI --json 与 Android 门面共用。
 //
 // Ok:false 时 Data 缺省（omitempty），Ok:true 时 Error 缺省；
 // Stale 用指针：课表查询恒给出（含 false），非课表命令可缺省。

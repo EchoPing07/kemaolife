@@ -5,7 +5,7 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 /**
- * 课表横向翻页（docs/002 §5.3 tab1）的手感契约：
+ * 课表横向翻页（docs/android.md tab1）的手感契约：
  *  - 翻页序列覆盖整个学期，锚点周在学期外也要能落页；
  *  - `lastWeek` 未知时不能把翻页功能悄悄关掉（否则用户看到「划不动」）；
  *  - 邻居页必须能被预取到，否则拖动时是空白页。

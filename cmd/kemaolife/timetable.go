@@ -10,10 +10,10 @@ import (
 	"github.com/EchoPing07/kemaolife/internal/core/model"
 )
 
-// cmdTimetable 实现 timetable / sync / today / week / date（docs/002 §1.1）。
+// cmdTimetable 实现 timetable / sync / today / week / date（docs/contract.md §2）。
 //
 // 查询类子命令（today / week / date）每次都会先刷新快照：
-// 刷新成功用最新数据，失败则回落旧快照并标 stale:true（docs/002 §1.3）。
+// 刷新成功用最新数据，失败则回落旧快照并标 stale:true（docs/contract.md §4）。
 func cmdTimetable(ctx context.Context, opts options, rt *session, args []string) error {
 	sub := "today"
 	if len(args) > 0 {
@@ -109,7 +109,7 @@ func timetableDay(ctx context.Context, opts options, rt *session, date model.Dat
 // weekSchema 是 timetable week 的 data。
 //
 // LastWeek 是可选字段（0 = 未知）：Android 翻页容器用它确定翻页边界，
-// 老客户端忽略即可（docs/002 §3.1）。
+// 老客户端忽略即可（docs/contract.md §7.1）。
 type weekSchema struct {
 	Week     int                 `json:"week"`
 	Days     []model.DaySchedule `json:"days"`
@@ -207,7 +207,7 @@ func parseWeek(raw string) (int, error) {
 // dataTimeLine 输出数据时间提示。
 //
 // stale 时必须显式说明「刷新失败、用的是旧快照」：这是 agent 唯一能判断
-// 「要不要告诉用户数据不是最新的」的依据（docs/002 §1.3）。
+// 「要不要告诉用户数据不是最新的」的依据（docs/contract.md §4）。
 func dataTimeLine(stale bool, syncedAt string) string {
 	if syncedAt == "" {
 		return ""

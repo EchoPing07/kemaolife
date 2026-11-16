@@ -1,6 +1,6 @@
 package model
 
-// 全部 DTO 字段名以 docs/002 §3 为准；三端共享，改动需先改文档。
+// 全部 DTO 字段名以 docs/contract.md §3 为准；三端共享，改动需先改文档。
 
 // Entry 是某一天的一节课。
 type Entry struct {

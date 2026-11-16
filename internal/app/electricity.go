@@ -12,7 +12,7 @@ import (
 // CheckElectricity 一次查询同时返回余额与每日用量（ElectricityReport）。
 //
 // 2 个主请求任一失败整体报错，不返回半份数据；第 3 个采集时刻请求失败静默降级
-// （docs/002 §3.2）。
+// （docs/contract.md §7.3）。
 // yearMonth 为空时取 Clock 当月的 YYYY-MM；
 // schoolCode 为空时回落配置值。
 func CheckElectricity(ctx context.Context, d Deps, cfg model.Config, yearMonth string) (model.ElectricityReport, error) {
@@ -20,7 +20,7 @@ func CheckElectricity(ctx context.Context, d Deps, cfg model.Config, yearMonth s
 		return model.ElectricityReport{}, err
 	}
 
-	// 参数校验先于凭据检查：月份写错是命令问题，与账号无关（docs/002 §4 2001）。
+	// 参数校验先于凭据检查：月份写错是命令问题，与账号无关（docs/contract.md §8 2001）。
 	if yearMonth == "" {
 		yearMonth = d.Clock.Now().In(localZone()).Format("2006-01")
 	}
@@ -29,7 +29,7 @@ func CheckElectricity(ctx context.Context, d Deps, cfg model.Config, yearMonth s
 		return model.ElectricityReport{}, err
 	}
 
-	// 电费学号可以独立于教务学号（docs/002 §5.3 tab3「继承教务信息」开关）。
+	// 电费学号可以独立于教务学号（docs/android.md tab3「继承教务信息」开关）。
 	studentID := cfg.ElectricityStudent()
 	if studentID == "" {
 		return model.ElectricityReport{}, model.NewError(model.CodeCredentialMissing,
@@ -78,7 +78,7 @@ func CheckElectricity(ctx context.Context, d Deps, cfg model.Config, yearMonth s
 	return model.ElectricityReport{Status: status, Usage: usage}, nil
 }
 
-// normalizeYearMonth 校验并补零 YYYY-MM（api-docs/002 §6.2）。
+// normalizeYearMonth 校验并补零 YYYY-MM（api-docs/windows.md §6.2）。
 func normalizeYearMonth(s string) (string, error) {
 	parts := strings.SplitN(strings.TrimSpace(s), "-", 2)
 	if len(parts) != 2 || len(parts[0]) != 4 {

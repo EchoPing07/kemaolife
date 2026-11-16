@@ -48,7 +48,7 @@ import com.github.echoping07.kemaolife.data.ElectricityReport
 import java.util.Locale
 
 /**
- * tab2 · 更多：今日概览 + 电费 + 校园网 + 取件码跳转（docs/002 §5.3）。
+ * tab2 · 更多：今日概览 + 电费 + 校园网 + 取件码跳转（docs/android.md）。
  *
  * 前三块都是「只读 + 手动刷新」：Android 不做后台、不做定时提醒，
  * 所以每次进入本页才拉数据，离开即停。取件码卡片是纯深链跳转，不发请求。
@@ -125,7 +125,7 @@ private fun TodayOverview(state: AppState, viewModel: AppViewModel) {
     SectionCard(
         title = title,
         action = {
-            // 与电费 / 校园网保持一致：手动同步课表，不受最小查询间隔约束（docs/002 §5.3）。
+            // 与电费 / 校园网保持一致：手动同步课表，不受最小查询间隔约束（docs/android.md）。
             RefreshAction(
                 loading = state.weekLoading || state.timetableSyncing,
                 result = viewModel.timetableFeedback.result,
@@ -213,7 +213,7 @@ private fun ElectricityBody(report: ElectricityReport, unit: String) {
         )
     }
 
-    // 「数据截至」必须出现：电表约有 1 天延迟，不能当实时值（R2 要求 4）。
+    // 「数据截至」必须出现：电表约有 1 天延迟，不能当实时值（docs/privacy.md §5）。
     if (status.collectedAt.isNotBlank()) {
         Spacer(Modifier.height(2.dp))
         MetaText(
@@ -516,7 +516,7 @@ private fun CampusButton(
     }
 }
 
-/** 取件码卡片：两个深链跳转按钮，不拉数据、无刷新动作（docs/002 §5.3 tab2）。 */
+/** 取件码卡片：两个深链跳转按钮，不拉数据、无刷新动作（docs/android.md tab2）。 */
 @Composable
 private fun PickupCodeCard() {
     SectionCard(title = stringResource(R.string.section_pickup)) {

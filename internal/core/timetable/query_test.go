@@ -106,7 +106,7 @@ func TestQueryBeforeSemester(t *testing.T) {
 	}
 }
 
-// 越界周次返回 inSemester:false 而非报错（docs/002 §1.1）。
+// 越界周次返回 inSemester:false 而非报错（docs/contract.md §2）。
 func TestQueryBeyondLastWeek(t *testing.T) {
 	snap := testSnapshot()
 	monday := snap.Week1Monday.AddDays(7 * 20) // 第 21 周

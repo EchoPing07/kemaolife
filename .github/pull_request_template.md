@@ -1,6 +1,6 @@
 ## 背景 / 目的
 
-<!-- 为什么改；关联 Issue 用 Closes #123，或注明 R 项 / D 项。不记录对话过程，不粘贴真实数据。 -->
+<!-- 为什么改；关联 Issue 用 Closes #123。不记录对话过程，不粘贴真实数据。 -->
 
 ## 改动范围
 
@@ -24,20 +24,14 @@
 - [ ] JSON 信封字段（`ok` / `data` / `error` / `ts` / `stale` / `syncedAt`）
 - [ ] DTO 字段名（`DaySchedule`、`ElectricityStatus`、`ElectricityUsage`、`ElectricityReport`、`CampusStatus`、`Snapshot` 等）
 - [ ] 错误码（1001–5001）
-- [ ] Android 门面 `op` 取值（含 `campusnet.*`）
+- [ ] Android 门面 `op` 取值（含 `campusnet.*` / `log.*`）
 - [ ] 快照 `Version`（结构变更必须升版本，旧版本丢弃重拉）
 
-若触及：确认已**先改 `docs/002-功能规格.md` 再改代码**，且新增字段可选、零值有明确语义、退出码与 `error.code` 同域映射。
-
-## D 项
-
-<!-- 若实现受待确认项影响：写 D 编号、所取的最保守默认值、代码中 `// TODO(D<n>): 待定` 的位置。D 项定稿由用户决策，本 PR 不自行定稿。 -->
-
-无 / D<n>：
+若触及：确认已**先改 `docs/contract.md` 再改代码**，且新增字段可选、零值有明确语义、退出码与 `error.code` 同域映射。
 
 ## 验证
 
-自检结果（M0 起适用；设计阶段只需执行隐私与占位符检查）：
+自检结果（纯文档改动只需执行隐私与占位符检查）：
 
 - [ ] `gofmt -l .` 无输出
 - [ ] `go vet ./...`
@@ -49,10 +43,9 @@
 - [ ] `GOOS=linux GOARCH=amd64 go build ./internal/... ./cmd/kemaolife/...`
 - [ ] `GOOS=darwin GOARCH=amd64 go build ./internal/... ./cmd/kemaolife/...`；`GOOS=darwin GOARCH=arm64 go build ./internal/... ./cmd/kemaolife/...`；两架构 `go vet ./cmd/kemaolife/... ./internal/platform/...`（CI 覆盖）
 - [ ] `GOOS=windows GOARCH=amd64 go build ./internal/...`；`GOOS=windows GOARCH=arm64 go build ./internal/...`
-- [ ] `GOOS=windows GOARCH=amd64 go build -ldflags "-H=windowsgui" -o kemaolife-agent.exe ./cmd/kemaolife-agent/`（托盘端必须是 GUI 子系统；console 子系统会挂控制台窗口，启动虽会 `FreeConsole` 摘掉，但不符合 docs/002 §5.2 形态）
+- [ ] `GOOS=windows GOARCH=amd64 go build -ldflags "-H=windowsgui" -o kemaolife-agent.exe ./cmd/kemaolife-agent/`（托盘端必须是 GUI 子系统，见 docs/windows.md）
 - [ ] `GOOS=android GOARCH=arm64 go build ./internal/... ./cmd/kemaolife-mobile/`
-- [ ] macOS 预编译包（darwin amd64 / arm64）打包与 `SHA256SUMS` 行数（12 行，覆盖十二个包）自检：包内含 `kemaolife` / `LICENSE` / `INSTALL.txt`
-- [ ] CI（`.github/workflows/ci.yml`）通过：另含 PE GUI 子系统校验、Windows 安装脚本 BOM / CRLF 校验；列表输出显式排序；时间统一经 `Clock` 获取
+- [ ] CI（`.github/workflows/ci.yml`）通过：另含 PE GUI 子系统校验、Windows 安装脚本 BOM / CRLF 校验
 
 补充说明（可选）：
 
@@ -61,7 +54,6 @@
 - [ ] 提交信息为 `类型(范围): 说明`，且不含真实凭据 / 账号 / 内网地址
 - [ ] 一个 PR 只做一件事，未混入「顺手优化」
 - [ ] 未包含真实学号、姓名、宿舍房间号、密码、Cookie、课表快照内容、会话值、本机 MAC、`distoken` 或指纹值；个人隐私示例均为占位符（学校代码 `3126` 与协议 IP 属学校事实，可入仓）
-- [ ] `docs/` 的「变更记录」表只追加了新行，未改写或删除已有行
 - [ ] 新增第三方依赖或构建工具链已在 Issue 中说明理由并取得确认（无则勾选）
 - [ ] 未实现非本人数据查询、批量遍历、代查或对外服务化
 - [ ] 我已阅读 [CODE_OF_CONDUCT.md](https://github.com/EchoPing07/kemaolife/blob/main/CODE_OF_CONDUCT.md)，讨论聚焦问题本身

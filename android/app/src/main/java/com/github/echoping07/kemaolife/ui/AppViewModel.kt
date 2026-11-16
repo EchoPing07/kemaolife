@@ -51,7 +51,7 @@ import java.util.Locale
  * `timetable.sync` 的成功 / 失败事务提交，任何纯读缓存的 `repo.week()` 都不得覆写它：
  * `CacheOnly` 的 `stale` 恒为 false，那是「本次没有刷新」，不是「上次刷新成功了」。
  *
- * 打开 App 的顺序（docs/002 §5.3）：**构造函数里同步**读课表 / 电费镜像缓存，
+ * 打开 App 的顺序（docs/android.md）：**构造函数里同步**读课表 / 电费镜像缓存，
  * 首帧立刻渲染，再无条件联网覆盖；其余自动触发（切回课表 tab、进入更多页、
  * 回到前台之外）按最小间隔节流，手动不受限。
  *
@@ -168,7 +168,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
             _state.update { it.copy(bridgeReady = repo.isReady(), bridgeError = repo.readyError()) }
 
             fetchWeek(0)
-            // 「每次打开」是特殊的自动：不受最小间隔约束（docs/002 §5.3）。
+            // 「每次打开」是特殊的自动：不受最小间隔约束（docs/android.md）。
             // 与挂起的 ON_RESUME 合并，保证冷启动恰好一轮。
             pendingOpen = true
             replayPendingOpen()
@@ -224,7 +224,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
      *
      * `fromSync=true` 表示这是「同步成功后的回读」：只有它才能把 weekStale 清成 false，
      * 且只有回读成功才提交数据时间；回读失败保留旧数据与旧数据时间并置离线标记，
-     * 避免「同步写盘成功但界面还是旧课表」被当成新数据（docs/002 §5.3）。
+     * 避免「同步写盘成功但界面还是旧课表」被当成新数据（docs/android.md）。
      */
     private suspend fun fetchWeek(
         week: Int = 0,
@@ -250,7 +250,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                     viewLastWeek = view.lastWeek,
                     currentWeek = if (week == 0) view.schedule.week else null,
                 )
-                // 落页后补一格邻页：保证下一次拖动时邻居页已经有内容（docs/002 §5.3 tab1）。
+                // 落页后补一格邻页：保证下一次拖动时邻居页已经有内容（docs/android.md tab1）。
                 prefetchNeighborWeeks()
                 seq == weekSeq
             },
@@ -279,7 +279,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     /**
-     * 预取当前周两侧的整周数据（docs/002 §5.3 tab1 翻页）。
+     * 预取当前周两侧的整周数据（docs/android.md tab1 翻页）。
      *
      * 失败一律静默：预取只是为了让邻居页拖动时就有内容，
      * 失败了落页时还会再走一次 `CacheOnly` 读取，不得因此弹错误或清空当前页。
@@ -387,7 +387,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
      * 为什么不在导出前顺手同步一次：导出是「把本机已有的课表带走」，
      * 用户要的是现在这份数据；顺带联网会让一次手动点按变成一次可能失败的请求，
      * 还要重新处理离线标记。数据时间随 [AppState.exportSheet] 一并展示，
-     * 用户能自己看到这份 CSV 对应哪次同步（docs/002 §5.3）。
+     * 用户能自己看到这份 CSV 对应哪次同步（docs/android.md）。
      */
     fun exportTimetable() {
         if (exportJob?.isActive == true) return
@@ -438,7 +438,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                         feedbackId?.let { electricityFeedback.complete(it, actionFeedbackFor(ex)) }
                         // 失败不清缓存：旧电费照常可看。
                         // 自动查询每次打开都会跑，失败文案不进全局 snackbar；
-                        // 诊断走设置页电费「测试」弹窗与日志页（docs/002 §5.3）。
+                        // 诊断走设置页电费「测试」弹窗与日志页（docs/android.md）。
                         _state.update { it.copy(electricityLoading = false) }
                     },
                 )
@@ -495,7 +495,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         val message = (ex as? AppException)?.displayMessage ?: "校园网判态失败"
         _state.update { s ->
             s.copy(
-                // 探测失败归 offline（docs/002 §3.3），不留在「加载中…」。
+                // 探测失败归 offline（docs/contract.md §7.4），不留在「加载中…」。
                 campus = CampusStatus(state = CampusState.OFFLINE, errorMsg = message, checkedAt = ""),
                 campusSkipped = false,
                 campusLoading = false,
@@ -1002,7 +1002,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                 week = schedule,
                 currentWeek = currentWeek ?: s.currentWeek,
                 weekNeighbors = weekCache,
-                // 可选 lastWeek：0 = 未知，翻页容器此时不拦截翻页（docs/002 §3.1）。
+                // 可选 lastWeek：0 = 未知，翻页容器此时不拦截翻页（docs/contract.md §7.1）。
                 lastWeek = if (viewLastWeek > 0) viewLastWeek else s.lastWeek,
                 todayDay = schedule.days.firstOrNull { it.date == s.todayDate } ?: s.todayDay,
                 // 纯读缓存不碰离线标记；只有「同步 + 回读」这个事务成功才清成 false。
@@ -1095,7 +1095,7 @@ data class AppState(
     val settingsSaved: Boolean = false,
     val error: String? = null,
 
-    /** 请求记录开关（默认关闭，docs/002 §2.1 规则 10）。 */
+    /** 请求记录开关（默认关闭，docs/contract.md §6 规则 10）。 */
     val requestLogEnabled: Boolean = false,
     /** 日志页列表；`null` 表示还没读过（首次进页时加载）。 */
     val log: LogState? = null,

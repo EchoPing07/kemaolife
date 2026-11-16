@@ -8,7 +8,7 @@ import (
 	"time"
 )
 
-// HTTPDoer 是「只用 IPv4」的 HTTP 客户端（api-docs/001-timetable §2、§6.3）。
+// HTTPDoer 是「只用 IPv4」的 HTTP 客户端（api-docs/001-timetable §2、§7）。
 //
 // 教务 aic 服务器 DNS 返回 AAAA 记录但没有 IPv6 监听：双栈拨号会先试 IPv6，
 // 连不上只能等超时（约 10s）再回退 —— 每次请求都白等 10 秒。

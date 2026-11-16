@@ -24,13 +24,7 @@ description: 用 kemaolife CLI 查询广东科贸职业学院的课表与宿舍�
 
 不适用：校园网状态、成绩、选课、考试安排、充值、替别人查。
 
-CLI 支持 linux / darwin（windows 后续计划）；macOS 另有预编译包（`kemaolife_0.5.5_darwin_amd64.tar.gz` / `kemaolife_0.5.5_darwin_arm64.tar.gz`），但**未经 Apple 签名 / 公证、未经过实机测试**，请按试验性支持使用。macOS 上 `config init` 同样默认关闭回显（终端不支持时会先在 `stderr` 警告「输入可能被看到」再读取），命令、输出与退出码和 Linux 一致，§2「所有命令带 `--json`」的固定用法不变。
-
-macOS 预编译包的三条硬口径：
-
-1. **macOS CLI 未经过实机测试**：仓库无 macOS 真机，darwin amd64 / arm64 仅交叉编译 + 静态审查 + 自动化单测通过，**未在真实 Mac 上运行**。未实机确认五项：真实终端 `TIOCGETA` / `TIOCSETA` 回显控制与恢复、Gatekeeper `com.apple.quarantine` 与 `xattr -d`、系统根证书链下 HTTPS、`time.Local` 本地时区、Apple Silicon arm64 首次执行不被拦截。
-2. **未经 Apple Developer ID 签名、未经 Apple 公证（notarization）**：macOS 二进制由 Linux CI 交叉编译，无 Apple 付费账号证书、不做公证；arm64 二进制带 Go 链接器自动生成的 ad-hoc 代码签名（Apple Silicon 要求），**不等于 Apple 签名**。浏览器下载解压后可能带 `com.apple.quarantine`，首次运行被 Gatekeeper 拦截，需手动执行 `xattr -d com.apple.quarantine kemaolife`（或 `xattr -r -d com.apple.quarantine <目录>`）后再运行。
-3. **仍不做**：Developer ID 签名 / 公证 / Keychain / 第三方依赖；凭据仍存 `~/.config/kemaolife/config.json`（目录 0700 / 文件 0600 / 原子写，XDG 优先）与 `~/.cache/kemaolife/`。
+CLI 支持 linux / darwin（windows 后续计划）。**macOS 为试验性支持**：预编译包（`kemaolife_0.5.5_darwin_amd64.tar.gz` / `kemaolife_0.5.5_darwin_arm64.tar.gz`）未经 Apple 签名 / 公证、未经过实机测试，首次运行前需 `xattr -d com.apple.quarantine kemaolife`；完整注意事项见仓库 [docs/cli.md §6](https://github.com/EchoPing07/kemaolife/blob/main/docs/cli.md#6-macos-注意事项试验性支持)。macOS 上 `config init` 同样默认关闭回显（终端不支持时会先在 `stderr` 警告「输入可能被看到」再读取），命令、输出与退出码和 Linux 一致，§2「所有命令带 `--json`」的固定用法不变。
 
 ## 2. 固定用法
 
@@ -127,4 +121,4 @@ macOS 预编译包的三条硬口径：
 3. `kemaolife --json timetable sync` —— 先生成一次快照（含可选的会话探活 + 1 登录 + 2 数据请求）。之后每次查询会自动刷新，这一步只在首次 / 快照被清时需要。
 4. `kemaolife --json timetable` / `kemaolife --json electricity` —— 日常查询。
 
-> // TODO(D2): 待定 —— skill 存放位置仍是待确认项；当前按 `skills/kemaolife/SKILL.md`（仓库内）放置，安装说明见仓库 README「安装与构建」。
+> skill 存放于仓库内 `skills/kemaolife/SKILL.md`，复制到 agent 的 skill 目录即可使用；安装说明见仓库 README「快速开始」。

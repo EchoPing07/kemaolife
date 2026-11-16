@@ -23,7 +23,7 @@ internal data class CourseBlock(
  * 把某一天的课程投影成网格块。
  *
  * 这里**只做排版换算**，不做业务计算（AGENTS A3）：
- * `periods` 已由 Go 侧 `core` 归一化成 `1-2` / `5-8` 这种形状（docs/002 §3），
+ * `periods` 已由 Go 侧 `core` 归一化成 `1-2` / `5-8` 这种形状（docs/contract.md §3），
  * 本函数仅把首尾小节号映射成行区间与行数。
  */
 internal fun layoutCourseBlocks(entries: List<Entry>): List<CourseBlock> {
