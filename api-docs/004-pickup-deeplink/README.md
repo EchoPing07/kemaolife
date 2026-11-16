@@ -2,7 +2,7 @@
 
 > **状态**：整理自开源项目 [pickup-code-launcher](https://github.com/EidenLiu/pickup-code-launcher)（`cn.pickup.launcher`）的公开实现，未在本仓库逐条实机验证
 > **更新**：2026-11-16
-> **适用**：Android 跳转第三方 App 的取件码 / 待取快递页；本仓库只采用三个取件码入口（见 §6）
+> **适用**：Android 跳转第三方 App 的取件码 / 待取快递页；本仓库只采用两个取件码入口（见 §6）
 
 **这不是查询协议：全部动作只是 `ACTION_VIEW` 隐式 Intent 跳转，不发任何网络请求、不携带凭据、不需要后端。链接均为各 App 公开注册的 scheme 与官方 H5 地址，属公开分发事实，不含个人隐私（P1）。**
 
@@ -13,7 +13,7 @@
 | 项 | 值 |
 |---|---|
 | 跳转方式 | `Intent(ACTION_VIEW, uri)`；私有 scheme 候选**锁定目标包名**（`setPackage`），避免弹选择器或被浏览器截走 |
-| 回退链 | 私有 scheme 候选（按序、钉包名）→（仅菜鸟）拉起 App 首页 → 官方 H5 钉包名 → 官方 H5 交系统浏览器 → 本机提示 |
+| 回退链 | 私有 scheme 候选（按序、钉包名）→ 官方 H5 钉包名 → 官方 H5 交系统浏览器 → 本机提示（参考实现另有「仅菜鸟拉起 App 首页」特例，本仓库不采用，见 §2①） |
 | 成败判定 | 只能判断「有没有接收者」：`startActivity` 抛 `ActivityNotFoundException` / `SecurityException` 等即失败，继续下一条；目标 App 收到后内部失败这里看不到 |
 | Intent flags | `FLAG_ACTIVITY_CLEAR_TOP \| FLAG_ACTIVITY_SINGLE_TOP` 复用已有页面栈；非 Activity 上下文补 `FLAG_ACTIVITY_NEW_TASK` |
 | 包可见性 | Android 11+ `startActivity` 不受包可见性限制；`getLaunchIntentForPackage` / `resolveActivity` 需要 Manifest `<queries>` 声明目标包 |
@@ -25,7 +25,7 @@
 
 每个目标 = 包名 + 一组**按优先级排列**的私有 scheme 候选 + 一个官方 H5 兜底地址。候选从「参数最全」到「裸路由」逐级降级，兼容不同版本 App 对参数的接受程度。
 
-### ① 菜鸟身份码（`com.cainiao.wireless`）
+### ① 菜鸟身份码（`com.cainiao.wireless`，本仓库不采用，仅存档）
 
 ```
 cainiao://desktop/station_code
@@ -90,10 +90,11 @@ H5 兜底是微信跳转用的公开入口（`extra_params=from_wx_jump%3D1`）�
 ## 3. 回退顺序（逐条对照实现）
 
 1. **私有 scheme 候选按序尝试**：每条都 `setPackage(目标包名)`；任一条有接收者且启动成功即结束。
-2. **（仅菜鸟）拉起 App 首页**：`getLaunchIntentForPackage` 非空则启动并本机提示「没有公开直达链接，已打开官方 App」；未安装或无启动入口则继续。
-3. **H5 钉包名**：部分版本官方 App 注册了自己的 HTTPS App Links，能直接在 App 内渲染该页，优先于浏览器。
-4. **H5 不钉包名**：交系统浏览器 / 用户默认接收者。
-5. **全部失败**：只给本机提示，不崩溃、不静默。
+2. **H5 钉包名**：部分版本官方 App 注册了自己的 HTTPS App Links，能直接在 App 内渲染该页，优先于浏览器。
+3. **H5 不钉包名**：交系统浏览器 / 用户默认接收者。
+4. **全部失败**：只给本机提示，不崩溃、不静默。
+
+参考实现在第 1、2 步之间还有「（仅菜鸟）拉起 App 首页」特例：`getLaunchIntentForPackage` 非空则启动并本机提示「没有公开直达链接，已打开官方 App」，未安装或无启动入口则继续。本仓库不采用菜鸟入口，该特例不实现。
 
 注意：
 
@@ -120,13 +121,13 @@ H5 兜底是微信跳转用的公开入口（`extra_params=from_wx_jump%3D1`）�
 |---|---|
 | 各链接在当前 App 版本的可用性 | 整理自参考项目公开实现，未逐条实机验证；App 改版可能使候选失效，回退链兜底 |
 | H5 兜底的登录要求 | 浏览器打开官方 H5 可能要求登录 / 无法展示身份码，属目标 App 行为，不在本链路控制 |
-| 菜鸟直达链接 | `cainiao://desktop/station_code` 在部分版本无接收者，故有「拉起 App 首页」特例 |
+| 菜鸟直达链接 | `cainiao://desktop/station_code` 在部分版本无接收者，参考实现故有「拉起 App 首页」特例；本仓库不采用菜鸟入口 |
 
 ---
 
 ## 6. 本仓库采用范围
 
-Android「更多」页 `取件码` 卡片只采用 **① 菜鸟身份码 / ② 淘宝取件码 / ③ 拼多多身份码** 三个入口（含菜鸟特例与完整回退链）；④ 待取快递入口不实现。实现位于 Kotlin 呈现层（`android/.../ui/PickupCode.kt`），不进 `core` / 门面、不新增 `op`；功能契约见 `docs/002` §5.3 tab2。
+Android「更多」页 `取件码` 卡片只采用 **② 淘宝取件码 / ③ 拼多多身份码** 两个入口（完整回退链）；① 菜鸟身份码与 ④ 待取快递入口不实现，仅存档。实现位于 Kotlin 呈现层（`android/.../ui/PickupCode.kt`），不进 `core` / 门面、不新增 `op`；功能契约见 `docs/002` §5.3 tab2。
 
 ---
 
@@ -135,3 +136,4 @@ Android「更多」页 `取件码` 卡片只采用 **① 菜鸟身份码 / ② �
 | 日期 | 内容 |
 |---|---|
 | 2026-11-16 | 建档：整理 pickup-code-launcher 公开实现的七个目标深链、回退顺序、Intent flags 与包可见性口径；声明本仓库只采用三个取件码入口，待取快递入口仅存档 |
+| 2026-11-16 | 采用范围收敛为 ② 淘宝 / ③ 拼多多两个入口：① 菜鸟身份码改为仅存档，「拉起 App 首页」特例不再实现；§1 回退链、§3 回退顺序与 §5 / §6 同步 |

@@ -48,6 +48,11 @@
     <string name="section_today">今日课表</string>
     <string name="section_electricity">电费</string>
     <string name="section_campusnet">校园网</string>
+    <string name="section_pickup">取件码</string>
+    <string name="pickup_hint">跳转对应 App 的取件码页</string>
+    <string name="pickup_taobao">淘宝</string>
+    <string name="pickup_pinduoduo">拼多多</string>
+    <string name="pickup_open_failed">暂时无法打开%1$s取件码</string>
     <string name="electricity_not_queried">尚未查询</string>
     <string name="metric_estimated_days">可用天数</string>
     <string name="metric_month_usage">本月已用</string>

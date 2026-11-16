@@ -37,6 +37,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.rotate
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -47,10 +48,10 @@ import com.github.echoping07.kemaolife.data.ElectricityReport
 import java.util.Locale
 
 /**
- * tab2 · 更多：今日概览 + 电费 + 校园网（docs/002 §5.3）。
+ * tab2 · 更多：今日概览 + 电费 + 校园网 + 取件码跳转（docs/002 §5.3）。
  *
- * 三块都是「只读 + 手动刷新」：Android 不做后台、不做定时提醒，
- * 所以每次进入本页才拉数据，离开即停。
+ * 前三块都是「只读 + 手动刷新」：Android 不做后台、不做定时提醒，
+ * 所以每次进入本页才拉数据，离开即停。取件码卡片是纯深链跳转，不发请求。
  *
  * 排版按「一眼能读」组织：余额是整个页面的视觉重心（headline 大数字），
  * 其余信息降级为 label；同类信息不再各包一张描边卡片，而是统一 filled card +
@@ -88,6 +89,8 @@ internal fun MoreScreen(
         Spacer(Modifier.height(16.dp))
         CampusCard(state, viewModel)
 
+        Spacer(Modifier.height(16.dp))
+        PickupCodeCard()
     }
 }
 
@@ -510,6 +513,47 @@ private fun CampusButton(
             contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 8.dp),
             content = content,
         )
+    }
+}
+
+/** 取件码卡片：两个深链跳转按钮，不拉数据、无刷新动作（docs/002 §5.3 tab2）。 */
+@Composable
+private fun PickupCodeCard() {
+    SectionCard(title = stringResource(R.string.section_pickup)) {
+        Text(
+            text = stringResource(R.string.pickup_hint),
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        Spacer(Modifier.height(12.dp))
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            PickupButton(stringResource(R.string.pickup_taobao), PickupDestination.TAOBAO, TabIcons.BrandTaobao, Modifier.weight(1f))
+            PickupButton(stringResource(R.string.pickup_pinduoduo), PickupDestination.PINDUODUO, TabIcons.Link, Modifier.weight(1f))
+        }
+    }
+}
+
+@Composable
+private fun PickupButton(
+    label: String,
+    destination: PickupDestination,
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    modifier: Modifier = Modifier,
+) {
+    val context = LocalContext.current
+    FilledTonalButton(
+        onClick = { openPickupCode(context, destination, label) },
+        shape = appShape(PageCorners.Field),
+        modifier = modifier.height(44.dp),
+        contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 8.dp),
+    ) {
+        Icon(
+            imageVector = icon,
+            contentDescription = null,
+            modifier = Modifier.size(17.dp),
+        )
+        Spacer(Modifier.width(5.dp))
+        Text(label, maxLines = 1)
     }
 }
 
