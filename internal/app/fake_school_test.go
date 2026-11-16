@@ -2,6 +2,7 @@ package app_test
 
 import (
 	"fmt"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -60,21 +61,21 @@ func newFakeSchool(t *testing.T) *fakeSchool {
 		if !hasFakeSession(r) {
 			// 实测失效响应：HTTP 200 + JS 跳转桩页（不是登录页 HTML）。
 			// 若这里回登录页，就测不出「桩页被误判成有效会话」的缺陷。
-			fmt.Fprint(w, expiredSessionStub)
+			_, _ = io.WriteString(w, expiredSessionStub)
 			return
 		}
 		fmt.Fprint(w, `<html><body><div class="jsxsd">教务首页 课表</div></body></html>`)
 	})
 	jsbMux.HandleFunc("/jsxsd/framework/mainV_index_loadkb.htmlx", func(w http.ResponseWriter, r *http.Request) {
 		if !hasFakeSession(r) {
-			fmt.Fprint(w, expiredSessionStub)
+			_, _ = io.WriteString(w, expiredSessionStub)
 			return
 		}
 		fmt.Fprint(w, fakeAnchorHTML)
 	})
 	jsbMux.HandleFunc("/jsxsd/xskb/xskb_list.do", func(w http.ResponseWriter, r *http.Request) {
 		if !hasFakeSession(r) {
-			fmt.Fprint(w, expiredSessionStub)
+			_, _ = io.WriteString(w, expiredSessionStub)
 			return
 		}
 		w.Header().Set("Content-Type", "text/html;charset=utf-8")

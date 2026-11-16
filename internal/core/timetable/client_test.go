@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -289,7 +290,8 @@ func TestLooksLikeJsxsdPageAcceptsRealPage(t *testing.T) {
 func TestSyncSessionExpiredStubIs3002(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		// 旧 Cookie 一律被回成 188 字节桩页，HTTP 200。
-		fmt.Fprint(w, sessionExpiredStub)
+		// 不经 fmt：Go 1.24 vet 会把夹具里的 %2F 当成 Fprint 的格式指令。
+		_, _ = io.WriteString(w, sessionExpiredStub)
 	}))
 	defer srv.Close()
 
