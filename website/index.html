@@ -1,0 +1,1285 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="description" content="科贸生活 KeMao Life：课表日程、宿舍电费、校园网认证一体。Android / Windows 托盘 / Linux macOS CLI 三端原生，轻量零打扰。">
+  <meta name="theme-color" content="#F3F4FA">
+  <link rel="icon" type="image/jpeg" href="assets/icon.jpg">
+  <link rel="apple-touch-icon" href="assets/icon.jpg">
+  <link rel="canonical" href="https://echoping07.github.io/kemaolife/">
+  <meta property="og:type" content="website">
+  <meta property="og:title" content="科贸生活 · KeMao Life">
+  <meta property="og:description" content="校园日常，一触即达。课表 / 电费 / 校园网认证，三端原生。">
+  <meta property="og:url" content="https://echoping07.github.io/kemaolife/">
+  <meta property="og:image" content="https://echoping07.github.io/kemaolife/assets/icon.jpg">
+  <title>科贸生活 · KeMao Life</title>
+  <link rel="stylesheet" href="assets/site.css">
+  <style>
+    :root {
+      --monet-bg: #F3F4FA;
+      --monet-ink: #1A1B22;
+    }
+    body {
+      background-color: var(--monet-bg);
+      color: var(--monet-ink);
+      font-family: 'DM Sans', 'PingFang SC', 'Microsoft YaHei', 'Noto Sans CJK SC', -apple-system, BlinkMacSystemFont, sans-serif;
+      font-feature-settings: 'cv02', 'cv03', 'cv04', 'cv11';
+      -webkit-font-smoothing: antialiased;
+      -moz-osx-font-smoothing: grayscale;
+      overflow-x: hidden;
+    }
+    .monet-canvas {
+      background:
+        radial-gradient(55% 40% at 50% 0%, rgba(224, 225, 255, 0.55) 0%, rgba(243, 244, 250, 0) 100%),
+        #F3F4FA;
+    }
+    .monet-card {
+      background: #FFFFFF;
+      box-shadow:
+        0 1px 2px rgba(26, 27, 34, 0.03),
+        0 12px 32px -8px rgba(74, 83, 166, 0.07);
+    }
+    .nav-active {
+      background-color: #FFFFFF;
+      color: #1A1B22;
+      box-shadow: 0 1px 3px rgba(26, 27, 34, 0.08);
+    }
+    .os-active {
+      background-color: #4A53A6;
+      color: #FFFFFF;
+      box-shadow: 0 2px 8px rgba(74, 83, 166, 0.25);
+    }
+    .view-transition {
+      animation: viewEnter 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+    }
+    @keyframes viewEnter {
+      from { opacity: 0; transform: translateY(5px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+    .win32-input {
+      background: #FFFFFF;
+      border: 1px solid #8A8A8A;
+      height: 22px;
+      padding: 0 6px;
+      font-size: 12px;
+      color: #000000;
+    }
+    .win32-btn {
+      background: #E5E5E5;
+      border: 1px solid #ADADAD;
+      height: 25px;
+      font-size: 12px;
+      color: #000000;
+    }
+    html {
+      scrollbar-width: thin;
+      scrollbar-color: #C7C6D4 transparent;
+    }
+    *::-webkit-scrollbar { width: 8px; height: 8px; }
+    *::-webkit-scrollbar-track { background: transparent; }
+    *::-webkit-scrollbar-thumb { background: #C7C6D4; border-radius: 8px; }
+    *::-webkit-scrollbar-thumb:hover { background: #767683; }
+    h1, h2, h3, .font-display {
+      font-family: 'Plus Jakarta Sans', 'PingFang SC', 'Microsoft YaHei', 'Noto Sans CJK SC', -apple-system, sans-serif;
+      letter-spacing: -0.025em;
+    }
+    .tabular-nums {
+      font-variant-numeric: tabular-nums;
+    }
+  </style>
+</head>
+<body class="monet-canvas min-h-screen flex flex-col selection:bg-monet-primaryContainer selection:text-monet-onPrimaryContainer">
+
+  <!-- Floating Architecture Dropdown Menu (fixed at body level to avoid card clip-path clipping) -->
+  <div id="archDropdownMenu" data-squircle="18" class="hidden fixed w-60 p-1.5 bg-white shadow-xl border border-monet-outlineVariant/50 z-50 space-y-0.5">
+    <!-- Populated dynamically -->
+  </div>
+
+  <!-- Top Navigation Bar -->
+  <header class="sticky top-0 z-30 border-b border-monet-outlineVariant/40 bg-monet-bg/85 backdrop-blur-xl">
+    <div class="max-w-5xl mx-auto px-3 sm:px-6 h-14 flex items-center justify-between gap-1.5 sm:gap-3">
+      <!-- Brand -->
+      <button id="brandHomeBtn" type="button" class="flex items-center gap-2 text-left group focus:outline-none shrink-0">
+        <span class="font-display font-bold text-[13px] sm:text-[15px] tracking-tight text-monet-onSurface group-hover:text-monet-primary transition-colors whitespace-nowrap">KeMao Life</span>
+        <span data-squircle="8" class="hidden sm:inline-flex items-center px-2 py-0.5 text-[11px] font-mono font-medium bg-monet-primaryContainer text-monet-primary">
+          v0.5.5
+        </span>
+      </button>
+
+      <!-- Segmented Control Navigation -->
+      <nav aria-label="主导航" data-squircle="14" class="flex items-center p-1 bg-monet-high">
+        <button type="button" data-nav="home" data-squircle="10" class="nav-tab nav-active text-xs font-medium px-1.5 sm:px-3.5 py-1.5 whitespace-nowrap transition-all">
+          首页
+        </button>
+        <button type="button" data-nav="mobile" data-squircle="10" class="nav-tab text-xs font-medium px-1.5 sm:px-3.5 py-1.5 whitespace-nowrap text-monet-onSurfaceVariant hover:text-monet-onSurface transition-all">
+          Mobile
+        </button>
+        <button type="button" data-nav="desktop" data-squircle="10" class="nav-tab text-xs font-medium px-1.5 sm:px-3.5 py-1.5 whitespace-nowrap text-monet-onSurfaceVariant hover:text-monet-onSurface transition-all">
+          Desktop
+        </button>
+        <button type="button" data-nav="cli" data-squircle="10" class="nav-tab text-xs font-medium px-1.5 sm:px-3.5 py-1.5 whitespace-nowrap text-monet-onSurfaceVariant hover:text-monet-onSurface transition-all">
+          CLI
+        </button>
+      </nav>
+
+      <!-- Right Actions (Tabler Icons: 发行包 -> GitHub -> QQ) -->
+      <div class="flex items-center gap-1">
+        <button id="openAllPackagesBtnTop" type="button" data-squircle="10" class="inline-flex items-center gap-1.5 text-xs font-medium px-1 sm:px-2.5 py-1.5 shrink-0 text-monet-onSurfaceVariant hover:text-monet-onSurface hover:bg-monet-high transition-colors" title="全部发行包">
+          <!-- Tabler: package -->
+          <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
+            <path stroke="none" d="M0 0h24v24H0z" fill="none"/>
+            <path d="M12 3l8 4.5l0 9l-8 4.5l-8 -4.5l0 -9l8 -4.5" />
+            <path d="M12 12l8 -4.5" /><path d="M12 12l0 9" /><path d="M12 12l-8 -4.5" />
+            <path d="M16 5.25l-8 4.5" />
+          </svg>
+          <span class="hidden lg:inline">发行包</span>
+        </button>
+        <a href="https://github.com/EchoPing07/kemaolife" target="_blank" rel="noopener noreferrer" data-squircle="10" class="inline-flex items-center gap-1.5 text-xs font-medium px-1 sm:px-2.5 py-1.5 shrink-0 text-monet-onSurfaceVariant hover:text-monet-onSurface hover:bg-monet-high transition-colors" title="GitHub 项目仓库">
+          <!-- Tabler: brand-github -->
+          <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
+            <path stroke="none" d="M0 0h24v24H0z" fill="none"/>
+            <path d="M9 19c-4.3 1.4 -4.3 -2.5 -6 -3m12 5v-3.5c0 -1 .1 -1.4 -.5 -2c2.8 -.3 5.5 -1.4 5.5 -6a4.6 4.6 0 0 0 -1.3 -3.2a4.2 4.2 0 0 0 -.1 -3.2s-1.1 -.3 -3.5 1.3a12.3 12.3 0 0 0 -6.2 0c-2.4 -1.6 -3.5 -1.3 -3.5 -1.3a4.2 4.2 0 0 0 -.1 3.2a4.6 4.6 0 0 0 -1.3 3.2c0 4.6 2.7 5.7 5.5 6c-.6 .6 -.6 1.2 -.5 2v3.5" />
+          </svg>
+          <span class="hidden sm:inline">项目仓库</span>
+        </a>
+        <a href="https://qm.qq.com/cgi-bin/qm/qr?k=SZIDA34vizNLSFVDQDj664hp5Sx8esJ0&jump_from=webapi&authKey=LuiwtF38kLmo0rR1cS5ASiWB+3h2ajI0Gbrvuc5zoqKYxzLgoxIv716NIjnLiLY1" target="_blank" rel="noopener noreferrer" data-squircle="10" class="inline-flex items-center gap-1.5 text-xs font-medium px-1 sm:px-2.5 py-1.5 shrink-0 text-monet-onSurfaceVariant hover:text-monet-onSurface hover:bg-monet-high transition-colors" title="加入 QQ 交流群：科贸生活 | KeMao Life">
+          <!-- Tabler: brand-qq -->
+          <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
+            <path stroke="none" d="M0 0h24v24H0z" fill="none"/>
+            <path d="M6 9.748a14.716 14.716 0 0 0 11.995 -.052c.275 -9.236 -11.104 -11.256 -11.995 .052" />
+            <path d="M18 10c.984 2.762 1.949 4.765 2 7.153c.014 .688 -.664 1.346 -1.184 .303c-.346 -.696 -.952 -1.181 -1.816 -1.456" />
+            <path d="M17 16c.031 1.831 .147 3.102 -1 4" />
+            <path d="M8 20c-1.099 -.87 -.914 -2.24 -1 -4" />
+            <path d="M6 10c-.783 2.338 -1.742 4.12 -1.968 6.43c-.217 2.227 .716 1.644 1.16 .917c.296 -.487 .898 -.934 1.808 -1.347" />
+            <path d="M15.898 13l-.476 -2" />
+            <path d="M8 20l-1.5 1c-.5 .5 -.5 1 .5 1h10c1 0 1 -.5 .5 -1l-1.5 -1" />
+            <path d="M12.75 7a1 1 0 1 0 2 0a1 1 0 1 0 -2 0" />
+            <path d="M9.25 7a1 1 0 1 0 2 0a1 1 0 1 0 -2 0" />
+          </svg>
+          <span class="hidden sm:inline">QQ交流群</span>
+        </a>
+      </div>
+    </div>
+  </header>
+
+  <!-- Main Workspace -->
+  <main class="flex-1 max-w-5xl w-full mx-auto px-4 sm:px-6 flex flex-col justify-center py-8 sm:py-12">
+
+    <!-- ==================== VIEW 1: HOME ==================== -->
+    <section id="view-home" class="view-transition">
+      <div class="max-w-xl mx-auto text-center space-y-7">
+        
+        <!-- App Squircle Icon -->
+        <div data-squircle="32" class="inline-flex p-1.5 bg-white shadow-sm">
+          <img src="assets/icon.jpg" alt="科贸生活" data-squircle="26" class="w-24 h-24 sm:w-28 sm:h-28 object-cover" />
+        </div>
+
+        <!-- Flagship Product Copy -->
+        <div class="space-y-3">
+          <h1 class="text-3xl sm:text-4xl font-bold tracking-tight text-monet-onSurface">
+            校园日常，一触即达。
+          </h1>
+          <p class="text-sm sm:text-base text-monet-onSurfaceVariant leading-relaxed max-w-md mx-auto">
+            集课表日程、宿舍水电与校园网认证于一体。全平台轻量原生构建，为你省去繁琐的网页登录与层层跳转。
+          </p>
+        </div>
+
+        <!-- Unified Download Dock with Explicit Edition Type (Mobile / Desktop / CLI) -->
+        <div data-squircle="28" class="monet-card p-5 sm:p-6 space-y-4 text-left">
+          <!-- OS Selector Row -->
+          <div data-squircle="16" class="grid grid-cols-4 gap-1 p-1 bg-monet-bg">
+            <button type="button" data-os="android" data-squircle="12" class="os-pill flex items-center justify-center gap-1.5 py-2 text-xs font-medium transition-all">
+              <!-- Tabler: brand-android -->
+              <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
+                <path stroke="none" d="M0 0h24v24H0z" fill="none"/>
+                <path d="M4 10l0 6" /><path d="M20 10l0 6" />
+                <path d="M7 9h10v8a1 1 0 0 1 -1 1h-8a1 1 0 0 1 -1 -1v-8a5 5 0 0 1 10 0" />
+                <path d="M8 3l1 2" /><path d="M16 3l-1 2" />
+                <path d="M9 18l0 3" /><path d="M15 18l0 3" />
+              </svg>
+              <span>Android</span>
+            </button>
+            <button type="button" data-os="windows" data-squircle="12" class="os-pill flex items-center justify-center gap-1.5 py-2 text-xs font-medium transition-all">
+              <!-- Tabler: brand-windows -->
+              <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
+                <path stroke="none" d="M0 0h24v24H0z" fill="none"/>
+                <path d="M17.8 20l-12 -1.5c-1 -.1 -1.8 -.9 -1.8 -1.9v-9.2c0 -1 .8 -1.8 1.8 -1.9l12 -1.5c1.2 -.1 2.2 .8 2.2 1.9v12.1c0 1.2 -1.1 2.1 -2.2 1.9z" />
+                <path d="M12 5l0 14" /><path d="M4 12l16 0" />
+              </svg>
+              <span>Windows</span>
+            </button>
+            <button type="button" data-os="macos" data-squircle="12" class="os-pill flex items-center justify-center gap-1.5 py-2 text-xs font-medium transition-all">
+              <!-- Tabler: brand-finder -->
+              <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
+                <path stroke="none" d="M0 0h24v24H0z" fill="none"/>
+                <path d="M3 4m0 1a1 1 0 0 1 1 -1h16a1 1 0 0 1 1 1v14a1 1 0 0 1 -1 1h-16a1 1 0 0 1 -1 -1z" />
+                <path d="M8 9v1" /><path d="M16 9v1" /><path d="M8 15c1.333 1 2.667 1.5 4 1.5s2.667 -.5 4 -1.5" />
+                <path d="M13 4c-.667 2 -1.333 4.667 -2 8h2c0 3 .333 5.667 1 8" />
+              </svg>
+              <span>macOS</span>
+            </button>
+            <button type="button" data-os="linux" data-squircle="12" class="os-pill flex items-center justify-center gap-1.5 py-2 text-xs font-medium transition-all">
+              <!-- Tabler (unmerged brand-linux / tux) -->
+              <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M8.5 7a3.5 3.5 0 0 1 7 0c0 2 1.1 3.8 2 5l3 4l-1.5 -1c0 3.5 -3 6 -7 6s-7 -2.5 -7 -6l-1.5 1l3 -4c.9 -1.2 2 -3 2 -5" />
+                <path d="M11.25 10l.75 -.5l.75 .5l-.75 .5l-.75 -.5" />
+              </svg>
+              <span>Linux</span>
+            </button>
+          </div>
+
+          <!-- Edition Type Badge + Variant Filename -->
+          <div class="flex items-center justify-between px-1">
+            <div class="flex items-center gap-2">
+              <span class="text-xs text-monet-onSurfaceVariant">版本形态</span>
+              <span id="editionTypeBadge" data-squircle="8" class="px-2 py-0.5 text-xs font-semibold bg-monet-primaryContainer text-monet-primary">
+                Mobile · 移动客户端
+              </span>
+            </div>
+            <span id="packageFileName" class="text-[11px] font-mono text-monet-outline hidden sm:inline">
+              kemaolife_0.5.5_android_arm64-v8a.apk
+            </span>
+          </div>
+
+          <!-- Primary CTA + Variant Select -->
+          <div class="flex flex-col sm:flex-row items-stretch sm:items-center gap-2.5">
+            <a id="primaryDownloadLink" href="https://github.com/EchoPing07/kemaolife/releases/download/v0.5.5/kemaolife_0.5.5_android_arm64-v8a.apk" target="_blank" rel="noopener noreferrer" data-squircle="16" class="flex-1 inline-flex items-center justify-center gap-2 px-5 py-3.5 bg-monet-primary hover:bg-monet-primaryHover text-white font-medium text-sm transition-colors">
+              <!-- Tabler: download -->
+              <svg xmlns="http://www.w3.org/2000/svg" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path stroke="none" d="M0 0h24v24H0z" fill="none"/>
+                <path d="M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2 -2v-2" />
+                <path d="M7 11l5 5l5 -5" /><path d="M12 4l0 12" />
+              </svg>
+              <span id="primaryDownloadLabel">Mobile 移动端</span>
+            </a>
+
+            <!-- Custom Monet Squircle Architecture Trigger -->
+            <div class="relative" id="archDropdownWrap">
+              <button id="archDropdownBtn" type="button" data-squircle="16" class="w-full sm:w-auto inline-flex items-center justify-between gap-2 px-4 py-3.5 bg-monet-high/80 hover:bg-monet-high text-xs font-mono font-medium text-monet-onSurface transition-colors">
+                <span id="archDropdownLabel">arm64-v8a</span>
+                <!-- Tabler: chevron-down -->
+                <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="text-monet-onSurfaceVariant">
+                  <path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M6 9l6 6l6 -6" />
+                </svg>
+              </button>
+            </div>
+          </div>
+
+          <!-- Sub-bar -->
+          <div class="flex items-center justify-between pt-1 text-xs text-monet-onSurfaceVariant">
+            <span id="osSubtleHint" class="truncate">适用于 Android 7.0 及以上设备，支持无缝覆盖更新</span>
+            <button id="goPlatformDetailBtn" type="button" class="inline-flex items-center gap-1 text-monet-primary hover:underline font-medium flex-shrink-0 ml-2">
+              <span id="goPlatformDetailText">探索 Mobile 端特性</span>
+              <!-- Tabler: arrow-right -->
+              <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path stroke="none" d="M0 0h24v24H0z" fill="none"/>
+                <path d="M5 12l14 0" /><path d="M13 18l6 -6" /><path d="M13 6l6 6" />
+              </svg>
+            </button>
+          </div>
+        </div>
+
+      </div>
+    </section>
+
+    <!-- ==================== VIEW 2: MOBILE (交替错落布局：左文右图 → 左图右文 → 左文右图 → 左图右文) ==================== -->
+    <section id="view-mobile" class="view-transition hidden max-w-4xl mx-auto w-full space-y-20 py-4">
+      
+      <!-- Page Header -->
+      <div class="flex flex-col sm:flex-row sm:items-end justify-between gap-4 border-b border-monet-outlineVariant/40 pb-6">
+        <div class="space-y-1.5">
+          <div class="inline-flex items-center gap-1.5 text-xs font-semibold text-monet-primary">
+            <!-- Tabler: device-mobile -->
+            <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M6 5a2 2 0 0 1 2 -2h8a2 2 0 0 1 2 2v14a2 2 0 0 1 -2 2h-8a2 2 0 0 1 -2 -2v-14z" /><path d="M11 4h2" /><path d="M12 17v.01" />
+            </svg>
+            <span>Mobile · Android 移动版</span>
+          </div>
+          <h2 class="text-2xl sm:text-3xl font-bold tracking-tight text-monet-onSurface">即开即用，纯净零打扰。</h2>
+        </div>
+        <div class="flex items-center gap-2">
+          <a href="https://github.com/EchoPing07/kemaolife/releases/download/v0.5.5/kemaolife_0.5.5_android_arm64-v8a.apk" target="_blank" rel="noopener noreferrer" data-squircle="14" class="inline-flex items-center gap-2 px-4 py-2.5 bg-monet-primary hover:bg-monet-primaryHover text-white text-xs font-medium transition-colors">
+            <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2 -2v-2" /><path d="M7 11l5 5l5 -5" /><path d="M12 4l0 12" />
+            </svg>
+            <span>Mobile 移动端 (arm64-v8a)</span>
+          </a>
+          <button type="button" data-open-packages="android" data-squircle="14" class="px-3 py-2.5 bg-white text-monet-onSurfaceVariant hover:text-monet-onSurface text-xs font-medium transition-colors">
+            其他版本
+          </button>
+        </div>
+      </div>
+
+      <!-- ROW 1 (ODD): Text Left / Component Right — 课表 -->
+      <div class="grid grid-cols-1 md:grid-cols-12 gap-8 md:gap-12 items-center">
+        <div class="md:col-span-5 space-y-3">
+          <span data-squircle="8" class="inline-block px-2.5 py-0.5 text-xs font-semibold bg-monet-primaryContainer text-monet-primary">01 · 课表日程</span>
+          <h3 class="text-xl sm:text-2xl font-bold tracking-tight text-monet-onSurface">整周课表，离线秒开。</h3>
+          <p class="text-sm text-monet-onSurfaceVariant leading-relaxed">
+            全学期课表常驻本机，无网络信号亦可瞬间呈现。跟手滑动切换周次，支持一键导出标准 CSV 课表并导入「WakeUp 课程表」。
+          </p>
+        </div>
+
+        <div class="md:col-span-7 flex justify-center md:justify-end">
+          <div data-squircle="36" class="monet-card w-full max-w-[360px] p-4 text-monet-onSurface select-none">
+            <!-- TimetableHeader -->
+            <div class="flex items-stretch justify-between h-12 px-1.5 mb-1.5">
+              <div class="flex flex-col justify-between">
+                <div class="text-[18px] leading-6 font-semibold tracking-tight">2026/11/17</div>
+                <div class="text-xs font-medium">第 12 周&nbsp;&nbsp;周二</div>
+              </div>
+              <div class="flex flex-col justify-between items-end">
+                <div class="flex items-center gap-2 text-monet-onSurface">
+                  <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2 -2v-2" /><path d="M7 11l5 5l5 -5" /><path d="M12 4l0 12" />
+                  </svg>
+                  <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M20 11a8.1 8.1 0 0 0 -15.5 -2m-.5 -4v4h4" /><path d="M4 13a8.1 8.1 0 0 0 15.5 2m.5 4v-4h-4" />
+                  </svg>
+                </div>
+                <div class="text-[10px] text-monet-onSurfaceVariant">同步于 11/17 08:05</div>
+              </div>
+            </div>
+
+            <!-- WeekStrip -->
+            <div class="grid grid-cols-[22px_repeat(5,minmax(0,1fr))] items-center py-1.5 text-center">
+              <div class="flex flex-col items-center leading-tight text-[11px] font-semibold">
+                <span>11</span><span>月</span>
+              </div>
+              <div class="flex flex-col items-center text-monet-onSurfaceVariant text-[11px]">
+                <span>一</span><span class="font-medium">16</span>
+              </div>
+              <div class="flex flex-col items-center text-monet-onSurface text-[11px]">
+                <span class="font-extrabold">二</span><span class="font-extrabold">17</span>
+              </div>
+              <div class="flex flex-col items-center text-monet-onSurfaceVariant text-[11px]">
+                <span>三</span><span class="font-medium">18</span>
+              </div>
+              <div class="flex flex-col items-center text-monet-onSurfaceVariant text-[11px]">
+                <span>四</span><span class="font-medium">19</span>
+              </div>
+              <div class="flex flex-col items-center text-monet-onSurfaceVariant text-[11px]">
+                <span>五</span><span class="font-medium">20</span>
+              </div>
+            </div>
+
+            <!-- WeekGrid -->
+            <div class="grid grid-cols-[22px_repeat(5,minmax(0,1fr))] gap-x-1 pt-1">
+              <div class="flex flex-col text-[10px] text-monet-onSurfaceVariant items-center">
+                <div class="h-10 flex items-center">1</div>
+                <div class="h-10 flex items-center">2</div>
+                <div class="h-10 flex items-center">3</div>
+                <div class="h-10 flex items-center">4</div>
+              </div>
+              <div class="flex flex-col">
+                <div data-squircle="10" class="h-20 p-1.5 bg-[#CFE7FF] text-[#0A3557] flex flex-col justify-between">
+                  <div>
+                    <div class="text-[8px] opacity-80">08:20</div>
+                    <div class="text-[10px] leading-tight font-semibold">植物生理学</div>
+                  </div>
+                  <div class="text-[8px] opacity-80">A201</div>
+                </div>
+                <div class="h-20"></div>
+              </div>
+              <div class="flex flex-col">
+                <div data-squircle="10" class="h-20 p-1.5 bg-[#E3DDFF] text-[#2B1F63] flex flex-col justify-between">
+                  <div>
+                    <div class="text-[8px] opacity-80">08:20</div>
+                    <div class="text-[10px] leading-tight font-semibold">园艺生物技术</div>
+                  </div>
+                  <div class="text-[8px] opacity-80">B302</div>
+                </div>
+                <div data-squircle="10" class="h-20 mt-1 p-1.5 bg-[#C9F1E3] text-[#00382C] flex flex-col justify-between">
+                  <div>
+                    <div class="text-[8px] opacity-80">10:15</div>
+                    <div class="text-[10px] leading-tight font-semibold">设施园艺实验</div>
+                  </div>
+                  <div class="text-[8px] opacity-80">温室104</div>
+                </div>
+              </div>
+              <div class="flex flex-col">
+                <div class="h-20"></div>
+                <div data-squircle="10" class="h-20 p-1.5 bg-[#FFE0CC] text-[#6B2E00] flex flex-col justify-between">
+                  <div>
+                    <div class="text-[8px] opacity-80">10:15</div>
+                    <div class="text-[10px] leading-tight font-semibold">土壤肥料学</div>
+                  </div>
+                  <div class="text-[8px] opacity-80">C105</div>
+                </div>
+              </div>
+              <div class="flex flex-col">
+                <div data-squircle="10" class="h-20 p-1.5 bg-[#FFD9DC] text-[#6E1220] flex flex-col justify-between">
+                  <div>
+                    <div class="text-[8px] opacity-80">08:20</div>
+                    <div class="text-[10px] leading-tight font-semibold">果树栽培学</div>
+                  </div>
+                  <div class="text-[8px] opacity-80">A305</div>
+                </div>
+                <div class="h-20"></div>
+              </div>
+              <div class="flex flex-col">
+                <div class="h-20"></div>
+                <div data-squircle="10" class="h-20 p-1.5 bg-[#FFEFC1] text-[#4F3B00] flex flex-col justify-between">
+                  <div>
+                    <div class="text-[8px] opacity-80">10:15</div>
+                    <div class="text-[10px] leading-tight font-semibold">遗传学基础</div>
+                  </div>
+                  <div class="text-[8px] opacity-80">B405</div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ROW 2 (EVEN): Component Left / Text Right — 宿舍电费 -->
+      <div class="grid grid-cols-1 md:grid-cols-12 gap-8 md:gap-12 items-center">
+        <div class="md:col-span-5 md:order-2 space-y-3">
+          <span data-squircle="8" class="inline-block px-2.5 py-0.5 text-xs font-semibold bg-monet-primaryContainer text-monet-primary">02 · 宿舍电费</span>
+          <h3 class="text-xl sm:text-2xl font-bold tracking-tight text-monet-onSurface">余额与消耗趋势，一目了然。</h3>
+          <p class="text-sm text-monet-onSurfaceVariant leading-relaxed">
+            告别繁琐的公众号菜单。实时呈现剩余电量、预计可用天数与当月累计消耗，并将近期每日用电量直观绘为趋势柱状图。
+          </p>
+        </div>
+
+        <div class="md:col-span-7 md:order-1 flex justify-center md:justify-start">
+          <div data-squircle="36" class="monet-card w-full max-w-[340px] px-[22px] pt-3.5 pb-4 text-monet-onSurface select-none">
+            <div class="flex items-center justify-between py-1">
+              <span class="text-[15px] font-bold">电费</span>
+              <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="text-monet-onSurface">
+                <path d="M20 11a8.1 8.1 0 0 0 -15.5 -2m-.5 -4v4h4" /><path d="M4 13a8.1 8.1 0 0 0 15.5 2m.5 4v-4h-4" />
+              </svg>
+            </div>
+
+            <div class="flex items-baseline gap-1.5 mt-0.5">
+              <span class="text-[32px] leading-[38px] font-bold text-monet-primary">42.80</span>
+              <span class="text-sm font-medium text-monet-onSurfaceVariant">度</span>
+            </div>
+
+            <div class="text-[11px] font-medium text-monet-tertiary mt-0.5">数据截至 11/17 06:00</div>
+
+            <div class="grid grid-cols-2 gap-2 mt-3">
+              <div data-squircle="24" class="bg-monet-high px-3.5 py-2.5">
+                <div class="text-[15px] font-semibold text-monet-onSurface">9 天</div>
+                <div class="text-[11px] text-monet-onSurfaceVariant">可用天数</div>
+              </div>
+              <div data-squircle="24" class="bg-monet-high px-3.5 py-2.5">
+                <div class="text-[15px] font-semibold text-monet-onSurface">68.40 度</div>
+                <div class="text-[11px] text-monet-onSurfaceVariant">本月已用</div>
+              </div>
+            </div>
+
+            <div class="text-[11px] text-monet-onSurfaceVariant mt-2">近 7 日均量 4.50 度 · 统计至 2026-11-16</div>
+
+            <div class="h-10 flex items-end gap-[3px] mt-3">
+              <div class="flex-1 h-[45%] rounded-[3px] bg-monet-primary/35"></div>
+              <div class="flex-1 h-[62%] rounded-[3px] bg-monet-primary/35"></div>
+              <div class="flex-1 h-[50%] rounded-[3px] bg-monet-primary/35"></div>
+              <div class="flex-1 h-[78%] rounded-[3px] bg-monet-primary/35"></div>
+              <div class="flex-1 h-[92%] rounded-[3px] bg-monet-primary/35"></div>
+              <div class="flex-1 h-[68%] rounded-[3px] bg-monet-primary/35"></div>
+              <div class="flex-1 h-[55%] rounded-[3px] bg-monet-primary/35"></div>
+              <div class="flex-1 h-[84%] rounded-[3px] bg-monet-primary/35"></div>
+              <div class="flex-1 h-[100%] rounded-[3px] bg-monet-primary/35"></div>
+              <div class="flex-1 h-[72%] rounded-[3px] bg-monet-primary/35"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ROW 3 (ODD): Text Left / Component Right — 校园网 -->
+      <div class="grid grid-cols-1 md:grid-cols-12 gap-8 md:gap-12 items-center">
+        <div class="md:col-span-5 space-y-3">
+          <span data-squircle="8" class="inline-block px-2.5 py-0.5 text-xs font-semibold bg-monet-primaryContainer text-monet-primary">03 · 校园网认证</span>
+          <h3 class="text-xl sm:text-2xl font-bold tracking-tight text-monet-onSurface">状态精准感知，掉线一键重连。</h3>
+          <p class="text-sm text-monet-onSurfaceVariant leading-relaxed">
+            智能识别当前 WiFi 环境，蜂窝移动网络下自动静默跳过。遇到网络波动或认证过期，点按即可完成下线重登。
+          </p>
+        </div>
+
+        <div class="md:col-span-7 flex justify-center md:justify-end">
+          <div data-squircle="36" class="monet-card w-full max-w-[340px] px-[22px] pt-3.5 pb-4 text-monet-onSurface select-none">
+            <div class="flex items-center justify-between py-1">
+              <span class="text-[15px] font-bold">校园网</span>
+              <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="text-monet-onSurface">
+                <path d="M20 11a8.1 8.1 0 0 0 -15.5 -2m-.5 -4v4h4" /><path d="M4 13a8.1 8.1 0 0 0 15.5 2m.5 4v-4h-4" />
+              </svg>
+            </div>
+
+            <div class="flex items-center gap-2 mt-1">
+              <span class="w-2.5 h-2.5 rounded-full bg-monet-primary"></span>
+              <span class="text-[15px] font-semibold text-monet-primary">已在线</span>
+            </div>
+            <div class="text-[11px] text-monet-onSurfaceVariant mt-0.5">探测于 11/17 08:05</div>
+
+            <div class="flex items-center justify-between py-1.5 mt-1.5 text-xs font-medium text-monet-onSurfaceVariant">
+              <span>接入详情</span>
+              <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M6 9l6 6l6 -6" />
+              </svg>
+            </div>
+
+            <div class="grid grid-cols-3 gap-2 mt-2 text-xs font-medium">
+              <div data-squircle="22" class="h-10 bg-monet-secondaryContainer text-monet-onSecondaryContainer opacity-55 flex items-center justify-center gap-1">
+                <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M15 8v-2a2 2 0 0 0 -2 -2h-7a2 2 0 0 0 -2 2v12a2 2 0 0 0 2 2h7a2 2 0 0 0 2 -2v-2" /><path d="M21 12h-13l3 -3" /><path d="M11 15l-3 -3" />
+                </svg>
+                <span>登录</span>
+              </div>
+              <div data-squircle="22" class="h-10 bg-monet-secondaryContainer text-monet-onSecondaryContainer flex items-center justify-center gap-1">
+                <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M20 11a8.1 8.1 0 0 0 -15.5 -2m-.5 -4v4h4" /><path d="M4 13a8.1 8.1 0 0 0 15.5 2m.5 4v-4h-4" />
+                </svg>
+                <span>重登</span>
+              </div>
+              <div data-squircle="22" class="h-10 bg-monet-primary text-white flex items-center justify-center gap-1">
+                <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M14 8v-2a2 2 0 0 0 -2 -2h-7a2 2 0 0 0 -2 2v12a2 2 0 0 0 2 2h7a2 2 0 0 0 2 -2v-2" /><path d="M7 12h14" /><path d="M18 9l3 3l-3 3" />
+                </svg>
+                <span>下线</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ROW 4 (EVEN): Component Left / Text Right — 取件码 -->
+      <div class="grid grid-cols-1 md:grid-cols-12 gap-8 md:gap-12 items-center">
+        <div class="md:col-span-5 md:order-2 space-y-3">
+          <span data-squircle="8" class="inline-block px-2.5 py-0.5 text-xs font-semibold bg-monet-primaryContainer text-monet-primary">04 · 快捷取件</span>
+          <h3 class="text-xl sm:text-2xl font-bold tracking-tight text-monet-onSurface">驿站取件，一步直达。</h3>
+          <p class="text-sm text-monet-onSurfaceVariant leading-relaxed">
+            无需在电商应用中层层翻找物流页，点按即可直接拉起淘宝与拼多多取件码界面，让高峰期取件更从容。
+          </p>
+        </div>
+
+        <div class="md:col-span-7 md:order-1 flex justify-center md:justify-start">
+          <div data-squircle="36" class="monet-card w-full max-w-[340px] px-[22px] pt-3.5 pb-4 text-monet-onSurface select-none">
+            <div class="py-1 text-[15px] font-bold">取件码</div>
+            <div class="text-xs text-monet-onSurfaceVariant mt-0.5">跳转对应 App 的取件码页</div>
+            <div class="grid grid-cols-2 gap-2 mt-3 text-xs font-medium">
+              <div data-squircle="22" class="h-10 bg-monet-secondaryContainer text-monet-onSecondaryContainer flex items-center justify-center gap-1.5">
+                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M2 5c.968 .555 1.335 1.104 2 2" /><path d="M2 10c5.007 3.674 2.85 6.544 0 10" /><path d="M10 4c-.137 4.137 -2.258 5.286 -3.709 6.684" /><path d="M10 6c2.194 -.8 3.736 -.852 6.056 -.993c4.206 -.158 5.523 2.264 5.803 5.153c.428 4.396 -.077 7.186 -2.117 9.298c-1.188 1.23 -3.238 2.62 -7.207 .259" /><path d="M11 10h6" /><path d="M13 10v6.493" /><path d="M8 13h10" /><path d="M16 15.512l.853 1.72" /><path d="M16.5 17c-1.145 .361 -7 3 -8.5 -.5" /><path d="M11.765 8.539l-1.765 2.461" />
+                </svg>
+                <span>淘宝</span>
+              </div>
+              <div data-squircle="22" class="h-10 bg-monet-secondaryContainer text-monet-onSecondaryContainer flex items-center justify-center gap-1.5">
+                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M9 15l6 -6" /><path d="M11 6l.463 -.536a5 5 0 0 1 7.071 7.072l-.534 .464" /><path d="M13 18l-.397 .534a5.068 5.068 0 0 1 -7.127 0a4.972 4.972 0 0 1 0 -7.071l.524 -.463" />
+                </svg>
+                <span>拼多多</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+    </section>
+
+    <!-- ==================== VIEW 3: DESKTOP (交替错落布局：左文右图 → 左图右文 → 左文右图) ==================== -->
+    <section id="view-desktop" class="view-transition hidden max-w-4xl mx-auto w-full space-y-20 py-4">
+      
+      <!-- Page Header -->
+      <div class="flex flex-col sm:flex-row sm:items-end justify-between gap-4 border-b border-monet-outlineVariant/40 pb-6">
+        <div class="space-y-1.5">
+          <div class="inline-flex items-center gap-1.5 text-xs font-semibold text-monet-primary">
+            <!-- Tabler: device-desktop -->
+            <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M3 5a1 1 0 0 1 1 -1h16a1 1 0 0 1 1 1v10a1 1 0 0 1 -1 1h-16a1 1 0 0 1 -1 -1v-10z" /><path d="M7 20h10" /><path d="M9 16v4" /><path d="M15 16v4" />
+            </svg>
+            <span>Desktop · Windows 桌面版</span>
+          </div>
+          <h2 class="text-2xl sm:text-3xl font-bold tracking-tight text-monet-onSurface">静默常驻，主动守候。</h2>
+        </div>
+        <div class="flex items-center gap-2">
+          <a href="https://github.com/EchoPing07/kemaolife/releases/download/v0.5.5/kemaolife-agent_0.5.5_windows_amd64.zip" target="_blank" rel="noopener noreferrer" data-squircle="14" class="inline-flex items-center gap-2 px-4 py-2.5 bg-monet-primary hover:bg-monet-primaryHover text-white text-xs font-medium transition-colors">
+            <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2 -2v-2" /><path d="M7 11l5 5l5 -5" /><path d="M12 4l0 12" />
+            </svg>
+            <span>Desktop 桌面端 (amd64)</span>
+          </a>
+          <a href="https://github.com/EchoPing07/kemaolife/releases/download/v0.5.5/kemaolife-agent_0.5.5_windows_arm64.zip" target="_blank" rel="noopener noreferrer" data-squircle="14" class="px-3 py-2.5 bg-white text-monet-onSurfaceVariant hover:text-monet-onSurface text-xs font-medium transition-colors">
+            ARM64
+          </a>
+        </div>
+      </div>
+
+      <!-- ROW 1 (ODD): Text Left / Component Right — 托盘常驻 -->
+      <div class="grid grid-cols-1 md:grid-cols-12 gap-8 md:gap-12 items-center">
+        <div class="md:col-span-5 space-y-3">
+          <span data-squircle="8" class="inline-block px-2.5 py-0.5 text-xs font-semibold bg-monet-primaryContainer text-monet-primary">01 · 原生托盘</span>
+          <h3 class="text-xl sm:text-2xl font-bold tracking-tight text-monet-onSurface">轻量常驻托盘，状态随手可控。</h3>
+          <p class="text-sm text-monet-onSurfaceVariant leading-relaxed">
+            解压后双击 <code>install.bat</code> 即可完成部署。无黑框窗口、不占任务栏空间，右键即可查看实时电费余额与校园网状态。
+          </p>
+        </div>
+
+        <div class="md:col-span-7 flex justify-center md:justify-end">
+          <div data-squircle="12" class="w-56 bg-[#F9F9F9] border border-[#D4D4D4] shadow-md py-1.5 px-1 text-[12px] text-[#1A1A1A] select-none">
+            <div class="px-3 py-1 text-[#888888]">校园网：已在线</div>
+            <div class="px-3 py-1 text-[#888888]">剩余电费：42.80 度</div>
+            <div class="my-1 border-t border-[#E5E5E5]"></div>
+            <div class="px-3 py-1 rounded hover:bg-[#E8E8E8]">登录校园网</div>
+            <div class="px-3 py-1 rounded hover:bg-[#E8E8E8]">下线</div>
+            <div class="px-3 py-1 rounded bg-[#EBEBEB] font-medium">重登</div>
+            <div class="my-1 border-t border-[#E5E5E5]"></div>
+            <div class="px-3 py-1 rounded hover:bg-[#E8E8E8]">立即探测校园网</div>
+            <div class="px-3 py-1 rounded hover:bg-[#E8E8E8]">立即查询电费</div>
+            <div class="px-3 py-1 rounded hover:bg-[#E8E8E8]">设置…</div>
+            <div class="my-1 border-t border-[#E5E5E5]"></div>
+            <div class="px-3 py-1 rounded hover:bg-[#E8E8E8]">退出</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ROW 2 (EVEN): Component Left / Text Right — 智能电费预警 -->
+      <div class="grid grid-cols-1 md:grid-cols-12 gap-8 md:gap-12 items-center">
+        <div class="md:col-span-5 md:order-2 space-y-3">
+          <span data-squircle="8" class="inline-block px-2.5 py-0.5 text-xs font-semibold bg-monet-primaryContainer text-monet-primary">02 · 低电费预警</span>
+          <h3 class="text-xl sm:text-2xl font-bold tracking-tight text-monet-onSurface">余量不足主动提醒，夜间自动免打扰。</h3>
+          <p class="text-sm text-monet-onSurfaceVariant leading-relaxed">
+            默认每 4 小时巡检一次宿舍电量，低于 10 度或预计可用不足 3 天时主动推送桌面通知；23:00 至次日 07:00 自动静默，守护安心睡眠。
+          </p>
+        </div>
+
+        <div class="md:col-span-7 md:order-1 flex justify-center md:justify-start">
+          <div data-squircle="16" class="w-full max-w-[320px] bg-white border border-monet-outlineVariant/60 shadow-md p-4 space-y-2 select-none">
+            <div class="flex items-center justify-between text-[11px] text-[#555555]">
+              <div class="flex items-center gap-1.5">
+                <img src="assets/icon.jpg" alt="" class="w-4 h-4 rounded-sm object-cover" />
+                <span class="font-medium text-[#1A1A1A]">科贸生活</span>
+              </div>
+              <span>✕</span>
+            </div>
+            <div class="text-xs font-semibold text-[#1A1A1A]">宿舍电费不足提醒</div>
+            <div class="text-[11px] text-[#444444] leading-relaxed">
+              当前剩余电量 8.40 度（预计可用 2 天），低于提醒阈值，请及时充值。<br/>
+              <span class="text-[#777777]">数据截至 2026-11-17 06:00</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ROW 3 (ODD): Text Left / Component Right — 设置与自启认证 -->
+      <div class="grid grid-cols-1 md:grid-cols-12 gap-8 md:gap-12 items-center">
+        <div class="md:col-span-5 space-y-3">
+          <span data-squircle="8" class="inline-block px-2.5 py-0.5 text-xs font-semibold bg-monet-primaryContainer text-monet-primary">03 · 无感认证</span>
+          <h3 class="text-xl sm:text-2xl font-bold tracking-tight text-monet-onSurface">一次配置，开机自动连网。</h3>
+          <p class="text-sm text-monet-onSurfaceVariant leading-relaxed">
+            单击托盘图标即可呼出设置面板。开启「自动模式」与「开机自启」后，每次开机或网络掉线均可在后台自动完成校园网认证。
+          </p>
+        </div>
+
+        <div class="md:col-span-7 flex justify-center md:justify-end">
+          <div data-squircle="12" class="w-full max-w-[360px] overflow-hidden border border-[#999999]/60 shadow-md bg-[#F0F0F0] text-[#000000] select-none">
+            <div class="bg-[#FFFFFF] px-3 py-1.5 flex items-center justify-between border-b border-[#DFDFDF] text-xs">
+              <div class="flex items-center gap-1.5">
+                <img src="assets/icon.jpg" alt="" class="w-3.5 h-3.5 rounded-sm object-cover" />
+                <span>科贸生活 · 设置</span>
+              </div>
+              <div class="flex items-center gap-3 text-[#555555]">
+                <span>—</span><span>✕</span>
+              </div>
+            </div>
+
+            <div class="p-3.5 space-y-3 text-[11px]">
+              <div class="space-y-1">
+                <div class="font-bold">电费查询（电费接口无密码）</div>
+                <div class="grid grid-cols-[68px_1fr] items-center gap-2 pl-1.5">
+                  <span>学号</span>
+                  <div class="win32-input flex items-center">&lt;学号&gt;</div>
+                </div>
+              </div>
+
+              <div class="space-y-1">
+                <div class="font-bold">校园网认证（独立凭据）</div>
+                <div class="grid grid-cols-[68px_1fr] items-center gap-2 pl-1.5">
+                  <span>账号</span>
+                  <div class="win32-input flex items-center">&lt;学号&gt;</div>
+                </div>
+                <div class="grid grid-cols-[68px_1fr] items-center gap-2 pl-1.5">
+                  <span>密码</span>
+                  <div class="win32-input flex items-center tracking-widest">••••••••</div>
+                </div>
+              </div>
+
+              <div class="space-y-1">
+                <div class="font-bold">运行模式</div>
+                <div class="pl-1.5 flex items-center gap-1.5">
+                  <span class="w-3.5 h-3.5 border border-[#555555] bg-white flex items-center justify-center text-[10px]">✓</span>
+                  <span>自动模式：未认证时自动登录</span>
+                </div>
+                <div class="pl-1.5 flex items-center gap-1.5">
+                  <span class="w-3.5 h-3.5 border border-[#555555] bg-white flex items-center justify-center text-[10px]">✓</span>
+                  <span>开机登录时自启动</span>
+                </div>
+              </div>
+
+              <div class="pt-1 flex justify-end gap-2">
+                <div class="win32-btn w-16 flex items-center justify-center border-[#0078D7]">保存</div>
+                <div class="win32-btn w-16 flex items-center justify-center">取消</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+    </section>
+
+    <!-- ==================== VIEW 4: CLI (交替错落布局：左文右图 → 左图右文) ==================== -->
+    <section id="view-cli" class="view-transition hidden max-w-4xl mx-auto w-full space-y-20 py-4">
+      
+      <!-- Page Header -->
+      <div class="flex flex-col sm:flex-row sm:items-end justify-between gap-4 border-b border-monet-outlineVariant/40 pb-6">
+        <div class="space-y-1.5">
+          <div class="inline-flex items-center gap-1.5 text-xs font-semibold text-monet-primary">
+            <!-- Tabler: terminal-2 -->
+            <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M8 9l3 3l-3 3" /><path d="M13 15l3 0" /><path d="M3 4m0 2a2 2 0 0 1 2 -2h14a2 2 0 0 1 2 2v12a2 2 0 0 1 -2 2h-14a2 2 0 0 1 -2 -2z" />
+            </svg>
+            <span>CLI · Linux / macOS 命令行与 AI 扩展</span>
+          </div>
+          <h2 class="text-2xl sm:text-3xl font-bold tracking-tight text-monet-onSurface">高效命令行，原生赋能 AI 助手。</h2>
+        </div>
+        <div class="flex flex-wrap items-center gap-2">
+          <a href="https://github.com/EchoPing07/kemaolife/releases/download/v0.5.5/kemaolife_0.5.5_linux_amd64.tar.gz" target="_blank" rel="noopener noreferrer" data-squircle="14" class="px-4 py-2.5 bg-monet-primary hover:bg-monet-primaryHover text-white text-xs font-medium transition-colors">
+            Linux CLI (amd64)
+          </a>
+          <a href="https://github.com/EchoPing07/kemaolife/releases/download/v0.5.5/kemaolife_0.5.5_darwin_arm64.tar.gz" target="_blank" rel="noopener noreferrer" data-squircle="14" class="px-4 py-2.5 bg-white text-monet-onSurface text-xs font-medium transition-colors">
+            macOS CLI (arm64)
+          </a>
+          <a href="https://github.com/EchoPing07/kemaolife/releases/download/v0.5.5/kemaolife-skill_0.5.5.zip" target="_blank" rel="noopener noreferrer" data-squircle="14" class="px-4 py-2.5 bg-monet-primaryContainer text-monet-primary text-xs font-medium transition-colors">
+            AI Skill 包
+          </a>
+        </div>
+      </div>
+
+      <!-- ROW 1 (ODD): Text Left / Component Right — 课表查询 -->
+      <div class="grid grid-cols-1 md:grid-cols-12 gap-8 md:gap-12 items-center">
+        <div class="md:col-span-5 space-y-3">
+          <span data-squircle="8" class="inline-block px-2.5 py-0.5 text-xs font-semibold bg-monet-primaryContainer text-monet-primary">01 · 课表速查</span>
+          <h3 class="text-xl sm:text-2xl font-bold tracking-tight text-monet-onSurface">单行指令，即刻输出结构化课表。</h3>
+          <p class="text-sm text-monet-onSurfaceVariant leading-relaxed">
+            支持按当日、指定周次或具体日期快速检索。离线状态下自动回退至本地快照，亦可通过 <code>--json</code> 参数无缝接入 AI Agent 工作流。
+          </p>
+        </div>
+
+        <div class="md:col-span-7 flex justify-center md:justify-end">
+          <div data-squircle="24" class="w-full max-w-[420px] bg-[#1A1B22] text-[#E4E6F2] p-4 font-mono text-[11px] shadow-md overflow-x-auto">
+            <div class="text-[#8E92A8] mb-2">$ kemaolife timetable</div>
+<pre class="leading-[1.6]">2026-11-17  星期二  第 12 周
+（快照同步于 2026-11-17T08:05:12+08:00）
+节次  时间         课程              地点        教师  
+-------------------------------------------------------
+1-2   08:20~09:55  园艺植物生物技术  教学楼B302  林教授
+5-6   14:00~15:35  设施园艺学实验    温室区104   陈老师</pre>
+          </div>
+        </div>
+      </div>
+
+      <!-- ROW 2 (EVEN): Component Left / Text Right — 电费查询 -->
+      <div class="grid grid-cols-1 md:grid-cols-12 gap-8 md:gap-12 items-center">
+        <div class="md:col-span-5 md:order-2 space-y-3">
+          <span data-squircle="8" class="inline-block px-2.5 py-0.5 text-xs font-semibold bg-monet-primaryContainer text-monet-primary">02 · 电费账单</span>
+          <h3 class="text-xl sm:text-2xl font-bold tracking-tight text-monet-onSurface">电量余量与每日明细，一次呈现。</h3>
+          <p class="text-sm text-monet-onSurfaceVariant leading-relaxed">
+            执行 <code>kemaolife electricity</code> 即可同步拉取当前剩余电量、近 7 日日均消耗、预计可用天数及当月逐日用电报表。
+          </p>
+        </div>
+
+        <div class="md:col-span-7 md:order-1 flex justify-center md:justify-start">
+          <div data-squircle="24" class="w-full max-w-[420px] bg-[#1A1B22] text-[#E4E6F2] p-4 font-mono text-[11px] shadow-md overflow-x-auto">
+            <div class="text-[#8E92A8] mb-2">$ kemaolife electricity</div>
+<pre class="leading-[1.6]">项          值              
+----------------------------
+剩余电量    42.80 度        
+宿舍        &lt;校区&gt;_&lt;楼栋&gt;_&lt;楼层&gt;_&lt;房间&gt; 
+数据截至    2026-11-17 06:00
+近 7 日均量 4.50 度/天      
+预计可用    9 天            
+
+2026-11 每日用量（当月累计 68.40 度）
+日期        用量（度）
+----------------------
+2026-11-15  5.10      
+2026-11-16  4.35      </pre>
+          </div>
+        </div>
+      </div>
+
+    </section>
+
+  </main>
+
+  <!-- ==================== MODAL: ALL 12 RELEASE PACKAGES ==================== -->
+  <div id="packagesModal" class="fixed inset-0 z-50 hidden items-center justify-center bg-monet-onSurface/30 backdrop-blur-sm p-4">
+    <div data-squircle="28" class="monet-card max-w-2xl w-full p-6 space-y-4 shadow-xl max-h-[90vh] overflow-y-auto">
+      <div class="flex items-center justify-between border-b border-monet-outlineVariant/40 pb-3.5">
+        <div>
+          <h3 class="text-sm font-semibold text-monet-onSurface">全部发行包下载（v0.5.5 · 按 Mobile / Desktop / CLI 分类）</h3>
+          <p class="text-xs text-monet-onSurfaceVariant">点击对应文件即可直接从 GitHub Releases 下载</p>
+        </div>
+        <button id="closePackagesModalBtn" type="button" data-squircle="10" class="p-1.5 hover:bg-monet-high text-monet-onSurfaceVariant hover:text-monet-onSurface">
+          <!-- Tabler: x -->
+          <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
+            <path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M18 6l-12 12" /><path d="M6 6l12 12" />
+          </svg>
+        </button>
+      </div>
+
+      <div id="allPackagesContainer" class="space-y-4 text-xs">
+        <!-- Populated dynamically -->
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const RELEASE_BASE = 'https://github.com/EchoPing07/kemaolife/releases/download/v0.5.5/';
+
+    const OS_CONFIG = {
+      android: {
+        name: 'Android',
+        navTarget: 'mobile',
+        navLabel: '探索 Mobile 端特性',
+        hint: '适用于 Android 7.0 及以上设备，支持无缝覆盖更新',
+        packages: [
+          {
+            edition: 'Mobile · 移动客户端',
+            arch: 'arm64-v8a', label: 'arm64-v8a（推荐）',
+            file: 'kemaolife_0.5.5_android_arm64-v8a.apk',
+            btnText: 'Mobile 移动端'
+          },
+          {
+            edition: 'Mobile · 移动客户端',
+            arch: 'armeabi-v7a', label: 'armeabi-v7a（32位）',
+            file: 'kemaolife_0.5.5_android_armeabi-v7a.apk',
+            btnText: 'Mobile 移动端 (32位)'
+          },
+          {
+            edition: 'Mobile · 移动客户端',
+            arch: 'x86_64', label: 'x86_64（模拟器）',
+            file: 'kemaolife_0.5.5_android_x86_64.apk',
+            btnText: 'Mobile 模拟器 (x86_64)'
+          },
+          {
+            edition: 'Mobile · 移动客户端',
+            arch: 'x86', label: 'x86（模拟器）',
+            file: 'kemaolife_0.5.5_android_x86.apk',
+            btnText: 'Mobile 模拟器 (x86)'
+          }
+        ]
+      },
+      windows: {
+        name: 'Windows',
+        navTarget: 'desktop',
+        navLabel: '探索 Desktop 端特性',
+        hint: '解压后运行 install.bat 即可完成部署并常驻系统托盘',
+        packages: [
+          {
+            edition: 'Desktop · 桌面托盘端',
+            arch: 'amd64', label: 'amd64（推荐）',
+            file: 'kemaolife-agent_0.5.5_windows_amd64.zip',
+            btnText: 'Desktop 桌面端'
+          },
+          {
+            edition: 'Desktop · 桌面托盘端',
+            arch: 'arm64', label: 'arm64（ARM）',
+            file: 'kemaolife-agent_0.5.5_windows_arm64.zip',
+            btnText: 'Desktop 桌面端 (ARM64)'
+          }
+        ]
+      },
+      macos: {
+        name: 'macOS',
+        navTarget: 'cli',
+        navLabel: '探索 CLI 端特性',
+        hint: '单文件原生构建，Apple Silicon 机型请选择 arm64 版本',
+        packages: [
+          {
+            edition: 'CLI · 命令行端',
+            arch: 'arm64', label: 'arm64（M系列芯片）',
+            file: 'kemaolife_0.5.5_darwin_arm64.tar.gz',
+            btnText: 'CLI 命令行 (macOS arm64)'
+          },
+          {
+            edition: 'CLI · 命令行端',
+            arch: 'amd64', label: 'amd64（Intel）',
+            file: 'kemaolife_0.5.5_darwin_amd64.tar.gz',
+            btnText: 'CLI 命令行 (macOS amd64)'
+          },
+          {
+            edition: 'CLI · AI Skill 扩展',
+            arch: 'Skill', label: 'Agent Skill 包',
+            file: 'kemaolife-skill_0.5.5.zip',
+            btnText: 'CLI 技能包 (.zip)'
+          }
+        ]
+      },
+      linux: {
+        name: 'Linux',
+        navTarget: 'cli',
+        navLabel: '探索 CLI 端特性',
+        hint: '零外部依赖静态二进制，支持终端直查与 AI Agent 接入',
+        packages: [
+          {
+            edition: 'CLI · 命令行端',
+            arch: 'amd64', label: 'amd64（推荐）',
+            file: 'kemaolife_0.5.5_linux_amd64.tar.gz',
+            btnText: 'CLI 命令行 (Linux amd64)'
+          },
+          {
+            edition: 'CLI · 命令行端',
+            arch: 'arm64', label: 'arm64',
+            file: 'kemaolife_0.5.5_linux_arm64.tar.gz',
+            btnText: 'CLI 命令行 (Linux arm64)'
+          },
+          {
+            edition: 'CLI · 命令行端',
+            arch: 'armv7', label: 'armv7',
+            file: 'kemaolife_0.5.5_linux_armv7.tar.gz',
+            btnText: 'CLI 命令行 (Linux armv7)'
+          },
+          {
+            edition: 'CLI · AI Skill 扩展',
+            arch: 'Skill', label: 'Agent Skill 包',
+            file: 'kemaolife-skill_0.5.5.zip',
+            btnText: 'CLI 技能包 (.zip)'
+          }
+        ]
+      }
+    };
+
+    const state = {
+      activeView: 'home',
+      selectedOS: 'android',
+      selectedPkgIndex: 0
+    };
+
+    function detectOSFromUA() {
+      const ua = navigator.userAgent.toLowerCase();
+      if (ua.includes('android')) return 'android';
+      if (ua.includes('win')) return 'windows';
+      if (ua.includes('mac')) return 'macos';
+      if (ua.includes('linux')) return 'linux';
+      return 'android';
+    }
+
+    function matchPkgIndexByArch(os, archHint) {
+      const pkgs = OS_CONFIG[os].packages;
+      if (!archHint) return 0;
+      const idx = pkgs.findIndex(p => p.arch && p.arch.toLowerCase() === archHint.toLowerCase());
+      return idx >= 0 ? idx : 0;
+    }
+
+    function detectArchHeuristic(os) {
+      const ua = navigator.userAgent.toLowerCase();
+      const plat = (navigator.platform || '').toLowerCase();
+      const combined = ua + ' ' + plat;
+
+      if (os === 'android') {
+        if (/x86_64|x64|amd64/.test(combined)) return 'x86_64';
+        if (/i686|i386|x86/.test(combined)) return 'x86';
+        if (/armv7/.test(combined)) return 'armeabi-v7a';
+        return 'arm64-v8a';
+      }
+      if (os === 'windows') {
+        if (/arm64|aarch64/.test(combined)) return 'arm64';
+        return 'amd64';
+      }
+      if (os === 'linux') {
+        if (/aarch64|arm64/.test(combined)) return 'arm64';
+        if (/armv7/.test(combined)) return 'armv7';
+        return 'amd64';
+      }
+      if (os === 'macos') {
+        try {
+          const canvas = document.createElement('canvas');
+          const gl = canvas.getContext('webgl') || canvas.getContext('experimental-webgl');
+          if (gl) {
+            const dbg = gl.getExtension('WEBGL_debug_renderer_info');
+            if (dbg) {
+              const renderer = (gl.getParameter(dbg.UNMASKED_RENDERER_WEBGL) || '').toLowerCase();
+              if (renderer.includes('intel') || renderer.includes('amd radeon')) return 'amd64';
+              if (renderer.includes('apple')) return 'arm64';
+            }
+          }
+        } catch (e) {}
+        return 'arm64';
+      }
+      return '';
+    }
+
+    async function autoDetectEnvironment() {
+      let os = detectOSFromUA();
+      let archHint = detectArchHeuristic(os);
+
+      if (navigator.userAgentData && navigator.userAgentData.getHighEntropyValues) {
+        try {
+          const info = await navigator.userAgentData.getHighEntropyValues(['architecture', 'bitness', 'platform']);
+          const plat = (info.platform || '').toLowerCase();
+          if (plat.includes('android')) os = 'android';
+          else if (plat.includes('win')) os = 'windows';
+          else if (plat.includes('mac')) os = 'macos';
+          else if (plat.includes('linux')) os = 'linux';
+
+          const rawArch = (info.architecture || '').toLowerCase();
+          const bits = info.bitness || '64';
+          if (rawArch === 'arm') {
+            if (os === 'android') archHint = bits === '32' ? 'armeabi-v7a' : 'arm64-v8a';
+            else if (os === 'linux') archHint = bits === '32' ? 'armv7' : 'arm64';
+            else archHint = 'arm64';
+          } else if (rawArch === 'x86') {
+            if (os === 'android') archHint = bits === '32' ? 'x86' : 'x86_64';
+            else archHint = 'amd64';
+          }
+        } catch (e) {}
+      }
+
+      return { os, pkgIndex: matchPkgIndexByArch(os, archHint), archHint };
+    }
+
+    /* Exact port of SmoothCornerShape.kt (n=4 squircle with 16 steps per quadrant) */
+    function buildSquirclePath(w, h, radius) {
+      const maxR = Math.min(w, h) / 2;
+      const r = Math.max(0, Math.min(radius, maxR));
+      if (r <= 0 || w <= 0 || h <= 0) {
+        return `M0,0 L${w},0 L${w},${h} L0,${h} Z`;
+      }
+      const pts = [];
+      const addCorner = (cx, cy, startDeg, endDeg, rad) => {
+        const steps = 16;
+        for (let step = 0; step <= steps; step++) {
+          const deg = startDeg + ((endDeg - startDeg) * step) / steps;
+          const radAngle = (deg * Math.PI) / 180;
+          const c = Math.cos(radAngle);
+          const s = Math.sin(radAngle);
+          const x = cx + rad * Math.sign(c) * Math.pow(Math.abs(c), 0.5);
+          const y = cy + rad * Math.sign(s) * Math.pow(Math.abs(s), 0.5);
+          pts.push(`${x.toFixed(2)},${y.toFixed(2)}`);
+        }
+      };
+      addCorner(r, r, 180, 270, r);
+      addCorner(w - r, r, 270, 360, r);
+      addCorner(w - r, h - r, 0, 90, r);
+      addCorner(r, h - r, 90, 180, r);
+      return 'M' + pts[0] + ' L' + pts.slice(1).join(' L') + ' Z';
+    }
+
+    function applyAllSquircles() {
+      document.querySelectorAll('[data-squircle]').forEach(el => {
+        const r = parseFloat(el.getAttribute('data-squircle')) || 16;
+        el.style.borderRadius = r + 'px';
+        const rect = el.getBoundingClientRect();
+        if (rect.width > 4 && rect.height > 4) {
+          const d = buildSquirclePath(rect.width, rect.height, r);
+          el.style.clipPath = `path('${d}')`;
+        }
+      });
+    }
+
+    function switchView(viewName, updateHash = true) {
+      state.activeView = viewName;
+      ['home', 'mobile', 'desktop', 'cli'].forEach(v => {
+        const el = document.getElementById('view-' + v);
+        if (el) el.classList.toggle('hidden', v !== viewName);
+      });
+      document.querySelectorAll('.nav-tab').forEach(btn => {
+        const isCurrent = btn.getAttribute('data-nav') === viewName;
+        btn.classList.toggle('nav-active', isCurrent);
+        btn.classList.toggle('text-monet-onSurfaceVariant', !isCurrent);
+      });
+      if (updateHash && location.hash !== '#' + viewName) {
+        history.pushState(null, '', '#' + viewName);
+      }
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+      requestAnimationFrame(applyAllSquircles);
+    }
+
+    function renderHomeOS() {
+      const cfg = OS_CONFIG[state.selectedOS];
+      document.querySelectorAll('.os-pill').forEach(btn => {
+        const active = btn.getAttribute('data-os') === state.selectedOS;
+        btn.className = active
+          ? 'os-pill os-active flex items-center justify-center gap-1.5 py-2 text-xs font-medium transition-all'
+          : 'os-pill flex items-center justify-center gap-1.5 py-2 text-xs font-medium text-monet-onSurfaceVariant hover:text-monet-onSurface transition-all';
+      });
+
+      const pkg = cfg.packages[state.selectedPkgIndex] || cfg.packages[0];
+      const menu = document.getElementById('archDropdownMenu');
+      menu.innerHTML = cfg.packages.map((p, idx) => {
+        const isSel = idx === state.selectedPkgIndex;
+        return `
+          <button type="button" data-arch-idx="${idx}" data-squircle="12" class="arch-option w-full px-3 py-2 text-left text-xs flex items-center justify-between transition-colors ${isSel ? 'bg-monet-primaryContainer/70 text-monet-primary font-semibold' : 'text-monet-onSurface hover:bg-monet-bg'}">
+            <span>${p.label}</span>
+            ${isSel ? '<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12l5 5l10 -10"/></svg>' : ''}
+          </button>
+        `;
+      }).join('');
+
+      document.querySelectorAll('.arch-option').forEach(opt => {
+        opt.addEventListener('click', () => {
+          state.selectedPkgIndex = parseInt(opt.getAttribute('data-arch-idx'), 10) || 0;
+          menu.classList.add('hidden');
+          renderHomeOS();
+        });
+      });
+      document.getElementById('primaryDownloadLink').href = RELEASE_BASE + pkg.file;
+      document.getElementById('primaryDownloadLabel').textContent = pkg.btnText;
+      document.getElementById('editionTypeBadge').textContent = pkg.edition;
+      document.getElementById('packageFileName').textContent = pkg.file;
+      document.getElementById('archDropdownLabel').textContent = pkg.arch;
+      document.getElementById('osSubtleHint').textContent = cfg.hint;
+      document.getElementById('goPlatformDetailText').textContent = cfg.navLabel;
+
+      requestAnimationFrame(applyAllSquircles);
+    }
+
+    function renderAllPackagesModal() {
+      const groups = [
+        { title: 'Mobile · Android 移动客户端（4 个包）', items: OS_CONFIG.android.packages },
+        { title: 'Desktop · Windows 桌面托盘端（2 个包）', items: OS_CONFIG.windows.packages },
+        { title: 'CLI · macOS 命令行端（2 个包）', items: OS_CONFIG.macos.packages.slice(0, 2) },
+        { title: 'CLI · Linux 命令行端（3 个包）', items: OS_CONFIG.linux.packages.slice(0, 3) },
+        { title: 'CLI · AI 助手技能扩展（1 个包）', items: [{ label: '[CLI Skill] 供 AI 助手调用的技能扩展包', file: 'kemaolife-skill_0.5.5.zip' }] }
+      ];
+
+      const container = document.getElementById('allPackagesContainer');
+      container.innerHTML = groups.map(g => `
+        <div class="space-y-2">
+          <div class="font-semibold text-monet-onSurface">${g.title}</div>
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-2">
+            ${g.items.map(item => `
+              <a href="${RELEASE_BASE + item.file}" target="_blank" rel="noopener noreferrer" data-squircle="14" class="p-3 bg-monet-bg hover:bg-monet-primaryContainer/50 flex items-center justify-between transition-colors">
+                <div class="min-w-0">
+                  <div class="font-mono font-medium text-monet-onSurface break-all">${item.file}</div>
+                  <div class="text-[11px] text-monet-onSurfaceVariant">${item.label}</div>
+                </div>
+                <span class="text-monet-primary font-medium ml-2 shrink-0 whitespace-nowrap">下载</span>
+              </a>
+            `).join('')}
+          </div>
+        </div>
+      `).join('');
+    }
+
+    window.addEventListener('DOMContentLoaded', () => {
+      state.selectedOS = detectOSFromUA();
+      state.selectedPkgIndex = matchPkgIndexByArch(state.selectedOS, detectArchHeuristic(state.selectedOS));
+      renderHomeOS();
+
+      autoDetectEnvironment().then(({ os, pkgIndex }) => {
+        state.selectedOS = os;
+        state.selectedPkgIndex = pkgIndex;
+        renderHomeOS();
+      });
+      renderAllPackagesModal();
+      applyAllSquircles();
+
+      window.addEventListener('resize', () => {
+        requestAnimationFrame(applyAllSquircles);
+      });
+
+      document.querySelectorAll('.nav-tab').forEach(btn => {
+        btn.addEventListener('click', () => {
+          switchView(btn.getAttribute('data-nav'));
+        });
+      });
+
+      document.getElementById('brandHomeBtn').addEventListener('click', () => {
+        switchView('home');
+      });
+
+      document.querySelectorAll('.os-pill').forEach(btn => {
+        btn.addEventListener('click', () => {
+          state.selectedOS = btn.getAttribute('data-os');
+          state.selectedPkgIndex = 0;
+          renderHomeOS();
+        });
+      });
+
+      const archBtn = document.getElementById('archDropdownBtn');
+      const archMenu = document.getElementById('archDropdownMenu');
+      const positionArchMenu = () => {
+        const rect = archBtn.getBoundingClientRect();
+        const menuW = 240;
+        const left = Math.max(12, Math.min(window.innerWidth - menuW - 12, rect.right - menuW));
+        const spaceBelow = window.innerHeight - rect.bottom;
+        archMenu.style.left = left + 'px';
+        if (spaceBelow < 180 && rect.top > 180) {
+          archMenu.style.top = 'auto';
+          archMenu.style.bottom = (window.innerHeight - rect.top + 8) + 'px';
+        } else {
+          archMenu.style.bottom = 'auto';
+          archMenu.style.top = (rect.bottom + 8) + 'px';
+        }
+      };
+      archBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const willOpen = archMenu.classList.contains('hidden');
+        if (willOpen) {
+          positionArchMenu();
+          archMenu.classList.remove('hidden');
+          requestAnimationFrame(applyAllSquircles);
+        } else {
+          archMenu.classList.add('hidden');
+        }
+      });
+      document.addEventListener('click', (e) => {
+        if (!document.getElementById('archDropdownWrap').contains(e.target) && !archMenu.contains(e.target)) {
+          archMenu.classList.add('hidden');
+        }
+      });
+      window.addEventListener('scroll', () => {
+        if (!archMenu.classList.contains('hidden')) positionArchMenu();
+      }, { passive: true });
+
+      document.getElementById('goPlatformDetailBtn').addEventListener('click', () => {
+        const target = OS_CONFIG[state.selectedOS].navTarget;
+        switchView(target);
+      });
+
+      const packagesModal = document.getElementById('packagesModal');
+      const openPkgModal = () => {
+        packagesModal.classList.remove('hidden');
+        packagesModal.classList.add('flex');
+        requestAnimationFrame(applyAllSquircles);
+      };
+      document.getElementById('openAllPackagesBtnTop').addEventListener('click', openPkgModal);
+      document.querySelectorAll('[data-open-packages]').forEach(b => b.addEventListener('click', openPkgModal));
+
+      document.getElementById('closePackagesModalBtn').addEventListener('click', () => {
+        packagesModal.classList.add('hidden');
+        packagesModal.classList.remove('flex');
+      });
+      packagesModal.addEventListener('click', (e) => {
+        if (e.target === packagesModal) {
+          packagesModal.classList.add('hidden');
+          packagesModal.classList.remove('flex');
+        }
+      });
+
+      const closeOverlays = () => {
+        archMenu.classList.add('hidden');
+        packagesModal.classList.add('hidden');
+        packagesModal.classList.remove('flex');
+      };
+      document.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape') closeOverlays();
+      });
+
+      window.addEventListener('hashchange', () => {
+        const v = location.hash.slice(1);
+        if (['home', 'mobile', 'desktop', 'cli'].includes(v) && v !== state.activeView) {
+          switchView(v, false);
+        }
+      });
+      const initialView = location.hash.slice(1);
+      if (['mobile', 'desktop', 'cli'].includes(initialView)) {
+        switchView(initialView, false);
+      }
+    });
+  </script>
+</body>
+</html>
