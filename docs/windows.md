@@ -1,6 +1,6 @@
-# Windows 托盘（kemaolife-agent）
+# Windows 托盘（kemaolife-desktop）
 
-`kemaolife-agent.exe` 是给人用的原生托盘常驻程序：**电费轮询 + 阈值提醒 + 校园网手动 / 自动认证**。Windows 主动说——这是它相对 Android 的结构性优势。不做课表主界面。
+`kemaolife-desktop.exe` 是给人用的原生托盘常驻程序：**电费轮询 + 阈值提醒 + 校园网手动 / 自动认证**。Windows 主动说——这是它相对 Android 的结构性优势。不做课表主界面。
 
 ## 1. 形态与生命周期
 
@@ -12,7 +12,7 @@
 
 ## 2. 安装与卸载
 
-从 [Releases](https://github.com/EchoPing07/kemaolife/releases) 下载 `kemaolife-agent_<版本>_windows_<架构>.zip`（`amd64` 或 `arm64`），**解压到任意目录后双击 `install.bat`**。脚本会结束旧实例、复制程序到 `%LOCALAPPDATA%\Programs\Kemaolife\`、建开始菜单快捷方式并启动一次，不需要管理员权限。也可直接双击 `kemaolife-agent.exe` 绿色运行，只是此时建议不要开启开机自启（自启项记录的是 exe 绝对路径，程序一挪位置就失效）。
+从 [Releases](https://github.com/EchoPing07/kemaolife/releases) 下载 `kemaolife-desktop_<版本>_windows_<架构>.zip`（`amd64` 或 `arm64`），**解压到任意目录后双击 `install.bat`**。脚本会结束旧实例、复制程序到 `%LOCALAPPDATA%\Programs\Kemaolife\`、建开始菜单快捷方式并启动一次，不需要管理员权限。也可直接双击 `kemaolife-desktop.exe` 绿色运行，只是此时建议不要开启开机自启（自启项记录的是 exe 绝对路径，程序一挪位置就失效）。
 
 卸载双击 `uninstall.bat`：结束进程、删自启项、删快捷方式与安装目录，**保留** `%LOCALAPPDATA%\Kemaolife\` 配置目录（含 DPAPI 加密的学号与凭据，重装可沿用）。
 
@@ -59,7 +59,7 @@
 
 ## 6. 告警规则
 
-告警判定是 `core/alert.Evaluate` 纯函数（旧状态 + 当前电费 + 注入时钟 + 配置 → 决策 + 新状态），由 `internal/agent.Engine` 在电费成功路径调用。通知渠道为系统通知为主、托盘状态为辅：当前由托盘 `NIF_INFO` 承载，进程 AUMID `Kemaolife.Agent` 仅用于归类，样式随 Windows 版本变化（气泡 / toast），不承诺 WinRT Toast 或操作中心归档。
+告警判定是 `core/alert.Evaluate` 纯函数（旧状态 + 当前电费 + 注入时钟 + 配置 → 决策 + 新状态），由 `internal/desktop.Engine` 在电费成功路径调用。通知渠道为系统通知为主、托盘状态为辅：当前由托盘 `NIF_INFO` 承载，进程 AUMID `Kemaolife.Desktop` 仅用于归类，样式随 Windows 版本变化（气泡 / toast），不承诺 WinRT Toast 或操作中心归档。
 
 1. **阈值**：`balance <= threshold` 或 `estimatedDays <= daysThreshold` 触发提醒。
 2. **去重**：余额阈值与可用天数阈值各用独立标记；同一触发原因只提醒一次，余额回升到阈值以上（充值）后重置余额标记，可用天数高于阈值后重置天数标记。
@@ -85,11 +85,11 @@
 
 - 非法数值拒绝保存；间隔低于下限钳制后保存并显示实际生效值。
 - 关闭窗口只隐藏，不退出进程。
-- 配置存 `agent/config` 键，经 DPAPI 加密后原子写入 `%LOCALAPPDATA%\Kemaolife\`。
+- 配置存 `desktop/config` 键，经 DPAPI 加密后原子写入 `%LOCALAPPDATA%\Kemaolife\`。
 
 ## 8. 开机自启
 
-开机登录时自启一次，设置窗口可开关（默认勾选）；**仅在设置保存时**写 HKCU `Run` 项（值名 `KemaolifeAgent`），首次安装不写、不自动生效。不写守护进程、不注册服务、不保活。
+开机登录时自启一次，设置窗口可开关（默认勾选）；**仅在设置保存时**写 HKCU `Run` 项（值名 `KemaolifeDesktop`），首次安装不写、不自动生效。不写守护进程、不注册服务、不保活。
 
 ## 9. 构建
 
@@ -98,7 +98,7 @@
 ```bash
 GOOS=windows GOARCH=amd64 go build -trimpath \
   -ldflags "-s -w -H=windowsgui" \
-  -o kemaolife-agent.exe ./cmd/kemaolife-agent
+  -o kemaolife-desktop.exe ./cmd/kemaolife-desktop
 ```
 
 不带 `-H=windowsgui` 会多挂一个控制台窗口（程序启动时会自己 `FreeConsole` 摘掉，但仍不符合 GUI 子系统形态）。`arm64` 把 `GOARCH` 换成 `arm64` 即可。

@@ -1,6 +1,6 @@
 // Package alert 实现 Windows 端电费告警判定（docs/windows.md §6）。
 //
-// 这里只有纯函数：不读时钟、不发通知、不写文件。调用方（cmd/kemaolife-agent）
+// 这里只有纯函数：不读时钟、不发通知、不写文件。调用方（cmd/kemaolife-desktop）
 // 负责把 Clock 取到的时间传进来、把通知交给 Notifier、把状态留在内存。
 package alert
 

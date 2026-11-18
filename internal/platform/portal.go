@@ -202,7 +202,7 @@ func (p *PortalNetwork) Relogin(ctx context.Context) error {
 
 // EnsureCampusNetwork 是自动模式下的电费轮询前置：已在线不动，未认证就登录，
 // 不在校园网就返回错误；失败不阻断本轮电费查询，也不单独重试。
-// 电费查询连续失败时的指数退避由 agent.Engine.Run 统一接管。
+// 电费查询连续失败时的指数退避由 desktop.Engine.Run 统一接管。
 func (p *PortalNetwork) EnsureCampusNetwork(ctx context.Context) error {
 	probe, err := p.probeOnce(ctx)
 	if err != nil || probe.State == model.CampusOffline {

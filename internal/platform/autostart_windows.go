@@ -18,8 +18,8 @@ import (
 
 const (
 	runKeyPath = `Software\Microsoft\Windows\CurrentVersion\Run`
-	// AutoStartValueName 是自启项的注册表值名（docs/contract.md §1：KemaolifeAgent）。
-	AutoStartValueName = "KemaolifeAgent"
+	// AutoStartValueName 是自启项的注册表值名（docs/contract.md §1：KemaolifeDesktop）。
+	AutoStartValueName = "KemaolifeDesktop"
 )
 
 var (

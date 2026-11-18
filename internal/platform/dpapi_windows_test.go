@@ -95,12 +95,12 @@ func TestEncryptedStore(t *testing.T) {
 	}
 
 	secret := []byte(`{"campusPassword":"<密码>"}`)
-	if err := store.Put("agent/config", secret); err != nil {
+	if err := store.Put("desktop/config", secret); err != nil {
 		t.Fatalf("Put: %v", err)
 	}
 
 	// 内层必须已是密文。
-	raw, err := inner.Get("agent/config")
+	raw, err := inner.Get("desktop/config")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -108,7 +108,7 @@ func TestEncryptedStore(t *testing.T) {
 		t.Error("内层存储不应是明文")
 	}
 
-	back, err := store.Get("agent/config")
+	back, err := store.Get("desktop/config")
 	if err != nil {
 		t.Fatalf("Get: %v", err)
 	}
@@ -116,10 +116,10 @@ func TestEncryptedStore(t *testing.T) {
 		t.Errorf("读回 = %q", back)
 	}
 
-	if err := store.Delete("agent/config"); err != nil {
+	if err := store.Delete("desktop/config"); err != nil {
 		t.Fatalf("Delete: %v", err)
 	}
-	if _, err := inner.Get("agent/config"); err == nil {
+	if _, err := inner.Get("desktop/config"); err == nil {
 		t.Error("删除应透传到内层")
 	}
 }

@@ -7,7 +7,7 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/EchoPing07/kemaolife/internal/agent"
+	"github.com/EchoPing07/kemaolife/internal/desktop"
 )
 
 // 设置窗口：纯 Win32 控件，不做自定义绘制。
@@ -50,15 +50,15 @@ var (
 	settingsMu   sync.Mutex
 	settingsWnd  uintptr
 	settingsCtl  map[int]uintptr
-	settingsSave func(agent.SettingsResult) error
+	settingsSave func(desktop.SettingsResult) error
 	// settingsHint 把保存结果映射为「提示文案 / 是否留在窗口」。
 	// nil 时保持原行为（成功即关闭窗口）。
 	settingsHint func(error) (string, bool)
 )
 
 // OpenSettings 显示设置窗口（单实例：再次打开只把已有窗口提到前台）。
-func OpenSettings(owner, icon uintptr, form agent.SettingsForm,
-	onSave func(agent.SettingsResult) error, onResult func(error) (string, bool)) {
+func OpenSettings(owner, icon uintptr, form desktop.SettingsForm,
+	onSave func(desktop.SettingsResult) error, onResult func(error) (string, bool)) {
 	// 锁只在读写共享状态时持有，绝不跨越 Win32 调用。
 	//
 	// 为什么：创建控件会同步派发 WM_COMMAND 到窗口过程，那里会再调
@@ -120,7 +120,7 @@ func SetSettingsHint(text string) {
 }
 
 // buildSettings 创建所有控件并返回句柄表。
-func buildSettings(hwnd uintptr, form agent.SettingsForm) map[int]uintptr {
+func buildSettings(hwnd uintptr, form desktop.SettingsForm) map[int]uintptr {
 	ctl := make(map[int]uintptr)
 	s := func(dp int32) int32 { return Scale(hwnd, dp) }
 
@@ -243,7 +243,7 @@ func buildSettings(hwnd uintptr, form agent.SettingsForm) map[int]uintptr {
 }
 
 // fillSettings 把最新配置写回已存在的控件（重复打开设置窗口时用）。
-func fillSettings(ctl map[int]uintptr, form agent.SettingsForm) {
+func fillSettings(ctl map[int]uintptr, form desktop.SettingsForm) {
 	set := func(id int, v string) {
 		if h := ctl[id]; h != 0 {
 			SetText(h, v)
@@ -269,7 +269,7 @@ func fillSettings(ctl map[int]uintptr, form agent.SettingsForm) {
 }
 
 // collectSettings 读取控件当前值。
-func collectSettings(ctl map[int]uintptr) agent.SettingsResult {
+func collectSettings(ctl map[int]uintptr) desktop.SettingsResult {
 	get := func(id int) string {
 		if h := ctl[id]; h != 0 {
 			return Text(h)
@@ -282,7 +282,7 @@ func collectSettings(ctl map[int]uintptr) agent.SettingsResult {
 		}
 		return false
 	}
-	return agent.SettingsResult{
+	return desktop.SettingsResult{
 		StudentID:         get(IDStudentID),
 		CustomerCode:      get(IDCustomer),
 		CampusUser:        get(IDCampusU),

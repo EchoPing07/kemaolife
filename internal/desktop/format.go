@@ -1,4 +1,4 @@
-package agent
+package desktop
 
 import (
 	"fmt"
@@ -126,7 +126,7 @@ func secondsDuration(secs int) time.Duration {
 	return time.Duration(secs) * time.Second
 }
 
-// SettingsForm 是设置窗口的初始值（与 internal/agent.Settings 同构，
+// SettingsForm 是设置窗口的初始值（与 internal/desktop.Settings 同构，
 // 数值以字符串传，便于窗口控件直接填充）。
 type SettingsForm struct {
 	StudentID         string

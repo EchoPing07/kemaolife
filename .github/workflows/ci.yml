@@ -27,8 +27,8 @@ jobs:
           fi
       - name: Layering
         run: |
-          if grep -rn 'runtime.GOOS' internal/core internal/app internal/agent; then
-            echo 'FAIL: platform check in core/app/agent'; exit 1
+          if grep -rn 'runtime.GOOS' internal/core internal/app internal/desktop; then
+            echo 'FAIL: platform check in core/app/desktop'; exit 1
           fi
           if go list -deps ./internal/core/... | grep -E 'x/sys/windows|gioui|fyne|android'; then
             echo 'FAIL: core depends on platform/UI packages'; exit 1
@@ -45,14 +45,14 @@ jobs:
           GOOS=windows GOARCH=arm64 go build ./internal/...
           # 托盘端必须按 GUI 子系统构建（docs/release.md）：console 子系统会挂控制台窗口，
           # 不符合 docs/windows.md 的 GUI 子系统形态。这里用与文档一致的参数做交叉编译。
-          GOOS=windows GOARCH=amd64 go build -ldflags "-H=windowsgui" -o /tmp/kemaolife-agent.exe ./cmd/kemaolife-agent/
-          GOOS=windows GOARCH=arm64 go build -ldflags "-H=windowsgui" -o /tmp/kemaolife-agent-arm64.exe ./cmd/kemaolife-agent/
+          GOOS=windows GOARCH=amd64 go build -ldflags "-H=windowsgui" -o /tmp/kemaolife-desktop.exe ./cmd/kemaolife-desktop/
+          GOOS=windows GOARCH=arm64 go build -ldflags "-H=windowsgui" -o /tmp/kemaolife-desktop-arm64.exe ./cmd/kemaolife-desktop/
 
           # 发布产物必须是 GUI 子系统：从 PE 头读 Subsystem（值 3 = console）。
           python3 - <<'PY'
           import struct
 
-          for path in ("/tmp/kemaolife-agent.exe", "/tmp/kemaolife-agent-arm64.exe"):
+          for path in ("/tmp/kemaolife-desktop.exe", "/tmp/kemaolife-desktop-arm64.exe"):
               with open(path, "rb") as f:
                   head = f.read(0x400)
               assert head[:2] == b"MZ", path

@@ -8,7 +8,7 @@ import (
 
 // 本程序是托盘常驻程序，必须构建成 GUI 子系统（Windows PE subsystem = 2）：
 //
-//	go build -ldflags "-H=windowsgui" -o kemaolife-agent.exe ./cmd/kemaolife-agent
+//	go build -ldflags "-H=windowsgui" -o kemaolife-desktop.exe ./cmd/kemaolife-desktop
 //
 // 默认的 console 子系统（subsystem = 3）会让系统为它分配一个终端窗口，用户关掉
 // 那个窗口就等于结束进程，「擦掉窗口仍在托盘运行」这一条验收直接不成立（docs/windows.md）。

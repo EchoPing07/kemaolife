@@ -1,4 +1,4 @@
-package agent_test
+package desktop_test
 
 import (
 	"context"
@@ -11,10 +11,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/EchoPing07/kemaolife/internal/agent"
 	"github.com/EchoPing07/kemaolife/internal/app"
 	"github.com/EchoPing07/kemaolife/internal/core/model"
 	"github.com/EchoPing07/kemaolife/internal/core/porttest"
+	"github.com/EchoPing07/kemaolife/internal/desktop"
 )
 
 // fakeCampus 是 core.CampusNetwork + core.NetworkReady 的内存实现。
@@ -140,7 +140,7 @@ func writeOuter(w http.ResponseWriter, body string) {
 }
 
 // buildEngine 组装一个「电费可查 + 校园网可控」的引擎。
-func buildEngine(t *testing.T, campus *fakeCampus, settings agent.Settings, srv *httptest.Server) (*agent.Engine, *porttest.Recorder, *porttest.FakeClock) {
+func buildEngine(t *testing.T, campus *fakeCampus, settings desktop.Settings, srv *httptest.Server) (*desktop.Engine, *porttest.Recorder, *porttest.FakeClock) {
 	t.Helper()
 	clock := testClock()
 	deps := app.Deps{
@@ -156,17 +156,17 @@ func buildEngine(t *testing.T, campus *fakeCampus, settings agent.Settings, srv 
 
 	settingsMu := sync.Mutex{}
 	current := settings
-	get := func() agent.Settings {
+	get := func() desktop.Settings {
 		settingsMu.Lock()
 		defer settingsMu.Unlock()
 		return current
 	}
-	eng := agent.NewEngine(deps, campusDeps, rec, get, nil)
+	eng := desktop.NewEngine(deps, campusDeps, rec, get, nil)
 	return eng, rec, clock
 }
 
-func defaultSettings() agent.Settings {
-	s := agent.DefaultSettings()
+func defaultSettings() desktop.Settings {
+	s := desktop.DefaultSettings()
 	s.StudentID = "<学号>"
 	return s
 }
@@ -235,8 +235,8 @@ func TestPollAutoModePreflightFailureDoesNotBlockElectricity(t *testing.T) {
 		t.Error("应拿到电费数据")
 	}
 	if !strings.Contains(st.LastError, "不在校园网环境") ||
-		!strings.Contains(agent.FormatStatus(st), "不在校园网环境") {
-		t.Errorf("前置失败应留在托盘提示: %q / %q", st.LastError, agent.FormatStatus(st))
+		!strings.Contains(desktop.FormatStatus(st), "不在校园网环境") {
+		t.Errorf("前置失败应留在托盘提示: %q / %q", st.LastError, desktop.FormatStatus(st))
 	}
 	if rec.Count() != 1 {
 		t.Errorf("前置失败不应阻断余额提醒, got %d 次", rec.Count())
@@ -318,7 +318,7 @@ func TestPollFailureDoesNotNotify(t *testing.T) {
 // 也不展示探测时刻、可用天数与「数据截至」。
 func TestTrayLineText(t *testing.T) {
 	days := 3
-	st := agent.Status{
+	st := desktop.Status{
 		Campus:        model.CampusOnline,
 		HasReport:     true,
 		Balance:       35.99,
@@ -326,7 +326,7 @@ func TestTrayLineText(t *testing.T) {
 		CollectedAt:   time.Date(2026, 11, 4, 22, 41, 37, 0, time.Local).Format(time.RFC3339),
 		EstimatedDays: &days,
 	}
-	campus, power := agent.TrayLine(st)
+	campus, power := desktop.TrayLine(st)
 	if campus != "校园网：已在线" {
 		t.Errorf("campus = %q", campus)
 	}
@@ -348,7 +348,7 @@ func TestTrayLineText(t *testing.T) {
 	}
 
 	// 悬浮提示同样不展示「数据截至」（采集时刻不进托盘 UI）。
-	tip := agent.FormatStatus(st)
+	tip := desktop.FormatStatus(st)
 	if strings.Contains(tip, "数据截至") || strings.Contains(tip, "11-04") {
 		t.Errorf("悬浮提示不应展示数据截至: %q", tip)
 	}
@@ -356,11 +356,11 @@ func TestTrayLineText(t *testing.T) {
 
 // 上游长文案（如「正在进行外网拨号请稍候…」）不得进单行的菜单状态行。
 func TestTrayLineDropsUpstreamMessage(t *testing.T) {
-	st := agent.Status{
+	st := desktop.Status{
 		Campus:    model.CampusOnline,
 		CampusMsg: "正在进行外网拨号请稍候…",
 	}
-	campus, _ := agent.TrayLine(st)
+	campus, _ := desktop.TrayLine(st)
 	if campus != "校园网：已在线" {
 		t.Errorf("campus = %q, want 校园网：已在线", campus)
 	}
@@ -374,7 +374,7 @@ func TestTrayLineStates(t *testing.T) {
 		model.CampusOffline: "不在校园网",
 	}
 	for state, want := range cases {
-		campus, _ := agent.TrayLine(agent.Status{Campus: state})
+		campus, _ := desktop.TrayLine(desktop.Status{Campus: state})
 		if !strings.Contains(campus, want) {
 			t.Errorf("state %q → %q, want 含 %q", state, campus, want)
 		}
@@ -383,8 +383,8 @@ func TestTrayLineStates(t *testing.T) {
 
 // 设置校验：轮询间隔低于 600 秒必须钳制（AGENTS §5.5）。
 func TestParseSettingsResultClampsPollInterval(t *testing.T) {
-	base := agent.DefaultSettings()
-	res := agent.SettingsResult{
+	base := desktop.DefaultSettings()
+	res := desktop.SettingsResult{
 		StudentID:        "<学号>",
 		PollSeconds:      "60",
 		CampusProbeSecs:  "5",
@@ -393,21 +393,21 @@ func TestParseSettingsResultClampsPollInterval(t *testing.T) {
 		QuietFrom:        "23",
 		QuietTo:          "7",
 	}
-	next, err := agent.ParseSettingsResult(res, base)
+	next, err := desktop.ParseSettingsResult(res, base)
 	if err != nil {
 		t.Fatalf("ParseSettingsResult: %v", err)
 	}
 	if next.PollSeconds != 600 {
 		t.Errorf("PollSeconds = %d, want 600（钳制到下限）", next.PollSeconds)
 	}
-	if next.CampusProbeSecs != agent.CampusProbeFloorSeconds {
+	if next.CampusProbeSecs != desktop.CampusProbeFloorSeconds {
 		t.Errorf("CampusProbeSecs = %d, want %d（钳制到下限）",
-			next.CampusProbeSecs, agent.CampusProbeFloorSeconds)
+			next.CampusProbeSecs, desktop.CampusProbeFloorSeconds)
 	}
-	if !agent.SettingsWereClamped(res, next) {
+	if !desktop.SettingsWereClamped(res, next) {
 		t.Error("低于下限应可生成设置窗口提示")
 	}
-	hint := agent.ClampedSettingsHint(next)
+	hint := desktop.ClampedSettingsHint(next)
 	if !strings.Contains(hint, "600") || !strings.Contains(hint, "30") {
 		t.Errorf("钳制提示应含生效值: %q", hint)
 	}
@@ -420,13 +420,13 @@ func TestCampusProbeIntervalNormalization(t *testing.T) {
 		input int
 		want  int
 	}{
-		{"零值取默认", 0, agent.DefaultCampusProbeSeconds},
-		{"默认值保持", agent.DefaultCampusProbeSeconds, agent.DefaultCampusProbeSeconds},
-		{"低于下限钳制", 5, agent.CampusProbeFloorSeconds},
+		{"零值取默认", 0, desktop.DefaultCampusProbeSeconds},
+		{"默认值保持", desktop.DefaultCampusProbeSeconds, desktop.DefaultCampusProbeSeconds},
+		{"低于下限钳制", 5, desktop.CampusProbeFloorSeconds},
 		{"自定义值保留", 300, 300},
 	}
 	for _, c := range cases {
-		s := agent.DefaultSettings()
+		s := desktop.DefaultSettings()
 		s.CampusProbeSecs = c.input
 		if got := int(s.CampusProbeInterval().Seconds()); got != c.want {
 			t.Errorf("%s: CampusProbeInterval = %d, want %d", c.name, got, c.want)
@@ -438,17 +438,17 @@ func TestCampusProbeIntervalNormalization(t *testing.T) {
 func TestSettingsStoreDefaultsProbeIntervalOnOldConfig(t *testing.T) {
 	inner := porttest.NewMemStore()
 	// 模拟升级前的配置：没有 campusProbeSeconds。
-	if err := inner.Put(agent.ConfigStoreKey, []byte(`{"studentId":"<学号>","pollSeconds":14400}`)); err != nil {
+	if err := inner.Put(desktop.ConfigStoreKey, []byte(`{"studentId":"<学号>","pollSeconds":14400}`)); err != nil {
 		t.Fatal(err)
 	}
 
-	store := agent.NewSettingsStore(inner)
+	store := desktop.NewSettingsStore(inner)
 	cfg, err := store.Load()
 	if err != nil {
 		t.Fatalf("Load: %v", err)
 	}
-	if cfg.CampusProbeSecs != agent.DefaultCampusProbeSeconds {
-		t.Errorf("老配置探测间隔 = %d, want %d", cfg.CampusProbeSecs, agent.DefaultCampusProbeSeconds)
+	if cfg.CampusProbeSecs != desktop.DefaultCampusProbeSeconds {
+		t.Errorf("老配置探测间隔 = %d, want %d", cfg.CampusProbeSecs, desktop.DefaultCampusProbeSeconds)
 	}
 }
 
@@ -474,15 +474,15 @@ func TestProbeCampusDoesNotLogin(t *testing.T) {
 		t.Error("探测后应记录 CampusCheckedAt")
 	}
 	// 探测时刻只存不展：菜单行就是简短状态。
-	if campus, _ := agent.TrayLine(eng.Status()); campus != "校园网：未认证" {
+	if campus, _ := desktop.TrayLine(eng.Status()); campus != "校园网：未认证" {
 		t.Errorf("菜单行不得带探测时刻: %q", campus)
 	}
 }
 
 // 设置校验：探测间隔非数字 / 为零必须报错。
 func TestParseSettingsResultRejectsBadProbeInterval(t *testing.T) {
-	base := agent.DefaultSettings()
-	valid := agent.SettingsResult{
+	base := desktop.DefaultSettings()
+	valid := desktop.SettingsResult{
 		PollSeconds:      "14400",
 		CampusProbeSecs:  "120",
 		BalanceThreshold: "10",
@@ -493,7 +493,7 @@ func TestParseSettingsResultRejectsBadProbeInterval(t *testing.T) {
 	for _, bad := range []string{"abc", "0", "-5"} {
 		r := valid
 		r.CampusProbeSecs = bad
-		if _, err := agent.ParseSettingsResult(r, base); err == nil {
+		if _, err := desktop.ParseSettingsResult(r, base); err == nil {
 			t.Errorf("探测间隔 %q: 应报错", bad)
 		}
 	}
@@ -501,8 +501,8 @@ func TestParseSettingsResultRejectsBadProbeInterval(t *testing.T) {
 
 // 设置校验：非法输入必须报错而不是静默接受。
 func TestParseSettingsResultRejectsInvalid(t *testing.T) {
-	base := agent.DefaultSettings()
-	valid := agent.SettingsResult{
+	base := desktop.DefaultSettings()
+	valid := desktop.SettingsResult{
 		PollSeconds:      "14400",
 		CampusProbeSecs:  "120",
 		BalanceThreshold: "10",
@@ -513,20 +513,20 @@ func TestParseSettingsResultRejectsInvalid(t *testing.T) {
 
 	bad := []struct {
 		name   string
-		mutate func(*agent.SettingsResult)
+		mutate func(*desktop.SettingsResult)
 	}{
-		{"轮询间隔非数字", func(r *agent.SettingsResult) { r.PollSeconds = "abc" }},
-		{"轮询间隔为零", func(r *agent.SettingsResult) { r.PollSeconds = "0" }},
-		{"余额非数字", func(r *agent.SettingsResult) { r.BalanceThreshold = "x" }},
-		{"余额为负", func(r *agent.SettingsResult) { r.BalanceThreshold = "-1" }},
-		{"天数非数字", func(r *agent.SettingsResult) { r.DaysThreshold = "3.5" }},
-		{"静默起点越界", func(r *agent.SettingsResult) { r.QuietFrom = "24" }},
-		{"静默终点越界", func(r *agent.SettingsResult) { r.QuietTo = "-1" }},
+		{"轮询间隔非数字", func(r *desktop.SettingsResult) { r.PollSeconds = "abc" }},
+		{"轮询间隔为零", func(r *desktop.SettingsResult) { r.PollSeconds = "0" }},
+		{"余额非数字", func(r *desktop.SettingsResult) { r.BalanceThreshold = "x" }},
+		{"余额为负", func(r *desktop.SettingsResult) { r.BalanceThreshold = "-1" }},
+		{"天数非数字", func(r *desktop.SettingsResult) { r.DaysThreshold = "3.5" }},
+		{"静默起点越界", func(r *desktop.SettingsResult) { r.QuietFrom = "24" }},
+		{"静默终点越界", func(r *desktop.SettingsResult) { r.QuietTo = "-1" }},
 	}
 	for _, c := range bad {
 		r := valid
 		c.mutate(&r)
-		if _, err := agent.ParseSettingsResult(r, base); err == nil {
+		if _, err := desktop.ParseSettingsResult(r, base); err == nil {
 			t.Errorf("%s: 应报错", c.name)
 		}
 	}
@@ -534,13 +534,13 @@ func TestParseSettingsResultRejectsInvalid(t *testing.T) {
 
 // 设置往返：保存后读回字段一致，且非法轮询间隔被钳制。
 func TestSettingsStoreRoundTrip(t *testing.T) {
-	store := agent.NewSettingsStore(porttest.NewMemStore())
+	store := desktop.NewSettingsStore(porttest.NewMemStore())
 
 	cfg, err := store.Load()
 	if err != nil {
 		t.Fatalf("首次 Load: %v", err)
 	}
-	if cfg.PollSeconds != int(agent.DefaultSettings().PollSeconds) {
+	if cfg.PollSeconds != int(desktop.DefaultSettings().PollSeconds) {
 		t.Errorf("默认轮询间隔 = %d", cfg.PollSeconds)
 	}
 	if cfg.AutoMode {
@@ -572,7 +572,7 @@ func TestSettingsStoreRoundTrip(t *testing.T) {
 	if back.CampusPassword != "<密码>" {
 		t.Error("校园网密码未正确保存")
 	}
-	if agent.SettingsWereClamped(agent.SettingsResult{
+	if desktop.SettingsWereClamped(desktop.SettingsResult{
 		PollSeconds:     "14400",
 		CampusProbeSecs: "120",
 	}, back) {
@@ -586,14 +586,14 @@ func TestDoCampusRefreshesStatus(t *testing.T) {
 	srv := electricityServer(t, 50, 1)
 	eng, _, _ := buildEngine(t, campus, defaultSettings(), srv)
 
-	if err := eng.DoCampus(context.Background(), agent.ActionLogin); err != nil {
+	if err := eng.DoCampus(context.Background(), desktop.ActionLogin); err != nil {
 		t.Fatalf("ActionLogin: %v", err)
 	}
 	if st := eng.Status(); st.Campus != model.CampusOnline {
 		t.Errorf("登录后状态 = %q, want online", st.Campus)
 	}
 
-	if err := eng.DoCampus(context.Background(), agent.ActionLogout); err != nil {
+	if err := eng.DoCampus(context.Background(), desktop.ActionLogout); err != nil {
 		t.Fatalf("ActionLogout: %v", err)
 	}
 	if st := eng.Status(); st.Campus != model.CampusUnauth {
@@ -608,7 +608,7 @@ func TestDoCampusRecordsError(t *testing.T) {
 	srv := electricityServer(t, 50, 1)
 	eng, _, _ := buildEngine(t, campus, defaultSettings(), srv)
 
-	if err := eng.DoCampus(context.Background(), agent.ActionLogin); err == nil {
+	if err := eng.DoCampus(context.Background(), desktop.ActionLogin); err == nil {
 		t.Fatal("应返回错误")
 	}
 	if st := eng.Status(); st.LastError == "" {

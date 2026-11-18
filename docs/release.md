@@ -36,11 +36,11 @@
 |---|---|
 | Linux CLI（3） | `kemaolife_<版本>_linux_{amd64,arm64,armv7}.tar.gz`（`CGO_ENABLED=0` 纯 Go 二进制） |
 | macOS CLI（2） | `kemaolife_<版本>_darwin_amd64.tar.gz`（Intel Mac）、`kemaolife_<版本>_darwin_arm64.tar.gz`（Apple Silicon） |
-| Windows 托盘（2） | `kemaolife-agent_<版本>_windows_{amd64,arm64}.zip` |
+| Windows 托盘（2） | `kemaolife-desktop_<版本>_windows_{amd64,arm64}.zip` |
 | Android APK（4） | `kemaolife_<版本>_android_<ABI>.apk` |
 | agent skill（1） | `kemaolife-skill_<版本>.zip` |
 
-CLI 包内含 `kemaolife` / `LICENSE` / `INSTALL.txt`，Linux 与 macOS 同构；文件名用 `darwin`（仓库 `GOOS` 口径），展示名用 macOS。Windows zip 内含 `kemaolife-agent.exe`（GUI 子系统）+ `install.bat` / `install.ps1` / `uninstall.bat` / `uninstall.ps1` + `LICENSE` / `INSTALL.txt`，脚本源码在 [`packaging/windows/`](../packaging/windows/)。
+CLI 包内含 `kemaolife` / `LICENSE` / `INSTALL.txt`，Linux 与 macOS 同构；文件名用 `darwin`（仓库 `GOOS` 口径），展示名用 macOS。Windows zip 内含 `kemaolife-desktop.exe`（GUI 子系统）+ `install.bat` / `install.ps1` / `uninstall.bat` / `uninstall.ps1` + `LICENSE` / `INSTALL.txt`，脚本源码在 [`packaging/windows/`](../packaging/windows/)。
 
 ## 4. 签名与平台注意事项
 

@@ -1,9 +1,9 @@
-kemaolife-agent —— Windows 托盘程序 安装说明
+kemaolife-desktop —— Windows 托盘程序 安装说明
 ================================================
 
 包内文件：
 
-  kemaolife-agent.exe   Windows 托盘常驻程序（GUI 子系统，无控制台窗口）
+  kemaolife-desktop.exe   Windows 托盘常驻程序（GUI 子系统，无控制台窗口）
   install.bat           一键安装（双击即可）
   install.ps1           安装脚本本体，由 install.bat 调用
   uninstall.bat         一键卸载
@@ -31,7 +31,7 @@ kemaolife-agent —— Windows 托盘程序 安装说明
 直接在下载目录（或临时解压目录）里跑，之后一挪走或清空下载目录，自启项就成了
 指向不存在文件的死项，而设置窗口仍会显示「已开启」。装到固定目录可以避免这个坑。
 
-如果只想绿色使用、不装到固定目录，也可以直接双击 kemaolife-agent.exe，
+如果只想绿色使用、不装到固定目录，也可以直接双击 kemaolife-desktop.exe，
 只是不要开启「开机登录时自启动」。
 
 

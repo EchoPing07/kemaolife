@@ -1,10 +1,10 @@
 //go:build windows
 
-// kemaolife-agent 是 Windows 常驻托盘程序（docs/windows.md）。
+// kemaolife-desktop 是 Windows 常驻托盘程序（docs/windows.md）。
 //
 // 职责边界（AGENTS §3）：
 //   - 本包只做「触发器 + 呈现 + 平台组装」：托盘菜单、设置窗口、轮询循环；
-//   - 业务逻辑来自 internal/app / internal/core / internal/agent；
+//   - 业务逻辑来自 internal/app / internal/core / internal/desktop；
 //   - 平台能力（DPAPI / 注册表自启 / Portal 认证）来自 internal/platform。
 //
 // 明确不做（docs/windows.md §10）：课表主界面、保活 / 守护、多账号、云端同步、浏览器内核。
@@ -20,9 +20,9 @@ import (
 	"sync"
 	"time"
 
-	"github.com/EchoPing07/kemaolife/cmd/kemaolife-agent/ui"
-	"github.com/EchoPing07/kemaolife/internal/agent"
+	"github.com/EchoPing07/kemaolife/cmd/kemaolife-desktop/ui"
 	"github.com/EchoPing07/kemaolife/internal/app"
+	"github.com/EchoPing07/kemaolife/internal/desktop"
 	"github.com/EchoPing07/kemaolife/internal/platform"
 	buildversion "github.com/EchoPing07/kemaolife/internal/version"
 )
@@ -36,16 +36,16 @@ var commit = "unknown"
 var defaultCustomerCode = "3126"
 
 // app 聚合常驻进程的全部运行状态。
-type agentApp struct {
+type desktopApp struct {
 	tray *ui.Tray
 	tip  *ui.TipSetter
 	wnd  uintptr
 
 	settingsMu sync.RWMutex
-	settings   agent.Settings
-	store      *agent.SettingsStore
+	settings   desktop.Settings
+	store      *desktop.SettingsStore
 
-	engine *agent.Engine
+	engine *desktop.Engine
 
 	stopOnce sync.Once
 	stop     chan struct{}
@@ -65,21 +65,21 @@ func main() {
 	ui.EnablePerMonitorDPI()
 	release, ok := ui.AcquireSingleInstance()
 	if !ok {
-		ui.MessageBox(agent.AppName, "科贸生活已在运行，请查看系统托盘。", ui.MB_OK|ui.MB_ICONINFO)
+		ui.MessageBox(desktop.AppName, "科贸生活已在运行，请查看系统托盘。", ui.MB_OK|ui.MB_ICONINFO)
 		return
 	}
 	defer release()
 
 	// 系统通知渠道：进程级 AUMID 必须在托盘图标创建前设置一次，
-	// 否则系统通知不会归到 Kemaolife.Agent。具体呈现样式随 Windows 版本变化，
+	// 否则系统通知不会归到 Kemaolife.Desktop。具体呈现样式随 Windows 版本变化，
 	// 不承诺 WinRT Toast 或操作中心归档；失败只降级提示，不阻断轮询。
 	if err := ui.SetAppUserModelID(); err != nil {
-		ui.MessageBox(agent.AppName, "系统通知初始化失败，将使用降级提示："+err.Error(),
+		ui.MessageBox(desktop.AppName, "系统通知初始化失败，将使用降级提示："+err.Error(),
 			ui.MB_OK|ui.MB_ICONWARNING)
 	}
 
 	if err := run(); err != nil {
-		ui.MessageBox(agent.AppName, "启动失败："+err.Error(), ui.MB_OK|ui.MB_ICONERROR)
+		ui.MessageBox(desktop.AppName, "启动失败："+err.Error(), ui.MB_OK|ui.MB_ICONERROR)
 		os.Exit(1)
 	}
 }
@@ -110,12 +110,12 @@ func run() (err error) {
 	}
 
 	// 托盘窗口是隐藏窗：不显示界面，只接收托盘图标回调与自定义消息。
-	trayWnd, err := ui.CreateWindow(ui.TrayClass, agent.AppName, 0, 0, 0, 0)
+	trayWnd, err := ui.CreateWindow(ui.TrayClass, desktop.AppName, 0, 0, 0, 0)
 	if err != nil {
 		return err
 	}
 
-	a := &agentApp{
+	a := &desktopApp{
 		tray: ui.NewTray(trayWnd, trayIcon),
 		wnd:  trayWnd,
 		stop: make(chan struct{}),
@@ -133,7 +133,7 @@ func run() (err error) {
 	}
 	// 配置含校园网凭据与学号，写盘前一律 DPAPI 加密（P5）。
 	secure := platform.NewEncryptedStore(rawStore)
-	a.store = agent.NewSettingsStore(secure)
+	a.store = desktop.NewSettingsStore(secure)
 
 	loaded, loadErr := a.store.Load()
 	a.settings = loaded
@@ -167,9 +167,9 @@ func run() (err error) {
 	ctx, cancel := context.WithCancel(context.Background())
 	a.cancel = cancel
 
-	a.engine = agent.NewEngine(deps, campusDeps, a.tray, a.currentSettings, func(st agent.Status) {
+	a.engine = desktop.NewEngine(deps, campusDeps, a.tray, a.currentSettings, func(st desktop.Status) {
 		// 回调来自轮询 goroutine：必须转回 UI 线程再更新托盘。
-		ui.PostStatus(trayWnd, agent.FormatStatus(st))
+		ui.PostStatus(trayWnd, desktop.FormatStatus(st))
 	})
 
 	ui.BindTray(trayWnd, ui.TrayHandler{
@@ -180,7 +180,7 @@ func run() (err error) {
 		OnQueryDone:  a.refreshTrayTip,
 	})
 
-	if err := a.tray.Add(agent.AppName); err != nil {
+	if err := a.tray.Add(desktop.AppName); err != nil {
 		return err
 	}
 	defer a.tray.Remove()
@@ -202,15 +202,15 @@ func run() (err error) {
 }
 
 // currentSettings 返回当前设置的副本。
-func (a *agentApp) currentSettings() agent.Settings {
+func (a *desktopApp) currentSettings() desktop.Settings {
 	a.settingsMu.RLock()
 	defer a.settingsMu.RUnlock()
 	return a.settings
 }
 
 // applySettings 校验、落盘并生效一次设置保存（设置窗口的回调）。
-func (a *agentApp) applySettings(res agent.SettingsResult) error {
-	next, err := agent.ParseSettingsResult(res, a.currentSettings())
+func (a *desktopApp) applySettings(res desktop.SettingsResult) error {
+	next, err := desktop.ParseSettingsResult(res, a.currentSettings())
 	if err != nil {
 		return err
 	}
@@ -232,26 +232,26 @@ func (a *agentApp) applySettings(res agent.SettingsResult) error {
 	// 模式切换会改变按钮组，立即重建一次菜单状态。
 	ui.PostTrigger(a.wnd, ui.WM_QUERY_DONE)
 
-	if agent.SettingsWereClamped(res, next) {
-		return agent.ErrSettingsClamped
+	if desktop.SettingsWereClamped(res, next) {
+		return desktop.ErrSettingsClamped
 	}
 	return nil
 }
 
 // openSettings 打开设置窗口（托盘左键或菜单项）。
-func (a *agentApp) openSettings() {
+func (a *desktopApp) openSettings() {
 	icon, _ := ui.AppIcon()
-	ui.OpenSettings(a.wnd, icon, agent.ToSettingsForm(a.currentSettings()), a.applySettings, a.settingsHint)
+	ui.OpenSettings(a.wnd, icon, desktop.ToSettingsForm(a.currentSettings()), a.applySettings, a.settingsHint)
 }
 
 // settingsHint 把「钳制提示」与「保存失败」分开：前者是成功后的说明，
 // 后者才要留在窗口让用户改。
-func (a *agentApp) settingsHint(err error) (string, bool) {
+func (a *desktopApp) settingsHint(err error) (string, bool) {
 	if err == nil {
 		return "", false
 	}
-	if errors.Is(err, agent.ErrSettingsClamped) {
-		return agent.ClampedSettingsHint(a.currentSettings()), true
+	if errors.Is(err, desktop.ErrSettingsClamped) {
+		return desktop.ClampedSettingsHint(a.currentSettings()), true
 	}
 	return "", true
 }
@@ -260,10 +260,10 @@ func (a *agentApp) settingsHint(err error) (string, bool) {
 //
 // 两行只读状态在上，按钮组按模式切换（docs/windows.md）：
 // 手动模式给 登录 / 下线 / 重登；自动模式只给 重登。
-func (a *agentApp) buildMenu() []ui.MenuItem {
+func (a *desktopApp) buildMenu() []ui.MenuItem {
 	s := a.currentSettings()
 	st := a.engine.Status()
-	campusLine, powerLine := agent.TrayLine(st)
+	campusLine, powerLine := desktop.TrayLine(st)
 
 	items := []ui.MenuItem{
 		{Title: campusLine, ID: ui.IDStatusCampus, Grayed: true},
@@ -305,7 +305,7 @@ var campusJobs = map[int]campusJob{
 	ui.IDRelogin: app.ReloginCampusNetwork,
 }
 
-func (a *agentApp) handleCommand(id int) {
+func (a *desktopApp) handleCommand(id int) {
 	if job, ok := campusJobs[id]; ok {
 		a.runAsync(func(ctx context.Context) {
 			a.reportCampusErr(ctx, job(ctx, a.engine.CampusDeps()))
@@ -330,7 +330,7 @@ func (a *agentApp) handleCommand(id int) {
 }
 
 // runAsync 在后台执行网络动作，完成后把状态刷新推回 UI 线程。
-func (a *agentApp) runAsync(fn func(context.Context)) {
+func (a *desktopApp) runAsync(fn func(context.Context)) {
 	go func() {
 		ctx, cancel := a.commandContext()
 		defer cancel()
@@ -340,27 +340,27 @@ func (a *agentApp) runAsync(fn func(context.Context)) {
 }
 
 // reportCampusErr 把校园网动作结果反映到托盘（不弹窗打断用户）。
-func (a *agentApp) reportCampusErr(ctx context.Context, err error) {
+func (a *desktopApp) reportCampusErr(ctx context.Context, err error) {
 	a.engine.ReportError(err)
 	a.engine.RefreshCampusStatus(ctx)
 }
 
 // commandContext 给用户点击触发的动作 60s：Portal 有 3s 生效等待 + 复探，
 // 电费要发 3 个请求，30s 太紧。
-func (a *agentApp) commandContext() (context.Context, context.CancelFunc) {
+func (a *desktopApp) commandContext() (context.Context, context.CancelFunc) {
 	return context.WithTimeout(context.Background(), 60*time.Second)
 }
 
 // refreshTrayTip 用引擎当前状态刷新托盘提示。
-func (a *agentApp) refreshTrayTip() {
-	a.tip.Set(agent.FormatStatus(a.engine.Status()))
+func (a *desktopApp) refreshTrayTip() {
+	a.tip.Set(desktop.FormatStatus(a.engine.Status()))
 }
 
 // shutdown 退出流程：先停轮询，再注销托盘，最后结束消息循环。
 //
 // 顺序很重要：先停轮询能避免退出时还在打学校接口，
 // 先摘图标能避免「进程已退出但托盘还留着死图标」。
-func (a *agentApp) shutdown() {
+func (a *desktopApp) shutdown() {
 	a.stopOnce.Do(func() { close(a.stop) })
 	if a.cancel != nil {
 		a.cancel()

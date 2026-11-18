@@ -24,12 +24,12 @@ var (
 )
 
 // AppUserModelID 是 Windows 系统通知的进程显式标识（docs/contract.md §1）。
-const AppUserModelID = "Kemaolife.Agent"
+const AppUserModelID = "Kemaolife.Desktop"
 
 // SetAppUserModelID 给进程设置显式 AppUserModelID。
 //
 // 系统通知为主：进程级标识让 Shell 把 NIF_INFO 识别为
-// Kemaolife.Agent 发出的系统通知；具体样式由 Windows 版本决定，不承诺
+// Kemaolife.Desktop 发出的系统通知；具体样式由 Windows 版本决定，不承诺
 // WinRT Toast 或操作中心归档（那需要 COM 激活器与快捷方式，另行决策）。
 // 必须在创建窗口 / 托盘图标之前调用，进程生命周期内只能设置一次。
 // 失败不在这里阻断启动，由调用方决定降级策略。
