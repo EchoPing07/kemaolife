@@ -13,18 +13,18 @@ import (
 	"github.com/EchoPing07/kemaolife/internal/core/model"
 )
 
-// Status 是托盘要展示的两行只读状态（docs/windows.md「托盘右键」）。
+// Status 是主窗口与托盘使用的只读状态。Report 与 CampusStatus 保留完整 DTO，
+// 由调用方按需展示；HasReport 区分尚未查询与合法的零值报告。
 type Status struct {
-	Campus          model.CampusState
-	CampusMsg       string
-	CampusCheckedAt time.Time
-	HasReport       bool
-	Balance         float64
-	Unit            string
-	CollectedAt     string
-	EstimatedDays   *int
-	LastError       string
-	LastCheckedAt   time.Time
+	Report       model.ElectricityReport
+	HasReport    bool
+	CampusStatus model.CampusStatus
+	// LastError 是托盘悬浮提示用的「最近一条错误」，取电费与校园网中最新的那一条。
+	// 主窗口按域展示时用下面两个字段，避免把电费故障显示成校园网故障。
+	LastError        string
+	ElectricityError string
+	CampusError      string
+	LastCheckedAt    time.Time
 }
 
 // Engine 是常驻轮询的编排层：把 app 用例、告警纯函数、通知端口串起来。
@@ -52,15 +52,38 @@ func NewEngine(deps app.Deps, campus app.CampusDeps, notifier core.Notifier,
 		deps: deps, campus: campus, notifier: notifier,
 		settings: settings, sink: sink,
 	}
-	e.status.Campus = model.CampusOffline
+	e.status.CampusStatus.State = model.CampusOffline
 	return e
 }
 
-// Status 返回当前状态的副本（UI 只读，避免数据竞争）。
+// Status 返回当前状态的安全副本（UI 只读，避免数据竞争或修改内部 DTO）。
 func (e *Engine) Status() Status {
 	e.mu.Lock()
 	defer e.mu.Unlock()
-	return e.status
+	return cloneStatus(e.status)
+}
+
+// Deps 返回课表等用例需要的端口副本，供 cmd 层组装独立动作。
+func (e *Engine) Deps() app.Deps {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	return e.deps
+}
+
+// cloneStatus 深拷贝 DTO 中的指针与切片，保证状态回调和 Status 返回值
+// 都不能修改引擎内部状态。model.CampusStatus 当前仅含值字段。
+func cloneStatus(s Status) Status {
+	out := s
+	if avg := s.Report.Status.DailyAvg; avg != nil {
+		value := *avg
+		out.Report.Status.DailyAvg = &value
+	}
+	if days := s.Report.Status.EstimatedDays; days != nil {
+		value := *days
+		out.Report.Status.EstimatedDays = &value
+	}
+	out.Report.Usage.Days = append([]model.DayUsage(nil), s.Report.Usage.Days...)
+	return out
 }
 
 // SetClock 仅供测试替换时钟（正式路径由 Deps.Clock 注入）。
@@ -74,11 +97,27 @@ func (e *Engine) SetClock(c core.Clock) {
 func (e *Engine) updateStatus(fn func(*Status)) {
 	e.mu.Lock()
 	fn(&e.status)
-	s := e.status
+	s := cloneStatus(e.status)
 	e.mu.Unlock()
 	if e.sink != nil {
 		e.sink(s)
 	}
+}
+
+// setCampusError 同时更新分域错误与托盘用的最近错误。
+func (e *Engine) setCampusError(fn func(s *Status)) {
+	e.updateStatus(func(s *Status) {
+		fn(s)
+		s.CampusError = s.LastError
+	})
+}
+
+// setElectricityError 同上，只影响电费域。
+func (e *Engine) setElectricityError(fn func(s *Status)) {
+	e.updateStatus(func(s *Status) {
+		fn(s)
+		s.ElectricityError = s.LastError
+	})
 }
 
 // CampusAction 是托盘按钮触发的校园网动作。
@@ -108,9 +147,9 @@ func (e *Engine) DoCampus(ctx context.Context, action CampusAction) error {
 	}
 
 	if err != nil {
-		e.updateStatus(func(s *Status) { s.LastError = model.MessageOf(err) })
+		e.setCampusError(func(s *Status) { s.LastError = model.MessageOf(err) })
 	} else {
-		e.updateStatus(func(s *Status) { s.LastError = "" })
+		e.setCampusError(func(s *Status) { s.LastError = "" })
 	}
 	e.RefreshCampusStatus(ctx)
 	return err
@@ -124,23 +163,21 @@ func (e *Engine) DoCampus(ctx context.Context, action CampusAction) error {
 func (e *Engine) RefreshCampusStatus(ctx context.Context) {
 	status, err := app.GetCampusNetworkStatus(ctx, e.campus)
 	if model.CodeOf(err) == model.CodeNetworkDown {
-		e.updateStatus(func(s *Status) {
-			s.Campus = model.CampusOffline
-			s.CampusMsg = ""
-			s.CampusCheckedAt = e.deps.Clock.Now()
+		e.setCampusError(func(s *Status) {
+			s.CampusStatus = model.CampusStatus{State: model.CampusOffline}
 			s.LastError = ""
 		})
 		return
 	}
-	e.updateStatus(func(s *Status) {
+	e.setCampusError(func(s *Status) {
 		if err != nil {
 			// 内部故障仍保留提示，但不覆盖上一次已知状态。
 			s.LastError = model.MessageOf(err)
 			return
 		}
-		s.Campus = status.State
-		s.CampusMsg = status.ErrorMsg
-		s.CampusCheckedAt = e.deps.Clock.Now()
+		// 判态成功只更新状态：动作失败原因由 DoCampus 管理，
+		// 不能被一次普通探测静默抹掉（docs/windows.md §3.4）。
+		s.CampusStatus = status
 	})
 }
 
@@ -151,22 +188,18 @@ func (e *Engine) RefreshCampusStatus(ctx context.Context) {
 func (e *Engine) ProbeCampus(ctx context.Context) (model.CampusState, error) {
 	status, err := app.GetCampusNetworkStatus(ctx, e.campus)
 	if model.CodeOf(err) == model.CodeNetworkDown {
-		e.updateStatus(func(s *Status) {
-			s.Campus = model.CampusOffline
-			s.CampusMsg = ""
-			s.CampusCheckedAt = e.deps.Clock.Now()
+		e.setCampusError(func(s *Status) {
+			s.CampusStatus = model.CampusStatus{State: model.CampusOffline}
 			s.LastError = ""
 		})
 		return model.CampusOffline, nil
 	}
 	if err != nil {
-		e.updateStatus(func(s *Status) { s.LastError = model.MessageOf(err) })
+		e.setCampusError(func(s *Status) { s.LastError = model.MessageOf(err) })
 		return model.CampusOffline, err
 	}
-	e.updateStatus(func(s *Status) {
-		s.Campus = status.State
-		s.CampusMsg = status.ErrorMsg
-		s.CampusCheckedAt = e.deps.Clock.Now()
+	e.setCampusError(func(s *Status) {
+		s.CampusStatus = status
 	})
 	return status.State, nil
 }
@@ -200,6 +233,7 @@ func (e *Engine) PollOnce(ctx context.Context) error {
 		e.mu.Unlock()
 		e.updateStatus(func(s *Status) {
 			s.LastError = model.MessageOf(err)
+			s.ElectricityError = s.LastError
 			s.LastCheckedAt = e.deps.Clock.Now()
 		})
 		return err
@@ -211,18 +245,18 @@ func (e *Engine) PollOnce(ctx context.Context) error {
 
 	now := e.deps.Clock.Now()
 	e.updateStatus(func(s *Status) {
+		s.Report = report
 		s.HasReport = true
-		s.Balance = report.Status.Balance
-		s.Unit = report.Status.Unit
-		s.CollectedAt = report.Status.CollectedAt
-		s.EstimatedDays = report.Status.EstimatedDays
 		// 前置认证失败与电费查询是独立链路：电费成功不能把它从托盘提示里抹掉，
 		// 但下一轮前置成功时要清掉旧提示（docs/windows.md §6 规则 5）。
 		if preflightErr != nil {
 			s.LastError = model.MessageOf(preflightErr)
+			s.CampusError = s.LastError
 		} else {
 			s.LastError = ""
+			s.CampusError = ""
 		}
+		s.ElectricityError = ""
 		s.LastCheckedAt = now
 	})
 
@@ -232,9 +266,37 @@ func (e *Engine) PollOnce(ctx context.Context) error {
 		if err := e.notifier.Notify(dec.Title, dec.Body); err != nil {
 			// 通知失败不改变告警状态：状态已置位，本轮不再重复弹，
 			// 但也不该因为这个错误把电费数据丢掉。
-			e.updateStatus(func(s *Status) { s.LastError = "通知发送失败: " + err.Error() })
+			e.updateStatus(func(s *Status) {
+				s.LastError = "通知发送失败: " + err.Error()
+				s.ElectricityError = s.LastError
+			})
 		}
 	}
+	return nil
+}
+
+// QueryElectricity 手动查询指定月份并更新完整报告。
+//
+// 它与默认轮询分离：不做校园网前置认证，不判定或发送余额告警，也不修改
+// 连续失败计数，因此历史月份查询不会改变 PollOnce 的告警与退避节奏。
+func (e *Engine) QueryElectricity(ctx context.Context, yearMonth string) error {
+	cfg := e.settings()
+	report, err := app.CheckElectricity(ctx, e.deps,
+		cfg.ElectricityConfig(e.deps.DefaultCustomerCode), yearMonth)
+	if err != nil {
+		err = withSettingsHint(err)
+		e.setElectricityError(func(s *Status) { s.LastError = model.CodeMessage(model.CodeOf(err)) })
+		return err
+	}
+
+	now := e.deps.Clock.Now()
+	e.updateStatus(func(s *Status) {
+		s.Report = report
+		s.HasReport = true
+		s.LastCheckedAt = now
+		s.LastError = ""
+		s.ElectricityError = ""
+	})
 	return nil
 }
 
@@ -308,12 +370,13 @@ func (e *Engine) runCampusProbe(ctx context.Context, stop <-chan struct{}) {
 //   - 上游长文案（如「正在进行外网拨号请稍候…」）不展示，一律收敛为「已在线」；
 //   - 可用天数不展示：它是本地估算，容易被误读为承诺。
 func TrayLine(s Status) (campusLine, powerLine string) {
-	campusLine = "校园网：" + campusStateText(s.Campus)
+	campusLine = "校园网：" + CampusStateText(s.CampusStatus.State)
 	if !s.HasReport {
 		powerLine = "剩余电费：未获取"
 		return campusLine, powerLine
 	}
-	powerLine = fmt.Sprintf("剩余电费：%.2f %s", s.Balance, unitOr(s.Unit))
+	powerLine = fmt.Sprintf("剩余电费：%.2f %s",
+		s.Report.Status.Balance, unitOr(s.Report.Status.Unit))
 	return campusLine, powerLine
 }
 

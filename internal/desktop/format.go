@@ -35,6 +35,7 @@ func ToSettingsForm(s Settings) SettingsForm {
 	return SettingsForm{
 		StudentID:         s.StudentID,
 		CustomerCode:      s.CustomerCode,
+		EduPassword:       s.EduPassword,
 		CampusUser:        s.CampusUser,
 		CampusPassword:    s.CampusPassword,
 		CampusFingerprint: s.CampusFingerprint,
@@ -57,8 +58,15 @@ func ParseSettingsResult(res SettingsResult, base Settings) (Settings, error) {
 	next := base
 	next.StudentID = strings.TrimSpace(res.StudentID)
 	next.CustomerCode = strings.TrimSpace(res.CustomerCode)
+	// 密码输入留空表示不修改。旧版设置窗口没有教务密码控件，保存时也会
+	// 回传空字符串，因此必须保留 base 中的密码，不能意外清空。
+	if res.EduPassword != "" {
+		next.EduPassword = res.EduPassword
+	}
 	next.CampusUser = strings.TrimSpace(res.CampusUser)
-	next.CampusPassword = res.CampusPassword
+	if res.CampusPassword != "" {
+		next.CampusPassword = res.CampusPassword
+	}
 	next.CampusFingerprint = strings.TrimSpace(res.CampusFingerprint)
 	next.AutoMode = res.AutoMode
 	next.AutoStart = res.AutoStart
@@ -109,8 +117,8 @@ func ParseSettingsResult(res SettingsResult, base Settings) (Settings, error) {
 	return next, nil
 }
 
-// campusStateText 把三态转成中文短语（托盘菜单与提示共用）。
-func campusStateText(s model.CampusState) string {
+// CampusStateText 把三态转成适合主窗口与托盘展示的中文短语。
+func CampusStateText(s model.CampusState) string {
 	switch s {
 	case model.CampusOnline:
 		return "已在线"
@@ -131,6 +139,7 @@ func secondsDuration(secs int) time.Duration {
 type SettingsForm struct {
 	StudentID         string
 	CustomerCode      string
+	EduPassword       string
 	CampusUser        string
 	CampusPassword    string
 	CampusFingerprint string
@@ -148,6 +157,7 @@ type SettingsForm struct {
 type SettingsResult struct {
 	StudentID         string
 	CustomerCode      string
+	EduPassword       string
 	CampusUser        string
 	CampusPassword    string
 	CampusFingerprint string

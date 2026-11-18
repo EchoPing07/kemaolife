@@ -49,15 +49,6 @@ func handleTrayMessage(hwnd uintptr, msg uint32, wParam, lParam uintptr) (uintpt
 		}
 		return 0, true
 
-	case WM_OPEN_SETTINGS:
-		trayMu.Lock()
-		cb := trayHandler.OnTrayClick
-		trayMu.Unlock()
-		if cb != nil {
-			cb()
-		}
-		return 0, true
-
 	case WM_QUERY_DONE:
 		trayMu.Lock()
 		cb := trayHandler.OnQueryDone
@@ -70,8 +61,9 @@ func handleTrayMessage(hwnd uintptr, msg uint32, wParam, lParam uintptr) (uintpt
 	case TrayCallbackMessage:
 		// lParam 低字是鼠标消息：右键弹菜单，左键单击交给上层（打开设置）。
 		//
-		// 为什么左键单击就开设置：本程序没有主界面，左键是用户最自然的入口；
-		// 双击在 Win11 的溢出面板里经常被面板自身吞掉，单击更可靠。
+		// 左键单击唤起主窗口「今天」：双击在 Win11 的溢出面板里
+		// 经常被面板自身吞掉，单击更可靠。
+		// 复选：双击图标没反应的问题在 Win11 溢出面板里常见，两个消息都认。
 		switch uint32(lParam) & 0xFFFF {
 		case WM_RBUTTONUP:
 			showTrayMenu(hwnd)
@@ -134,61 +126,9 @@ func showTrayMenu(hwnd uintptr) {
 	}
 }
 
-// handleSettingsMessage 是设置窗口的消息处理核心。
-func handleSettingsMessage(hwnd uintptr, msg uint32, wParam, lParam uintptr) (uintptr, bool) {
-	switch msg {
-	case WM_CTLCOLORSTATIC:
-		// STATIC（标签、分节标题）用窗口底色 + 透明背景。
-		//
-		// 只对 STATIC 这么做：复选框（BUTTON）走 WM_CTLCOLORBTN，
-		// 若在这里一并处理，按钮的文字会被画两遍（实测重影）。
-		if brush := dialogBrush(); brush != 0 {
-			SetTextColor(wParam, 0)
-			SetBkMode(wParam, transparentMode)
-			return brush, true
-		}
-		return 0, true
-
-	case WM_CTLCOLORBTN:
-		// 复选框保持系统默认绘制（不接管），文字与勾选框才不会错位。
-		return 0, false
-
-	case WM_ERASEBKGND:
-		// 用与刷子一致的底色擦除父窗口背景，避免「半透明残影」。
-		if brush := dialogBrush(); brush != 0 {
-			FillRect(wParam, hwnd, brush)
-			return 1, true
-		}
-		return 0, false
-	case WM_COMMAND:
-		id := int(wParam & 0xFFFF)
-		if handleSettingsCommand(id) {
-			return 0, true
-		}
-		return 0, true
-	case WM_CLOSE:
-		// 关闭按钮等同于「取消」：不保存，只隐藏窗口，下次打开重建控件值。
-		Show(hwnd, false)
-		return 0, true
-	case WM_DESTROY:
-		closeSettings()
-		return 0, true
-	}
-	return 0, false
-}
-
 // TrayProc 是托盘窗口过程。
 func TrayProc(hwnd uintptr, msg uint32, wParam, lParam uintptr) uintptr {
 	if r, ok := handleTrayMessage(hwnd, msg, wParam, lParam); ok {
-		return r
-	}
-	r, _, _ := procDefWindowProc.Call(hwnd, uintptr(msg), wParam, lParam)
-	return r
-}
-
-// SettingsProc 是设置窗口过程。
-func SettingsProc(hwnd uintptr, msg uint32, wParam, lParam uintptr) uintptr {
-	if r, ok := handleSettingsMessage(hwnd, msg, wParam, lParam); ok {
 		return r
 	}
 	r, _, _ := procDefWindowProc.Call(hwnd, uintptr(msg), wParam, lParam)

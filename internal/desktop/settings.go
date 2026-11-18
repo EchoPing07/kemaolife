@@ -22,13 +22,16 @@ var ErrSettingsClamped = errors.New("设置间隔已钳制")
 
 // Settings 是 Windows 端的全部可配置项（docs/windows.md）。
 //
-// 与 CLI 版的 model.Config 分开：Windows 不需要教务凭据（不做课表），
-// 但需要校园网凭据（独立字段）与轮询 / 告警参数。
+// 与 CLI 版的 model.Config 分开：Windows 额外需要校园网独立凭据
+// 与轮询 / 告警参数；教务密码是可选的新增字段，老配置可继续读取。
 // 落盘前由 DPAPI 加密（P5）。
 type Settings struct {
 	// 电费：学号 + 学校代码（电费接口无密码，api-docs/contract.md §1）。
 	StudentID    string `json:"studentId"`
 	CustomerCode string `json:"customerCode,omitempty"`
+
+	// 教务：可选；留空时仍能使用电费与校园网功能。
+	EduPassword string `json:"eduPassword,omitempty"`
 
 	// 校园网：独立凭据，不复用教务 / 电费账号。
 	CampusUser        string `json:"campusUser"`
@@ -138,6 +141,15 @@ func (s Settings) AlertConfig() alert.Config {
 		DaysThreshold:    s.DaysThreshold,
 		QuietStartHour:   s.QuietStartHour,
 		QuietEndHour:     s.QuietEndHour,
+	}
+}
+
+// TimetableConfig 转成 app 课表用例需要的 model.Config。
+func (s Settings) TimetableConfig() model.Config {
+	return model.Config{
+		StudentID:    s.StudentID,
+		EduPassword:  s.EduPassword,
+		CustomerCode: s.CustomerCode,
 	}
 }
 

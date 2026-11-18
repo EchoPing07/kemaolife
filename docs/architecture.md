@@ -16,7 +16,7 @@
 | `Query(snapshot, date/week)` 纯计算 | **结果给谁**：stdout / 系统通知 / 屏幕 |
 | 电费 `getbindroom` / `getusedetail` 请求与解析 | **存哪儿**：`0600` 文件 / DPAPI / Keystore |
 | 校园网判态与登录/下线表单构造（纯函数） | **网络 I/O**：探测 302 与 POST 由 `internal/platform` 适配器执行 |
-| 共享 DTO、统一错误码、快照版本 | **UI**：无 / 托盘 / Compose |
+| 共享 DTO、统一错误码、快照版本 | **UI**：无 / 原生主窗口 + 托盘 / Compose |
 | 可用天数估算、告警去重判定 | **平台优化**：连接池、退避、缓存镜像等 |
 
 「为平台单独优化」不是改核心，而是同一组用例的不同组合方式，外加一层平台适配器。
@@ -26,7 +26,7 @@
 ```
 ┌───────────────── 触发 / 呈现层（各端独有，全部原生） ─────────────────┐
 │ CLI（linux / darwin）：`kemaolife timetable` 单次进程 / stdout / 退出码│
-│ Windows：开机自启 + ticker + 托盘                                      │
+│ Windows：主窗口 + 开机自启 + ticker + 托盘                              │
 │ Android：Compose（三 tab / 缓存优先 / 打开联网覆盖）                   │
 └───────────────────────────────┬───────────────────────────────────────┘
                                 │ 调用同一组用例
@@ -53,14 +53,14 @@
 ┌───────────────────────────────▼────────────────────────────────────────┐
 │ internal/platform · 适配器（build tags / 注入）                         │
 │ CLI（linux / darwin）：0700 目录 / 0600 文件 / 原子写 + XDG 口径        │
-│ windows：DPAPI + Portal 认证（托盘 / 通知在 cmd）                      │
+│ windows：DPAPI + Portal 认证（主窗口 / 托盘 / 通知在 cmd）             │
 │ android：快照复用私有目录文件存储，凭据加密留在 Kotlin                  │
 └────────────────────────────────────────────────────────────────────────┘
 ```
 
 依赖方向恒向下：`core` 不 import `app`，`app` 不 import `cmd`，`core` 绝不 import `platform` 实现。
 
-`internal/desktop` 是 Windows 端常驻编排（轮询 / 告警 / 托盘状态机），只依赖 `core` + ports + `app`，无平台调用，可跨平台单测。托盘与通知属呈现层，归 `cmd/kemaolife-desktop/ui`，不进 `internal/platform`。
+`internal/desktop` 是 Windows 端常驻编排（轮询 / 告警 / 窗口状态机），只依赖 `core` + ports + `app`，无平台调用，可跨平台单测。`Engine.Deps()` 向 `cmd` 暴露课表用例所需的端口副本；`Engine.QueryElectricity` 提供指定月份的手动查询，不触发告警、不修改轮询退避。主窗口、托盘与通知属呈现层，归 `cmd/kemaolife-desktop/ui`，不进 `internal/platform`。
 
 ## 3. 目录结构
 
@@ -86,7 +86,7 @@ kemaolife/                         # GitHub: EchoPing07/kemaolife
 │   │   ├── alert/evaluate.go      # ★ 纯函数：阈值判定 + 去重 + 充值后重置
 │   │   ├── porttest/              # 端口内存 fake（KVStore / Clock / Notifier / HTTPDoer）
 │   │   └── ports.go               # 只定义接口
-│   ├── desktop/                   # Windows 端编排（轮询 / 告警 / 托盘状态机，无平台调用）
+│   ├── desktop/                   # Windows 端编排（轮询 / 告警 / 窗口状态机，无平台调用）
 │   ├── app/                       # 用例编排
 │   │   ├── deps.go                # Deps：组装平台实现
 │   │   ├── timetable.go           # SyncTimetable
@@ -111,9 +111,9 @@ kemaolife/                         # GitHub: EchoPing07/kemaolife
 │       └── requestlog.go          # Android 请求记录（包在既有 Transport 外层，见 privacy.md §7）
 ├── cmd/
 │   ├── kemaolife/                 # CLI（linux / darwin）：单二进制 + 子命令
-│   ├── kemaolife-desktop/         # Windows：托盘 + 开机自启 + ticker（GUI 子系统无控制台）
+│   ├── kemaolife-desktop/         # Windows：五页主窗口 + 托盘 + 自启 + ticker（GUI 子系统无控制台）
 │   │   ├── console_windows.go     # FreeConsole 兜底
-│   │   └── ui/                    # 纯 Win32（syscall 直调 user32/gdi32/shell32），内嵌图标、菜单与通知
+│   │   └── ui/                    # 纯 Win32（syscall 直调 user32/gdi32/shell32），主窗口、托盘、菜单与通知
 │   └── kemaolife-mobile/          # Android：gomobile bind 薄门面（§6）
 ├── android/                       # Kotlin + Compose，仅渲染与门面调用（构建见 android/README.md）
 ├── skills/kemaolife/SKILL.md      # agent skill
@@ -203,7 +203,7 @@ func SyncTimetable(ctx context.Context, d Deps, cfg model.Config) (SyncResult, e
 func GetSchedule(ctx context.Context, d Deps, cfg model.Config, date model.Date, mode CacheOption) (ScheduleResult, error)
 func GetWeekSchedule(ctx context.Context, d Deps, cfg model.Config, week int, mode CacheOption) (WeekResult, error)
 func ExportTimetableCSV(ctx context.Context, d Deps, cfg model.Config) (ExportResult, error) // 只读快照、0 请求
-// CacheOption：RefreshFirst = 先刷新再计算（CLI）；CacheOnly = 只读本地快照、0 请求、stale 恒 false（Android）
+// CacheOption：RefreshFirst = 先刷新再计算（CLI）；CacheOnly = 只读本地快照、0 请求、stale 恒 false（Windows / Android）
 func CheckElectricity(ctx context.Context, d Deps, cfg model.Config, yearMonth string) (model.ElectricityReport, error)
 func alert.Evaluate(prev alert.State, cur model.ElectricityStatus, now time.Time, cfg alert.Config) (alert.Decision, alert.State) // ★ 纯函数
 func EnsureCampusNetwork(ctx context.Context, d CampusDeps) error                    // 仅 Windows 自动模式
@@ -215,23 +215,23 @@ func ReloginCampusNetwork(ctx context.Context, d CampusDeps) error
 
 差异只体现在「谁来调、多久调、结果去哪、活多久」：
 
-| | CLI（linux / darwin） | Windows 常驻 | Android |
+| | CLI（linux / darwin） | Windows 主窗口 + 常驻托盘 | Android |
 |---|---|---|---|
-| `GetSchedule` / `GetWeekSchedule` | 每次进程调用一次，`RefreshFirst`：内部先刷新 | 不调 | 打开 / 切周，`CacheOnly`：只读本地快照 |
-| `SyncTimetable` | 显式 `sync`（只刷新不查询） | 不调 | 打开 App（不受最小查询间隔约束）、切回课表 tab（按间隔）、手动刷新 / 设置页「测试」（不受节流） |
+| `GetSchedule` / `GetWeekSchedule` | 每次进程调用一次，`RefreshFirst`：内部先刷新 | 今天 / 课表页与切周均 `CacheOnly`：只读本地快照，不联网 | 打开 / 切周，`CacheOnly`：只读本地快照 |
+| `SyncTimetable` | 显式 `sync`（只刷新不查询） | 启动读快照后后台同步一次；「刷新课表」独立触发，不与切周合并 | 打开 App（不受最小查询间隔约束）、切回课表 tab（按间隔）、手动刷新 / 设置页「测试」（不受节流） |
 | `ExportTimetableCSV` | 不调 | 不调 | 课表页「导出课表」：只读快照，SAF 落盘 |
-| `CheckElectricity` | 显式 `kemaolife electricity` | 启动立即查一次，之后 ticker 默认 4 小时；菜单可「立即查询电费」 | 打开 App + 进入更多按间隔 + 手动刷新 |
-| `alert.Evaluate` | 不调 | 电费成功后由 `desktop.Engine` 调用 | 不调 |
+| `CheckElectricity` | 显式 `kemaolife electricity` | `PollOnce` 启动立即查一次，之后 ticker 默认 4 小时；默认立即刷新保留告警；`QueryElectricity` 支持指定月份手动查询且不告警、不改退避 | 打开 App + 进入更多按间隔 + 手动刷新 |
+| `alert.Evaluate` | 不调 | 仅 `PollOnce` 电费成功后由 `desktop.Engine` 调用；月份手动查询不调 | 不调 |
 | `EnsureCampusNetwork` | 不调 | 仅自动模式，每轮电费轮询前置 | 不调 |
-| `GetCampusNetworkStatus` 等 | 不调 | 启动立即判态一次，之后独立 ticker 默认 120s；手动按钮用 `CampusNetwork` | 「更多」页 / 手动动作前（默认仅 WiFi 下探测） |
-| 结果去向 | stdout（`--json` 只出数据） | 托盘状态 + 悬浮提示 + 系统通知 | Compose 三 tab |
-| 进程生命 | 秒级 | 天级（登录时自启一次，不保活） | 分钟级，随时被杀 |
+| `GetCampusNetworkStatus` 等 | 不调 | 启动立即判态一次，之后独立 ticker 默认 120s；主窗口 / 托盘手动按钮用 `CampusNetwork` | 「更多」页 / 手动动作前（默认仅 WiFi 下探测） |
+| 结果去向 | stdout（`--json` 只出数据） | 五页主窗口 + 托盘状态 / 悬浮提示 + 系统通知 | Compose 三 tab |
+| 进程生命 | 秒级 | 天级（登录时 `--background` 自启仅托盘，普通启动显示主窗口，不保活） | 分钟级，随时被杀 |
 
 CLI 不调用校园网用例。校园网用例用独立的 `app.CampusDeps`（`Clock` / `Net` / `Ready`），不挂在 `app.Deps` 下；`platform/campusnet_stub.go` 与 `notify_stub.go` 是备用实现（返回 `2001` / no-op），当前无装配点。
 
 **课表查询 = 刷新 + 计算（CLI）**：`GetSchedule` 内部先调 `SyncTimetable`，成功后用新快照计算；刷新失败则回落旧快照并置 `stale:true + syncedAt`。刷新与查询是同一个用例内的两步。
 
-**Android 走 `CacheOnly`**：查询只读本地快照、0 请求、`stale` 恒 `false`；联网刷新是独立动作（`timetable.sync`），成功后 UI 回读缓存覆盖界面。两者不合并的原因很直接：切周如果走「查询即刷新」，等于每次翻页都白打一次教务接口。各触发时机的完整规则见 [android.md](android.md)。
+**Windows / Android 查询走 `CacheOnly`**：查询只读本地快照、0 请求、`stale` 恒 `false`；联网刷新是独立动作（Windows 直接调用 `SyncTimetable`，Android 经 `timetable.sync`），成功后 UI 回读缓存覆盖界面。两者不合并的原因很直接：切周如果走「查询即刷新」，等于每次翻页都白打一次教务接口。Windows 启动先显示已有快照，再后台同步；Android 各触发时机的完整规则见 [android.md](android.md)。
 
 这些优化没有一个需要改 `core`：Android「不做后台」与 Windows「常驻」只是分别调用同一组用例；告警判定走 `core/alert.Evaluate`，只写一份、只测一份。
 
@@ -254,7 +254,11 @@ CLI 不调用校园网用例。校园网用例用独立的 `app.CampusDeps`（`C
 
 ## 7. Windows 原生层
 
-Windows 是一个原生托盘程序，不是浏览器套壳：用标准库 `syscall` 直调 user32 / gdi32 / shell32 与 advapi32 / crypt32 实现托盘、菜单、设置窗口、通知、自启注册表项与 DPAPI，单二进制、免 .NET / WebView2 / 第三方依赖。通知由托盘 `NIF_INFO` 承载，进程启动时设置 `Kemaolife.Desktop` AUMID 用于归类；不承诺 WinRT Toast 或操作中心归档。
+Windows 是一个原生主窗口 + 托盘程序，不是浏览器套壳：用标准库 `syscall` 直调 user32 / gdi32 / shell32 与 advapi32 / crypt32 实现五页主窗口、托盘、菜单、通知、自启注册表项与 DPAPI，单二进制、免 .NET / WebView2 / 第三方依赖。通知由托盘 `NIF_INFO` 承载，进程启动时设置 `Kemaolife.Desktop` AUMID 用于归类；不承诺 WinRT Toast 或操作中心归档。
+
+主窗口固定为今天 / 课表 / 电费 / 校园网 / 设置五页。今天与完整周课表均通过 `CacheOnly` 读取快照，切周不联网；启动先读快照再后台 `SyncTimetable`，手动刷新走同一独立用例。Windows 新增保存教务密码，和校园网凭据一样使用用户级 DPAPI。
+
+普通启动显示主窗口；自启注册表命令带 `--background`，新实例只驻留托盘。关闭主窗口只隐藏到托盘，重复启动唤起已有主窗口，托盘左键定位「今天」。校园网页展示三态与对应动作，不展示接入详情；电费页展示完整报告和按日期升序的每日表格，月份查询使用 `Engine.QueryElectricity`，不改变默认轮询的告警与退避。
 
 校园网默认手动模式，自动模式才做轮询前置：
 
@@ -264,7 +268,7 @@ Windows 是一个原生托盘程序，不是浏览器套壳：用标准库 `sysc
                           │（前置认证失败只更新托盘状态，不阻断本轮电费，也不自动登录）
 ```
 
-行为规则（自启时机、轮询间隔、告警、设置项）见 [windows.md](windows.md)。
+行为规则（五页主窗口、课表同步、窗口生命周期、自启参数、轮询间隔、告警、设置项）见 [windows.md](windows.md)。
 
 ## 8. 依赖约束
 

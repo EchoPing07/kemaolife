@@ -1,13 +1,13 @@
 //go:build windows
 
-// kemaolife-desktop 是 Windows 常驻托盘程序（docs/windows.md）。
+// kemaolife-desktop 是 Windows 原生主窗口与常驻托盘程序（docs/windows.md）。
 //
 // 职责边界（AGENTS §3）：
-//   - 本包只做「触发器 + 呈现 + 平台组装」：托盘菜单、设置窗口、轮询循环；
+//   - 本包只做「触发器 + 呈现 + 平台组装」：主窗口、托盘菜单、设置窗口、轮询循环；
 //   - 业务逻辑来自 internal/app / internal/core / internal/desktop；
 //   - 平台能力（DPAPI / 注册表自启 / Portal 认证）来自 internal/platform。
 //
-// 明确不做（docs/windows.md §10）：课表主界面、保活 / 守护、多账号、云端同步、浏览器内核。
+// 明确不做：保活 / 守护、多账号、云端同步、浏览器内核。
 package main
 
 import (
@@ -22,6 +22,8 @@ import (
 
 	"github.com/EchoPing07/kemaolife/cmd/kemaolife-desktop/ui"
 	"github.com/EchoPing07/kemaolife/internal/app"
+	"github.com/EchoPing07/kemaolife/internal/core"
+	"github.com/EchoPing07/kemaolife/internal/core/timetable"
 	"github.com/EchoPing07/kemaolife/internal/desktop"
 	"github.com/EchoPing07/kemaolife/internal/platform"
 	buildversion "github.com/EchoPing07/kemaolife/internal/version"
@@ -44,11 +46,22 @@ type desktopApp struct {
 	settingsMu sync.RWMutex
 	settings   desktop.Settings
 	store      *desktop.SettingsStore
+	secure     core.KVStore
 
 	engine *desktop.Engine
 
+	viewMu              sync.RWMutex
+	view                ui.MainWindowState
+	electricityErr      string
+	campusErr           string
+	timetableInFlight   bool
+	timetableCancel     context.CancelFunc
+	snapshotGenerations snapshotGeneration
+	activeJobs          map[string]bool
+
 	stopOnce sync.Once
 	stop     chan struct{}
+	rootCtx  context.Context
 	cancel   context.CancelFunc
 }
 
@@ -65,7 +78,7 @@ func main() {
 	ui.EnablePerMonitorDPI()
 	release, ok := ui.AcquireSingleInstance()
 	if !ok {
-		ui.MessageBox(desktop.AppName, "科贸生活已在运行，请查看系统托盘。", ui.MB_OK|ui.MB_ICONINFO)
+		ui.ShowExistingMainWindow()
 		return
 	}
 	defer release()
@@ -105,7 +118,7 @@ func run() (err error) {
 	if err := ui.RegisterClass(ui.TrayClass, ui.TrayProc, icon); err != nil {
 		return err
 	}
-	if err := ui.RegisterClass(ui.SettingsCls, ui.SettingsProc, icon); err != nil {
+	if err := ui.RegisterClass(ui.MainCls, ui.MainProc, icon); err != nil {
 		return err
 	}
 
@@ -116,9 +129,10 @@ func run() (err error) {
 	}
 
 	a := &desktopApp{
-		tray: ui.NewTray(trayWnd, trayIcon),
-		wnd:  trayWnd,
-		stop: make(chan struct{}),
+		tray:       ui.NewTray(trayWnd, trayIcon),
+		wnd:        trayWnd,
+		stop:       make(chan struct{}),
+		activeJobs: make(map[string]bool),
 	}
 	a.tip = ui.NewTipSetter(a.tray)
 
@@ -133,6 +147,7 @@ func run() (err error) {
 	}
 	// 配置含校园网凭据与学号，写盘前一律 DPAPI 加密（P5）。
 	secure := platform.NewEncryptedStore(rawStore)
+	a.secure = secure
 	a.store = desktop.NewSettingsStore(secure)
 
 	loaded, loadErr := a.store.Load()
@@ -165,19 +180,23 @@ func run() (err error) {
 	campusDeps := app.CampusDeps{Clock: platform.RealClock{}, Net: portal, Ready: portal}
 
 	ctx, cancel := context.WithCancel(context.Background())
+	a.rootCtx = ctx
 	a.cancel = cancel
+	a.view.AutoMode = a.currentSettings().AutoMode
 
 	a.engine = desktop.NewEngine(deps, campusDeps, a.tray, a.currentSettings, func(st desktop.Status) {
-		// 回调来自轮询 goroutine：必须转回 UI 线程再更新托盘。
+		// 回调来自引擎 goroutine：只把托盘文本与一次刷新请求投递回 UI 线程，
+		// 主窗口的状态一律由 UI 线程从 Engine.Status() 重新合成。
 		ui.PostStatus(trayWnd, desktop.FormatStatus(st))
+		ui.PostTrigger(trayWnd, ui.WM_QUERY_DONE)
 	})
 
 	ui.BindTray(trayWnd, ui.TrayHandler{
 		BuildMenu:    a.buildMenu,
 		OnCommand:    a.handleCommand,
-		OnTrayClick:  a.openSettings,
+		OnTrayClick:  a.openMain,
 		OnStatusText: a.tip.Set,
-		OnQueryDone:  a.refreshTrayTip,
+		OnQueryDone:  a.refreshMainWindow,
 	})
 
 	if err := a.tray.Add(desktop.AppName); err != nil {
@@ -185,10 +204,14 @@ func run() (err error) {
 	}
 	defer a.tray.Remove()
 
-	// 首次启动（没有学号）直接打开设置：不填配置什么也查不到，
-	// 让用户去翻托盘菜单是没必要的绕路。
-	if strings.TrimSpace(a.currentSettings().StudentID) == "" {
-		ui.PostTrigger(trayWnd, ui.WM_OPEN_SETTINGS)
+	background := len(os.Args) > 1 && os.Args[1] == "--background"
+	if !background {
+		// 主窗口在首个网络动作前创建，后台同步时显示局部加载态。
+		a.openMain()
+		if strings.TrimSpace(a.currentSettings().StudentID) == "" {
+			ui.OpenMainPage(ui.MainPageSettings)
+			a.openSettings()
+		}
 	}
 
 	// 首轮立即查一次：开机自启后用户马上能看到数据，不必等一个轮询周期。
@@ -196,6 +219,8 @@ func run() (err error) {
 		// 失败只更新托盘状态，不弹余额通知（docs/windows.md §6 规则 5）。
 		ui.PostTrigger(trayWnd, ui.WM_QUERY_DONE)
 	})
+
+	go a.bootstrapTimetable()
 
 	ui.Run()
 	return nil
@@ -210,7 +235,8 @@ func (a *desktopApp) currentSettings() desktop.Settings {
 
 // applySettings 校验、落盘并生效一次设置保存（设置窗口的回调）。
 func (a *desktopApp) applySettings(res desktop.SettingsResult) error {
-	next, err := desktop.ParseSettingsResult(res, a.currentSettings())
+	previous := a.currentSettings()
+	next, err := desktop.ParseSettingsResult(res, previous)
 	if err != nil {
 		return err
 	}
@@ -229,6 +255,20 @@ func (a *desktopApp) applySettings(res desktop.SettingsResult) error {
 	a.settingsMu.Unlock()
 
 	a.refreshTrayTip()
+	if strings.TrimSpace(previous.StudentID) != strings.TrimSpace(next.StudentID) {
+		// 先推进代次再取消与删除：即使旧同步已收到响应，也不能写回新账号快照。
+		a.snapshotGenerations.next()
+		a.viewMu.Lock()
+		cancel := a.timetableCancel
+		a.timetableCancel = nil
+		a.timetableInFlight = false
+		a.view = ui.MainWindowState{TimetableError: "教务账号已更改，请重新同步课表"}
+		a.viewMu.Unlock()
+		if cancel != nil {
+			cancel()
+		}
+		_ = a.secure.Delete(timetable.SnapshotStoreKey)
+	}
 	// 模式切换会改变按钮组，立即重建一次菜单状态。
 	ui.PostTrigger(a.wnd, ui.WM_QUERY_DONE)
 
@@ -238,22 +278,25 @@ func (a *desktopApp) applySettings(res desktop.SettingsResult) error {
 	return nil
 }
 
-// openSettings 打开设置窗口（托盘左键或菜单项）。
+// openSettings 切到主窗口「设置」页（托盘菜单项与校园网页按钮都走这里）。
 func (a *desktopApp) openSettings() {
-	icon, _ := ui.AppIcon()
-	ui.OpenSettings(a.wnd, icon, desktop.ToSettingsForm(a.currentSettings()), a.applySettings, a.settingsHint)
+	a.openMain()
+	ui.OpenMainPage(ui.MainPageSettings)
 }
 
-// settingsHint 把「钳制提示」与「保存失败」分开：前者是成功后的说明，
-// 后者才要留在窗口让用户改。
-func (a *desktopApp) settingsHint(err error) (string, bool) {
-	if err == nil {
-		return "", false
+// saveSettingsFromPage 在主窗口设置页保存，返回提示文本；
+// 钳制与保存失败都留在页内，只有完全成功才提示「已保存」。
+func (a *desktopApp) saveSettingsFromPage(res desktop.SettingsResult) (hint string) {
+	defer func() {
+		a.refreshMainWindow()
+	}()
+	if err := a.applySettings(res); err != nil {
+		if errors.Is(err, desktop.ErrSettingsClamped) {
+			return desktop.ClampedSettingsHint(a.currentSettings())
+		}
+		return err.Error()
 	}
-	if errors.Is(err, desktop.ErrSettingsClamped) {
-		return desktop.ClampedSettingsHint(a.currentSettings()), true
-	}
-	return "", true
+	return "已保存"
 }
 
 // buildMenu 按当前状态与模式生成托盘右键菜单。
@@ -266,6 +309,8 @@ func (a *desktopApp) buildMenu() []ui.MenuItem {
 	campusLine, powerLine := desktop.TrayLine(st)
 
 	items := []ui.MenuItem{
+		{Title: "打开科贸生活", ID: ui.IDOpenMain},
+		{Sep: true},
 		{Title: campusLine, ID: ui.IDStatusCampus, Grayed: true},
 		{Title: powerLine, ID: ui.IDStatusPower, Grayed: true},
 		{Sep: true},
@@ -314,6 +359,8 @@ func (a *desktopApp) handleCommand(id int) {
 	}
 
 	switch id {
+	case ui.IDOpenMain:
+		a.openMain()
 	case ui.IDProbe:
 		a.runAsync(func(ctx context.Context) { a.engine.ProbeCampus(ctx) })
 	case ui.IDRefresh:
@@ -348,7 +395,11 @@ func (a *desktopApp) reportCampusErr(ctx context.Context, err error) {
 // commandContext 给用户点击触发的动作 60s：Portal 有 3s 生效等待 + 复探，
 // 电费要发 3 个请求，30s 太紧。
 func (a *desktopApp) commandContext() (context.Context, context.CancelFunc) {
-	return context.WithTimeout(context.Background(), 60*time.Second)
+	parent := a.rootCtx
+	if parent == nil {
+		parent = context.Background()
+	}
+	return context.WithTimeout(parent, 60*time.Second)
 }
 
 // refreshTrayTip 用引擎当前状态刷新托盘提示。
