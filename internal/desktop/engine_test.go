@@ -422,6 +422,75 @@ func TestPollAlertsOncePerThreshold(t *testing.T) {
 	}
 }
 
+// 三个入口（常驻循环 / 托盘按钮 / 刷新全部）可能同时触发 PollOnce：
+// 并发不得重复查询出两次同阈值告警（配合 -race 检测 alertState 竞争）。
+func TestPollOnceConcurrentNotifiesOnce(t *testing.T) {
+	campus := newFakeCampus(model.CampusOnline)
+	srv := electricityServer(t, 5, 1)
+	eng, rec, _ := buildEngine(t, campus, defaultSettings(), srv)
+
+	var wg sync.WaitGroup
+	for i := 0; i < 8; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			if err := eng.PollOnce(context.Background()); err != nil {
+				t.Errorf("PollOnce: %v", err)
+			}
+		}()
+	}
+	wg.Wait()
+	if rec.Count() != 1 {
+		t.Fatalf("并发轮询同一阈值应只提醒一次, got %d 次", rec.Count())
+	}
+}
+
+// 凭据类月份查询错误必须保留「设置…」修复指引，不能被标准码文案吃掉。
+func TestQueryElectricityCredentialErrorKeepsSettingsHint(t *testing.T) {
+	srv := electricityServer(t, 50, 1)
+	settings := defaultSettings()
+	settings.StudentID = ""
+	eng, _, _ := buildEngine(t, newFakeCampus(model.CampusOnline), settings, srv)
+
+	if err := eng.QueryElectricity(context.Background(), "2026-10"); err == nil {
+		t.Fatal("缺学号应报错")
+	}
+	if got := eng.Status().LastError; !strings.Contains(got, "设置") {
+		t.Errorf("凭据错误应保留修复指引: %q", got)
+	}
+}
+
+// 电费成功（默认轮询与月份查询）不得抹掉校园网动作失败原因：
+// 两个域是独立链路，错误各归各管（docs/windows.md §3.4）。
+func TestElectricitySuccessKeepsCampusError(t *testing.T) {
+	campus := newFakeCampus(model.CampusUnauth)
+	campus.loginErr = model.NewError(model.CodeUpstreamRejected, "<校园网凭据错误>")
+	srv := electricityServer(t, 50, 1)
+	eng, _, _ := buildEngine(t, campus, defaultSettings(), srv)
+
+	if err := eng.DoCampus(context.Background(), desktop.ActionLogin); err == nil {
+		t.Fatal("登录应失败")
+	}
+	want := eng.Status().CampusError
+	if want == "" {
+		t.Fatal("登录失败应记录校园网错误")
+	}
+
+	if err := eng.QueryElectricity(context.Background(), "2026-10"); err != nil {
+		t.Fatalf("QueryElectricity: %v", err)
+	}
+	if got := eng.Status(); got.CampusError != want || got.LastError != want || got.ElectricityError != "" {
+		t.Errorf("月份查询成功不得抹掉校园网错误: %+v", got)
+	}
+
+	if err := eng.PollOnce(context.Background()); err != nil {
+		t.Fatalf("PollOnce: %v", err)
+	}
+	if got := eng.Status(); got.CampusError != want || got.LastError != want || got.ElectricityError != "" {
+		t.Errorf("手动模式轮询成功不得抹掉校园网错误: %+v", got)
+	}
+}
+
 // 电费查询失败：不弹余额通知，只更新状态（规则 5）。
 func TestPollFailureDoesNotNotify(t *testing.T) {
 	campus := newFakeCampus(model.CampusOnline)

@@ -78,7 +78,11 @@ func main() {
 	ui.EnablePerMonitorDPI()
 	release, ok := ui.AcquireSingleInstance()
 	if !ok {
-		ui.ShowExistingMainWindow()
+		// 带 --background 的重复启动（如登录脚本再跑一次）静默退出，
+		// 不打扰已有实例的窗口状态；普通重复启动才唤起主窗口（contract §1.5）。
+		if !backgroundStartup() {
+			ui.ShowExistingMainWindow()
+		}
 		return
 	}
 	defer release()
@@ -98,8 +102,9 @@ func main() {
 }
 
 func run() (err error) {
-	// Win32 回调里发生 Go panic 会直接杀掉进程（syscall.NewCallback 不传播 panic），
-	// 启动期把 panic 转成可见的错误提示，而不是静默消失。
+	// 启动阶段的 panic 兜底：把初始化错误转成可见提示而不是静默消失。
+	// 注意它接不住 Win32 回调里的 panic（syscall.NewCallback 不跨 C 边界传播），
+	// 窗口过程必须自身保证不 panic。
 	defer func() {
 		if r := recover(); r != nil {
 			err = fmt.Errorf("启动异常: %v", r)
@@ -197,6 +202,7 @@ func run() (err error) {
 		OnTrayClick:  a.openMain,
 		OnStatusText: a.tip.Set,
 		OnQueryDone:  a.refreshMainWindow,
+		OnEndSession: a.shutdown,
 	})
 
 	if err := a.tray.Add(desktop.AppName); err != nil {
@@ -204,7 +210,7 @@ func run() (err error) {
 	}
 	defer a.tray.Remove()
 
-	background := len(os.Args) > 1 && os.Args[1] == "--background"
+	background := backgroundStartup()
 	if !background {
 		// 主窗口在首个网络动作前创建，后台同步时显示局部加载态。
 		a.openMain()
@@ -226,6 +232,11 @@ func run() (err error) {
 	return nil
 }
 
+// backgroundStartup 判断是否以 --background 自启（只认第一个参数）。
+func backgroundStartup() bool {
+	return len(os.Args) > 1 && os.Args[1] == "--background"
+}
+
 // currentSettings 返回当前设置的副本。
 func (a *desktopApp) currentSettings() desktop.Settings {
 	a.settingsMu.RLock()
@@ -245,11 +256,8 @@ func (a *desktopApp) applySettings(res desktop.SettingsResult) error {
 		return err
 	}
 
-	// 自启开关立刻写注册表；失败要明确告知，不能「提示已保存但实际没生效」。
-	if err := platform.SetAutoStart(next.AutoStart); err != nil {
-		return fmt.Errorf("配置已保存，但写入开机自启失败：%w", err)
-	}
-
+	// 落盘成功即生效：内存配置先更新，自启写注册表失败也不能让
+	// 内存与磁盘不一致（否则下一轮轮询仍用旧配置，界面却显示新值）。
 	a.settingsMu.Lock()
 	a.settings = next
 	a.settingsMu.Unlock()
@@ -272,6 +280,10 @@ func (a *desktopApp) applySettings(res desktop.SettingsResult) error {
 	// 模式切换会改变按钮组，立即重建一次菜单状态。
 	ui.PostTrigger(a.wnd, ui.WM_QUERY_DONE)
 
+	// 自启开关立刻写注册表；失败要明确告知，不能「提示已保存但实际没生效」。
+	if err := platform.SetAutoStart(next.AutoStart); err != nil {
+		return fmt.Errorf("配置已保存，但写入开机自启失败：%w", err)
+	}
 	if desktop.SettingsWereClamped(res, next) {
 		return desktop.ErrSettingsClamped
 	}

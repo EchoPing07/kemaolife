@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"strings"
 	"sync"
+	"syscall"
 	"unsafe"
 
 	"github.com/EchoPing07/kemaolife/internal/core/model"
@@ -56,6 +57,7 @@ type MainWindowHandler struct {
 	OnTimetableWeek    func(int)
 	OnTimetableRefresh func()
 	OnElectricityMonth func(string)
+	OnElectricityPoll  func()       // 电费页「立即查询电费」：走 PollOnce
 	OnCampusAction     func(string) // refresh / login / logout / relogin
 	// OnSaveSettings 在 UI 线程做校验与落盘，返回要显示在设置页的提示文本。
 	OnSaveSettings func(desktop.SettingsResult) string
@@ -69,7 +71,8 @@ const (
 	IDMainCampus      = 3004
 	IDMainSettings    = 3005
 
-	IDMainRefreshAll = 3101
+	IDMainRefreshAll   = 3101
+	IDMainTodayRefresh = 3102
 
 	IDMainTimetablePrev    = 3201
 	IDMainTimetableCurrent = 3202
@@ -79,6 +82,7 @@ const (
 	IDMainElectricityMonth  = 3301
 	IDMainElectricityQuery  = 3302
 	IDMainElectricityScroll = 3303
+	IDMainElectricityPoll   = 3304
 
 	IDMainCampusRefresh = 3401
 	IDMainCampusLogin   = 3402
@@ -86,6 +90,7 @@ const (
 	IDMainCampusRelogin = 3404
 
 	IDMainTimetableScroll = 3451
+	IDMainSettingsScroll  = 3452
 )
 
 // MainCls 是主窗口类名；与托盘、设置窗口共用 RegisterClass 注册表。
@@ -180,6 +185,8 @@ func OpenMainWindow(owner, icon uintptr, state MainWindowState, h MainWindowHand
 		mainMu.Unlock()
 		w.applyState()
 		w.layout()
+		// 窗口可能被最小化：SW_SHOW 不会恢复最小化窗口，先 Restore。
+		Restore(w.hwnd)
 		Show(w.hwnd, true)
 		return nil
 	}
@@ -200,7 +207,9 @@ func OpenMainWindow(owner, icon uintptr, state MainWindowState, h MainWindowHand
 	mainMu.Unlock()
 
 	SetWindowIcon(hwnd, icon)
-	w.buildControls()
+	if err := w.buildControls(); err != nil {
+		return err
+	}
 	w.applyState()
 	// 客户区尺寸必须是「逻辑 1120×720 按当前 DPI 放大后的物理像素」。
 	// 只在创建时读一次 DPI 不够：窗口尚未经过 CenterOnScreen 落到目标显示器，
@@ -259,6 +268,7 @@ func ShowMainWindow() {
 	w := mainWnd
 	mainMu.Unlock()
 	if w != nil && w.hwnd != 0 {
+		Restore(w.hwnd)
 		Show(w.hwnd, true)
 	}
 }
@@ -330,9 +340,54 @@ func (w *mainWindow) addButton(id int, text string) {
 	if font := mainFont(w.hwnd, 14, 400); font != 0 {
 		procSendMessage.Call(h, WM_SETFONT, font, 1)
 	}
+	subclassChildWheel(h)
 }
 
-func (w *mainWindow) buildControls() {
+// 焦点控件的滚轮转发：WM_MOUSEWHEEL 发给焦点窗口而不是光标下的窗口，
+// 点过按钮 / 输入框后焦点留在控件上，控件默认过程不处理滚轮，页面就滚不动。
+// 这里给可聚焦子控件换一层转发壳：滚轮转给父窗口，其余消息原样放行。
+// 主窗口只隐藏不销毁，控件与进程同寿，原过程表无需清理。
+var (
+	childProcMu        sync.Mutex
+	childOrigProcs     = map[uintptr]uintptr{}
+	childWheelCallback uintptr
+)
+
+const gwlpWndProc = ^uintptr(3) // GWLP_WNDPROC = -4
+
+func subclassChildWheel(h uintptr) {
+	if h == 0 {
+		return
+	}
+	childProcMu.Lock()
+	defer childProcMu.Unlock()
+	if _, ok := childOrigProcs[h]; ok {
+		return
+	}
+	if childWheelCallback == 0 {
+		childWheelCallback = syscall.NewCallback(func(hwnd uintptr, msg uint32, wParam, lParam uintptr) uintptr {
+			if msg == wmMouseWheel {
+				if parent, _, _ := procGetParent.Call(hwnd); parent != 0 {
+					r, _, _ := procSendMessage.Call(parent, uintptr(msg), wParam, lParam)
+					return r
+				}
+			}
+			childProcMu.Lock()
+			orig := childOrigProcs[hwnd]
+			childProcMu.Unlock()
+			if orig != 0 {
+				r, _, _ := procCallWindowProc.Call(orig, hwnd, uintptr(msg), wParam, lParam)
+				return r
+			}
+			r, _, _ := procDefWindowProc.Call(hwnd, uintptr(msg), wParam, lParam)
+			return r
+		})
+	}
+	orig, _, _ := procSetWindowLongPtr.Call(h, gwlpWndProc, childWheelCallback)
+	childOrigProcs[h] = orig
+}
+
+func (w *mainWindow) buildControls() error {
 	for id, text := range map[int]string{
 		IDMainToday: "今天", IDMainTimetable: "课表", IDMainElectricity: "电费",
 		IDMainCampus: "校园网", IDMainSettings: "设置",
@@ -340,11 +395,12 @@ func (w *mainWindow) buildControls() {
 		w.addButton(id, text)
 	}
 	for id, text := range map[int]string{
-		IDMainRefreshAll:    "刷新全部",
+		IDMainRefreshAll: "刷新全部", IDMainTodayRefresh: "刷新课表",
 		IDMainTimetablePrev: "上一周", IDMainTimetableCurrent: "本周",
 		IDMainTimetableNext: "下一周", IDMainTimetableRefresh: "刷新",
-		IDMainElectricityQuery: "查询", IDMainCampusRefresh: "刷新",
-		IDMainCampusLogin: "登录", IDMainCampusLogout: "下线",
+		IDMainElectricityQuery: "查询", IDMainElectricityPoll: "立即查询电费",
+		IDMainCampusRefresh: "刷新",
+		IDMainCampusLogin:   "登录", IDMainCampusLogout: "下线",
 		IDMainCampusRelogin: "重登",
 	} {
 		w.addButton(id, text)
@@ -355,10 +411,11 @@ func (w *mainWindow) buildControls() {
 	if font := mainFont(w.hwnd, 14, 400); font != 0 {
 		procSendMessage.Call(month, WM_SETFONT, font, 1)
 	}
-	for _, id := range []int{IDMainTimetableScroll, IDMainElectricityScroll} {
+	subclassChildWheel(month)
+	for _, id := range []int{IDMainTimetableScroll, IDMainElectricityScroll, IDMainSettingsScroll} {
 		w.ctl[id] = CreateChild("SCROLLBAR", "", sbsVert, w.hwnd, id)
 	}
-	w.buildSettingsControls()
+	return w.buildSettingsControls()
 }
 
 func (w *mainWindow) contentRect() (left, top, right, bottom int32) {
@@ -397,6 +454,7 @@ func (w *mainWindow) layout() {
 	}
 
 	w.move(IDMainRefreshAll, right-s(104), s(26), s(104), s(34))
+	w.move(IDMainTodayRefresh, right-s(216), s(26), s(104), s(34))
 
 	y := s(70)
 	x := left
@@ -411,6 +469,7 @@ func (w *mainWindow) layout() {
 
 	w.move(IDMainElectricityMonth, left+s(78), y, s(142), s(30))
 	w.move(IDMainElectricityQuery, left+s(230), y, s(88), s(32))
+	w.move(IDMainElectricityPoll, left+s(326), y, s(128), s(32))
 
 	buttonY := s(226)
 	x = left
@@ -428,9 +487,14 @@ func (w *mainWindow) layout() {
 	tableTop := s(306)
 	w.move(IDMainElectricityScroll, right-s(15), tableTop, s(15), bottom-tableTop)
 	if w.page == mainPageSettings {
+		g := w.settingsGeometry()
+		w.move(IDMainSettingsScroll, right-s(15), s(96), s(15), g.saveY-s(8)-s(96))
+	}
+	// 先更新滚动条范围（可能钳制滚动位置），再按钳制后的位置摆设置页控件。
+	w.updateScrollbars()
+	if w.page == mainPageSettings {
 		w.layoutSettings()
 	}
-	w.updateScrollbars()
 }
 
 func (w *mainWindow) setPage(page int) {
@@ -453,13 +517,15 @@ func (w *mainWindow) setPage(page int) {
 	switch page {
 	case mainPageToday:
 		w.show(IDMainRefreshAll, true)
+		w.show(IDMainTodayRefresh, true)
 	case mainPageTimetable:
 		for _, id := range []int{IDMainTimetablePrev, IDMainTimetableCurrent,
 			IDMainTimetableNext, IDMainTimetableRefresh, IDMainTimetableScroll} {
 			w.show(id, true)
 		}
 	case mainPageElectricity:
-		for _, id := range []int{IDMainElectricityMonth, IDMainElectricityQuery, IDMainElectricityScroll} {
+		for _, id := range []int{IDMainElectricityMonth, IDMainElectricityQuery,
+			IDMainElectricityPoll, IDMainElectricityScroll} {
 			w.show(id, true)
 		}
 	case mainPageCampus:
@@ -468,6 +534,7 @@ func (w *mainWindow) setPage(page int) {
 			w.show(id, true)
 		}
 	case mainPageSettings:
+		w.show(IDMainSettingsScroll, true)
 	}
 	w.applyState()
 	w.updateScrollbars()
@@ -489,10 +556,11 @@ func (w *mainWindow) applyState() {
 		SetText(w.ctl[IDMainRefreshAll], "刷新全部")
 	}
 	for _, id := range []int{IDMainTimetablePrev, IDMainTimetableCurrent,
-		IDMainTimetableNext, IDMainTimetableRefresh} {
+		IDMainTimetableNext, IDMainTimetableRefresh, IDMainTodayRefresh} {
 		Enable(w.ctl[id], !w.state.TimetableLoading && !w.state.Refreshing)
 	}
 	Enable(w.ctl[IDMainElectricityQuery], !w.state.ElectricityLoading && !w.state.Refreshing)
+	Enable(w.ctl[IDMainElectricityPoll], !w.state.ElectricityLoading && !w.state.Refreshing)
 	Enable(w.ctl[IDMainElectricityMonth], !w.state.ElectricityLoading)
 	campusReady := !w.state.CampusLoading && !w.state.Refreshing
 	for _, id := range []int{IDMainCampusRefresh, IDMainCampusRelogin} {
@@ -542,6 +610,8 @@ func MainProc(hwnd uintptr, msg uint32, wParam, lParam uintptr) uintptr {
 	case WM_CLOSE:
 		Show(hwnd, false)
 		return 0
+	case WM_QUERYENDSESSION:
+		return 1 // 允许注销 / 关机；托盘图标由托盘窗口的 WM_ENDSESSION 摘除
 	case wmGetMinMaxInfo:
 		if w != nil && lParam != 0 {
 			applyMainMinTrackSize(lParam, Scale(hwnd, 960), Scale(hwnd, 640))
@@ -601,6 +671,8 @@ func MainProc(hwnd uintptr, msg uint32, wParam, lParam uintptr) uintptr {
 				w.scrollTimetable(uint32(wParam&0xFFFF), int32(uint16(wParam>>16)))
 			case w.ctl[IDMainElectricityScroll]:
 				w.scrollElectricity(uint32(wParam&0xFFFF), int32(uint16(wParam>>16)))
+			case w.ctl[IDMainSettingsScroll]:
+				w.scrollSettings(uint32(wParam&0xFFFF), int32(uint16(wParam>>16)))
 			}
 			return 0
 		}
@@ -620,6 +692,8 @@ func MainProc(hwnd uintptr, msg uint32, wParam, lParam uintptr) uintptr {
 				w.setTimetableScroll(w.timetableScroll + steps*w.scale(56*2))
 			case mainPageElectricity:
 				w.setElectricScroll(w.electricScroll + steps*w.scale(28*3))
+			case mainPageSettings:
+				w.setSettingsScroll(w.settingsScroll + steps*w.scale(38))
 			}
 			return 0
 		}
@@ -672,7 +746,9 @@ func (w *mainWindow) command(id int) {
 			w.handler.OnRefreshAll()
 		}
 	case IDMainTimetablePrev:
-		if w.handler.OnTimetableWeek != nil {
+		// 周次从 1 起：第 1 周再往前没有合法周次（0 是「当周」语义，
+		// 传下去会跳回当前周而不是上一周）。
+		if w.state.Week > 1 && w.handler.OnTimetableWeek != nil {
 			w.handler.OnTimetableWeek(w.state.Week - 1)
 		}
 	case IDMainTimetableCurrent:
@@ -683,13 +759,17 @@ func (w *mainWindow) command(id int) {
 		if w.handler.OnTimetableWeek != nil {
 			w.handler.OnTimetableWeek(w.state.Week + 1)
 		}
-	case IDMainTimetableRefresh:
+	case IDMainTimetableRefresh, IDMainTodayRefresh:
 		if w.handler.OnTimetableRefresh != nil {
 			w.handler.OnTimetableRefresh()
 		}
 	case IDMainElectricityQuery:
 		if w.handler.OnElectricityMonth != nil {
 			w.handler.OnElectricityMonth(strings.TrimSpace(Text(w.ctl[IDMainElectricityMonth])))
+		}
+	case IDMainElectricityPoll:
+		if w.handler.OnElectricityPoll != nil {
+			w.handler.OnElectricityPoll()
 		}
 	case IDMainCampusRefresh, IDMainCampusLogin, IDMainCampusLogout, IDMainCampusRelogin:
 		actions := map[int]string{IDMainCampusRefresh: "refresh", IDMainCampusLogin: "login",
@@ -779,24 +859,28 @@ func (w *mainWindow) setTimetableScroll(v int32) {
 	procInvalidateRect.Call(w.hwnd, 0, 0)
 }
 
+// settingsViewport 返回设置页表单可视区的上下边界（物理像素）。
+// 表单从标题下方开始，到保存按钮上方结束；保存 / 提示固定在底部不滚动。
+func (w *mainWindow) settingsViewport() (top, bottom int32) {
+	g := w.settingsGeometry()
+	return w.scale(96), g.saveY - w.scale(8)
+}
+
 // settingsMaxScroll 返回设置页可滚动的最大距离。
 //
 // 窗口最小 960×640 时表单底部会超出可视区，因此设置页也参与滚动；
 // 只有内容真的放不下时才允许滚动，避免大窗口下滚出空白。
 func (w *mainWindow) settingsMaxScroll() int32 {
+	top, bottom := w.settingsViewport()
 	g := w.settingsGeometry()
-	// 表单可视区从标题下方到保存按钮上方；保存 / 提示固定在底部不滚动。
-	viewportTop := w.scale(96)
-	viewportBottom := g.saveY - w.scale(8)
-	viewport := viewportBottom - viewportTop
-	if viewport < 1 {
-		viewport = 1
-	}
-	content := g.quietY + w.scale(30) - viewportTop
-	if content <= viewport {
-		return 0
-	}
-	return content - viewport
+	_, maxScroll := settingsScrollMetrics(top, bottom, g.quietY+w.scale(30))
+	return maxScroll
+}
+
+func (w *mainWindow) scrollSettings(code uint32, pos int32) {
+	top, bottom := w.settingsViewport()
+	viewport, maximum := settingsScrollMetrics(top, bottom, w.settingsGeometry().quietY+w.scale(30))
+	w.setSettingsScroll(w.scrollValue(code, pos, w.settingsScroll, viewport, maximum))
 }
 
 func (w *mainWindow) setSettingsScroll(v int32) {
@@ -838,17 +922,13 @@ func (w *mainWindow) scrollElectricity(code uint32, pos int32) {
 	w.setElectricScroll(w.scrollValue(code, pos, w.electricScroll, bottom-bodyTop, maximum))
 }
 
+// mainStateLabel 复用 desktop 的三态文案，避免 UI 与托盘各写一套；
+// 零值（尚未判态）是 UI 独有的第四种展示。
 func mainStateLabel(state model.CampusState) string {
-	switch state {
-	case model.CampusOnline:
-		return "已在线"
-	case model.CampusUnauth:
-		return "未认证"
-	case model.CampusOffline:
-		return "不在校园网"
-	default:
+	if state == "" {
 		return "尚未检查"
 	}
+	return desktop.CampusStateText(state)
 }
 
 func mainTextOr(value, fallback string) string {

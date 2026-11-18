@@ -15,6 +15,9 @@ import (
 // SettingsStore 负责（AGENTS §3：UI 不重写业务规则）。
 
 const (
+	// IDSetPanel 是表单滚动容器：表单控件都是它的子窗口，
+	// 滚动时被容器客户区裁剪，不会溢进标题区；保存 / 还原 / 提示不在此列。
+	IDSetPanel       = 4000
 	IDSetStudentID   = 4001
 	IDSetEduPass     = 4002
 	IDSetCustomer    = 4003
@@ -37,6 +40,43 @@ const (
 	IDSetGroupThird  = 4303
 	IDSetLabelFirst  = 4311
 )
+
+const settingsPanelClass = "KemaolifeSettingsPanel"
+
+const wmCtlColorEdit = 0x0133
+
+// settingsPanelProc 只做转发与底色：面板是裁剪容器，不含任何业务。
+// 子控件的 WM_COMMAND / WM_CTLCOLOR* 必须转给主窗口，否则按钮点击与
+// 背景同色处理都会失效；滚轮同样转给主窗口统一处理。
+func settingsPanelProc(hwnd uintptr, msg uint32, wParam, lParam uintptr) uintptr {
+	switch msg {
+	case WM_COMMAND, WM_CTLCOLORSTATIC, WM_CTLCOLORBTN, wmCtlColorEdit, wmMouseWheel:
+		if parent, _, _ := procGetParent.Call(hwnd); parent != 0 {
+			r, _, _ := procSendMessage.Call(parent, uintptr(msg), wParam, lParam)
+			return r
+		}
+	case WM_ERASEBKGND:
+		if brush := controlBackground(); brush != 0 {
+			FillRect(wParam, hwnd, brush)
+			return 1
+		}
+	}
+	r, _, _ := procDefWindowProc.Call(hwnd, uintptr(msg), wParam, lParam)
+	return r
+}
+
+// settingsScrollMetrics 是设置页滚动范围的纯函数版，便于单测。
+// viewportTop/Bottom 是表单可视区，contentBottom 是表单内容底部。
+func settingsScrollMetrics(viewportTop, viewportBottom, contentBottom int32) (viewport, maxScroll int32) {
+	viewport = viewportBottom - viewportTop
+	if viewport < 1 {
+		viewport = 1
+	}
+	if contentBottom <= viewportTop+viewport {
+		return viewport, 0
+	}
+	return viewport, contentBottom - viewportTop - viewport
+}
 
 var (
 	ctlBrushOnce sync.Once
@@ -129,11 +169,17 @@ func settingsGeometryForWidth(left, right int32, scale func(int32) int32) settin
 	return g
 }
 
-func (w *mainWindow) buildSettingsControls() {
+func (w *mainWindow) buildSettingsControls() error {
 	ctl := w.ctl
 
+	if err := RegisterClass(settingsPanelClass, settingsPanelProc, 0); err != nil {
+		return err
+	}
+	panel := CreateChild(settingsPanelClass, "", wsClipChildren, w.hwnd, IDSetPanel)
+	ctl[IDSetPanel] = panel
+
 	label := func(id int, text string) uintptr {
-		h := CreateChild(classNameStatic, text, SS_LEFT, w.hwnd, id)
+		h := CreateChild(classNameStatic, text, SS_LEFT, panel, id)
 		ctl[id] = h
 		if f := mainFont(w.hwnd, 14, 400); f != 0 {
 			procSendMessage.Call(h, WM_SETFONT, f, 1)
@@ -141,7 +187,7 @@ func (w *mainWindow) buildSettingsControls() {
 		return h
 	}
 	group := func(id int, text string) {
-		h := CreateChild(classNameStatic, text, SS_LEFT, w.hwnd, id)
+		h := CreateChild(classNameStatic, text, SS_LEFT, panel, id)
 		ctl[id] = h
 		if f := mainFont(w.hwnd, 16, 700); f != 0 {
 			procSendMessage.Call(h, WM_SETFONT, f, 1)
@@ -152,19 +198,21 @@ func (w *mainWindow) buildSettingsControls() {
 		if password {
 			st |= ES_PASSWORD
 		}
-		e := CreateChild(classNameEdit, "", st, w.hwnd, id)
+		e := CreateChild(classNameEdit, "", st, panel, id)
 		ctl[id] = e
 		if f := mainFont(w.hwnd, 14, 400); f != 0 {
 			procSendMessage.Call(e, WM_SETFONT, f, 1)
 		}
+		subclassChildWheel(e)
 		return e
 	}
 	checkbox := func(id int, text string) {
-		c := CreateChild(classNameButton, text, BS_AUTOCHECKBOX|WS_TABSTOP, w.hwnd, id)
+		c := CreateChild(classNameButton, text, BS_AUTOCHECKBOX|WS_TABSTOP, panel, id)
 		ctl[id] = c
 		if f := mainFont(w.hwnd, 14, 400); f != 0 {
 			procSendMessage.Call(c, WM_SETFONT, f, 1)
 		}
+		subclassChildWheel(c)
 	}
 
 	group(IDSetGroupFirst, "教务与电费")
@@ -200,6 +248,7 @@ func (w *mainWindow) buildSettingsControls() {
 	field(IDSetQuietFrom, false)
 	field(IDSetQuietTo, false)
 
+	// 保存 / 还原 / 提示固定在页面底部，不放进滚动面板。
 	hint := CreateChild(classNameStatic, "", SS_LEFT, w.hwnd, IDSetHint)
 	ctl[IDSetHint] = hint
 	if f := mainFont(w.hwnd, 13, 400); f != 0 {
@@ -212,11 +261,14 @@ func (w *mainWindow) buildSettingsControls() {
 		if f := mainFont(w.hwnd, 14, 400); f != 0 {
 			procSendMessage.Call(b, WM_SETFONT, f, 1)
 		}
+		subclassChildWheel(b)
 	}
-
+	return nil
 }
 
 // layoutSettings 在页面可见时重新摆放控件；窗口缩放后也走这里。
+// 表单控件摆在滚动面板内（坐标相对面板左上角），滚动只移动面板内容；
+// 保存 / 还原 / 提示是主窗口直接子控件，固定在底部不随滚动。
 func (w *mainWindow) layoutSettings() {
 	if w == nil || len(w.ctl) == 0 {
 		return
@@ -225,10 +277,15 @@ func (w *mainWindow) layoutSettings() {
 	rowH := g.rowH
 	fieldW := g.colW - g.labelW
 	offset := w.settingsScroll
+	top, bottom := w.settingsViewport()
+	if bottom < top {
+		bottom = top
+	}
+	Move(w.ctl[IDSetPanel], g.leftX, top, g.colW, bottom-top)
 
 	place := func(id int, x, y, width, height int32) {
 		if h := w.ctl[id]; h != 0 {
-			Move(h, x, y-offset, width, height)
+			Move(h, x-g.leftX, y-top-offset, width, height)
 		}
 	}
 	// 标签与输入框之间留 8px 缝隙，避免边框压在文字上。
@@ -270,9 +327,9 @@ func (w *mainWindow) layoutSettings() {
 	place(IDSetQuietFrom, g.leftX+g.labelW, g.quietY, w.scale(58), rowH)
 	place(IDSetQuietTo, g.leftX+g.labelW+w.scale(110), g.quietY, w.scale(58), rowH)
 
-	place(IDSetSave, g.leftX, g.saveY, w.scale(104), w.scale(32))
-	place(IDSetRevert, g.leftX+w.scale(116), g.saveY, w.scale(88), w.scale(32))
-	place(IDSetHint, g.leftX, g.hintY, g.colW, w.scale(40))
+	w.move(IDSetSave, g.leftX, g.saveY, w.scale(104), w.scale(32))
+	w.move(IDSetRevert, g.leftX+w.scale(116), g.saveY, w.scale(88), w.scale(32))
+	w.move(IDSetHint, g.leftX, g.hintY, g.colW, w.scale(40))
 
 	w.showSettingsPage(true)
 }
@@ -284,7 +341,7 @@ func (w *mainWindow) right() int32 {
 
 func (w *mainWindow) showSettingsPage(visible bool) {
 	for id := range w.ctl {
-		if id >= IDSetStudentID {
+		if id >= IDSetPanel {
 			w.show(id, visible)
 		}
 	}

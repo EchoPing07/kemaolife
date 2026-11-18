@@ -48,3 +48,37 @@ func TestSettingsLayoutVerticalOrder(t *testing.T) {
 		t.Errorf("内容高度应大于提示行: contentH=%d hintY=%d", g.contentH, g.hintY)
 	}
 }
+
+// 滚动范围：矮窗口必须可滚、高窗口不滚、退化视口不产生负值。
+func TestSettingsScrollMetrics(t *testing.T) {
+	identity := func(dp int32) int32 { return dp }
+	g := settingsGeometryForWidth(216, 1092, identity)
+	contentBottom := g.quietY + 30
+
+	// 矮窗口（底部按钮固定在 saveY=500）：表单底部被视口裁掉，必须能滚。
+	viewport, maxScroll := settingsScrollMetrics(96, 492, contentBottom)
+	if viewport != 396 {
+		t.Errorf("视口高应为 396, got %d", viewport)
+	}
+	if maxScroll <= 0 {
+		t.Errorf("矮窗口 maxScroll 应 > 0, got %d", maxScroll)
+	}
+	if maxScroll != contentBottom-492 {
+		t.Errorf("maxScroll 应恰好补齐被裁掉的 %d, got %d", contentBottom-492, maxScroll)
+	}
+
+	// 高窗口：表单完整可见，不需要滚动。
+	viewport, maxScroll = settingsScrollMetrics(96, contentBottom+96, contentBottom)
+	if maxScroll != 0 {
+		t.Errorf("高窗口 maxScroll 应为 0, got %d", maxScroll)
+	}
+	if viewport != contentBottom {
+		t.Errorf("视口高应为 %d, got %d", contentBottom, viewport)
+	}
+
+	// 退化视口（bottom < top）：钳到 1，不得返回负数或除零。
+	viewport, _ = settingsScrollMetrics(96, 90, contentBottom)
+	if viewport != 1 {
+		t.Errorf("退化视口应钳到 1, got %d", viewport)
+	}
+}

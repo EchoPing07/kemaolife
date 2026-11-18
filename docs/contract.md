@@ -28,7 +28,7 @@
 2. 生成 Java 类实测落在 `com.github.echoping07.kemaolife.bridge.kemaolife.Kemaolife`（`-javapkg` 只决定前缀，末段固定取 Go 包名）；Kotlin 调 `Kemaolife.init(...)` / `Kemaolife.call(...)`。改包名须同步 `android/.../data/Bridge.kt` 与 `android/README.md`。
 3. 仓库与文档不出现任何凭据明文；学校代码属学校事实，可用内置默认值（当前 `3126`）；示例中的用户自填值写 `<学校代码>`。
 4. CLI 支持 linux / darwin（源码构建 + 预编译产物），windows 为后续计划；桌面端仅 Windows、移动端仅 Android。内部标识（`cmd` 目录名、二进制名、AUMID、Android 包名、产物名）冻结，不因支持平台扩展而改名。Windows 端命名用 `desktop`：主窗口 + 托盘程序是给人的；`agent` 一词仅指 CLI 侧的 AI agent。
-5. Windows 主窗口固定为今天 / 课表 / 电费 / 校园网 / 设置五页。关闭主窗口只隐藏到托盘；重复启动唤起已有主窗口，即使本次带 `--background` 也不改变已有窗口状态；托盘左键打开主窗口并定位「今天」。窗口行为与完整规则见 [windows.md](windows.md)。
+5. Windows 主窗口固定为今天 / 课表 / 电费 / 校园网 / 设置五页。关闭主窗口只隐藏到托盘；重复启动不带 `--background` 时唤起已有主窗口（已有实例仅驻留托盘、主窗口尚未创建时，通知其创建并显示）；重复启动带 `--background` 时直接退出，不改变已有实例的窗口状态；托盘左键打开主窗口并定位「今天」。窗口行为与完整规则见 [windows.md](windows.md)。
 
 ## 2. CLI 命令
 

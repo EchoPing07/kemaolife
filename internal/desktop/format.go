@@ -30,14 +30,13 @@ func FormatStatus(s Status) string {
 	return strings.Join(lines, "\n")
 }
 
-// toSettingsForm 把持久化设置转成 UI 表单初始值。
+// ToSettingsForm 把持久化设置转成 UI 表单初始值。
+// 两类密码恒为空：留空即「保留已保存密码」，表单不回显明文凭据（P5）。
 func ToSettingsForm(s Settings) SettingsForm {
 	return SettingsForm{
 		StudentID:         s.StudentID,
 		CustomerCode:      s.CustomerCode,
-		EduPassword:       s.EduPassword,
 		CampusUser:        s.CampusUser,
-		CampusPassword:    s.CampusPassword,
 		CampusFingerprint: s.CampusFingerprint,
 		AutoMode:          s.AutoMode,
 		AutoStart:         s.AutoStart,

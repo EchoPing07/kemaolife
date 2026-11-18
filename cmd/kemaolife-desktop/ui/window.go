@@ -25,6 +25,7 @@ const (
 const (
 	WM_STATUS_UPDATE = WM_APP + 1 // 状态文本变了
 	WM_QUERY_DONE    = WM_APP + 3 // 一次轮询结束（刷新托盘与主窗口）
+	WM_SHOW_MAIN     = WM_APP + 4 // 重复启动请求唤起主窗口（经托盘窗口转 UI 线程）
 )
 
 // wmTrayCallback 是 Shell_NotifyIcon 回调消息号（与通知实现里的常量一致）。
@@ -174,6 +175,9 @@ func Enable(hwnd uintptr, on bool) {
 	}
 	procEnableWindow.Call(hwnd, v)
 }
+
+// Restore 把最小化的窗口恢复为之前的大小与位置（未最小化时相当于激活）。
+func Restore(hwnd uintptr) { procShowWindow.Call(hwnd, SW_RESTORE) }
 
 // Show 显示 / 隐藏窗口。
 func Show(hwnd uintptr, show bool) {

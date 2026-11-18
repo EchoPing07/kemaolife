@@ -55,6 +55,9 @@ var (
 	procSystemParam      = user32.NewProc("SystemParametersInfoW")
 	procMonitorFromPoint = user32.NewProc("MonitorFromPoint")
 	procGetDpiForMonitor = shcore.NewProc("GetDpiForMonitor")
+	procGetParent        = user32.NewProc("GetParent")
+	procSetWindowLongPtr = user32.NewProc("SetWindowLongPtrW")
+	procCallWindowProc   = user32.NewProc("CallWindowProcW")
 
 	procGetModuleHndl = kernel32.NewProc("GetModuleHandleW")
 
@@ -63,13 +66,15 @@ var (
 
 // 窗口消息（只列用到的）。
 const (
-	WM_DESTROY       = 0x0002
-	WM_CLOSE         = 0x0010
-	WM_COMMAND       = 0x0111
-	WM_LBUTTONUP     = 0x0202
-	WM_LBUTTONDBLCLK = 0x0203
-	WM_RBUTTONUP     = 0x0205
-	WM_APP           = 0x8000
+	WM_DESTROY         = 0x0002
+	WM_CLOSE           = 0x0010
+	WM_QUERYENDSESSION = 0x0011
+	WM_ENDSESSION      = 0x0016
+	WM_COMMAND         = 0x0111
+	WM_LBUTTONUP       = 0x0202
+	WM_LBUTTONDBLCLK   = 0x0203
+	WM_RBUTTONUP       = 0x0205
+	WM_APP             = 0x8000
 )
 
 // 控件样式与通用常量。
@@ -82,8 +87,9 @@ const (
 	WS_BORDER      = 0x00800000
 	WS_TABSTOP     = 0x00010000
 
-	SW_HIDE = 0
-	SW_SHOW = 5
+	SW_HIDE    = 0
+	SW_SHOW    = 5
+	SW_RESTORE = 9
 
 	SWP_NOZORDER   = 0x0004
 	SWP_NOACTIVATE = 0x0010

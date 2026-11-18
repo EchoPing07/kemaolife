@@ -64,3 +64,30 @@ func TestCloneMainStateDoesNotAliasSlices(t *testing.T) {
 		t.Fatal("MainWindowState must own its DTO slices and optional values")
 	}
 }
+
+// 「上一周」在周次 ≤1 时不得触发回调：0 是「当周」语义，传下去会跳回当前周。
+func TestTimetablePrevClampsAtWeekOne(t *testing.T) {
+	for _, tc := range []struct {
+		week int
+		want []int
+	}{
+		{week: 0, want: nil},
+		{week: 1, want: nil},
+		{week: 8, want: []int{7}},
+	} {
+		var calls []int
+		w := &mainWindow{
+			state:   MainWindowState{Week: tc.week},
+			handler: MainWindowHandler{OnTimetableWeek: func(n int) { calls = append(calls, n) }},
+		}
+		w.command(IDMainTimetablePrev)
+		if len(calls) != len(tc.want) {
+			t.Fatalf("week=%d: 回调次数 %d, want %d", tc.week, len(calls), len(tc.want))
+		}
+		for i, n := range calls {
+			if n != tc.want[i] {
+				t.Fatalf("week=%d: 回调周次 %d, want %d", tc.week, n, tc.want[i])
+			}
+		}
+	}
+}

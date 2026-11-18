@@ -20,6 +20,8 @@ type TrayHandler struct {
 	OnStatusText func(text string)
 	// OnQueryDone 后台一轮轮询结束：刷新提示并重建菜单状态。
 	OnQueryDone func()
+	// OnEndSession 系统注销 / 关机：摘掉托盘图标，避免留下死图标。
+	OnEndSession func()
 }
 
 var (
@@ -55,6 +57,31 @@ func handleTrayMessage(hwnd uintptr, msg uint32, wParam, lParam uintptr) (uintpt
 		trayMu.Unlock()
 		if cb != nil {
 			cb()
+		}
+		return 0, true
+
+	case WM_SHOW_MAIN:
+		// 重复启动（不带 --background）经托盘窗口唤起主窗口：
+		// 窗口创建必须发生在拥有消息循环的 UI 线程。
+		trayMu.Lock()
+		cb := trayHandler.OnTrayClick
+		trayMu.Unlock()
+		if cb != nil {
+			cb()
+		}
+		return 0, true
+
+	case WM_QUERYENDSESSION:
+		return 1, true // 允许注销 / 关机
+
+	case WM_ENDSESSION:
+		if wParam != 0 {
+			trayMu.Lock()
+			cb := trayHandler.OnEndSession
+			trayMu.Unlock()
+			if cb != nil {
+				cb()
+			}
 		}
 		return 0, true
 

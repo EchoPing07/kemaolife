@@ -24,19 +24,25 @@ func validSettingsResult() desktop.SettingsResult {
 	}
 }
 
-func TestTimetableConfigAndSettingsFormIncludeEduPassword(t *testing.T) {
+func TestTimetableConfigIncludesEduPasswordAndFormHidesPasswords(t *testing.T) {
 	settings := desktop.DefaultSettings()
 	settings.StudentID = "<学号>"
 	settings.CustomerCode = "<学校代码>"
 	settings.EduPassword = "<教务密码>"
+	settings.CampusPassword = "<校园网密码>"
 
 	cfg := settings.TimetableConfig()
 	if cfg.StudentID != settings.StudentID || cfg.CustomerCode != settings.CustomerCode ||
 		cfg.EduPassword != settings.EduPassword {
 		t.Errorf("TimetableConfig 未完整映射教务配置: %+v", cfg)
 	}
-	if form := desktop.ToSettingsForm(settings); form.EduPassword != settings.EduPassword {
-		t.Errorf("设置表单教务密码 = %q, want %q", form.EduPassword, settings.EduPassword)
+	form := desktop.ToSettingsForm(settings)
+	if form.EduPassword != "" || form.CampusPassword != "" {
+		t.Errorf("设置表单不得回显明文密码: edu=%q campus=%q", form.EduPassword, form.CampusPassword)
+	}
+	if form.StudentID != settings.StudentID || form.CustomerCode != settings.CustomerCode ||
+		form.PollSeconds != settings.PollSeconds {
+		t.Errorf("设置表单未回显非敏感配置: %+v", form)
 	}
 }
 

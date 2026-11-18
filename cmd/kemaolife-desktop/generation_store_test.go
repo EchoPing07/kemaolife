@@ -3,9 +3,10 @@
 package main
 
 import (
+	"errors"
+	"sync"
 	"testing"
 
-	"github.com/EchoPing07/kemaolife/internal/core/model"
 	"github.com/EchoPing07/kemaolife/internal/core/porttest"
 	"github.com/EchoPing07/kemaolife/internal/core/timetable"
 )
@@ -22,8 +23,8 @@ func TestGenerationSnapshotStoreBlocksStaleWrite(t *testing.T) {
 	}
 	if err := stale.Put(timetable.SnapshotStoreKey, []byte("old")); err == nil {
 		t.Fatal("旧代次写入必须被拒绝")
-	} else if model.CodeOf(err) != model.CodeNetworkDown {
-		t.Errorf("拒绝原因应为网络类错误码, got %v", model.CodeOf(err))
+	} else if !errors.Is(err, errGenerationSuperseded) {
+		t.Errorf("拒绝原因应为代次哨兵错误, got %v", err)
 	}
 
 	got, err := inner.Get(timetable.SnapshotStoreKey)
@@ -82,4 +83,29 @@ func TestGenerationSnapshotStoreAllowsRead(t *testing.T) {
 	if string(got) != "cached" {
 		t.Errorf("读到 %q", got)
 	}
+}
+
+// 换账号与写盘并发时，守卫只允许两种结果：写成功或哨兵拒绝，
+// 不得出现其他错误（配合 -race 可检出检查与写盘之间的竞争）。
+func TestGenerationSnapshotStoreConcurrentSwitch(t *testing.T) {
+	inner := porttest.NewMemStore()
+	gens := &snapshotGeneration{}
+	var wg sync.WaitGroup
+	for i := 0; i < 50; i++ {
+		gen := gens.next()
+		st := generationSnapshotStore{inner: inner, gens: gens, gen: gen}
+		wg.Add(2)
+		go func() {
+			defer wg.Done()
+			gens.next()
+		}()
+		go func() {
+			defer wg.Done()
+			err := st.Put(timetable.SnapshotStoreKey, []byte("v"))
+			if err != nil && !errors.Is(err, errGenerationSuperseded) {
+				t.Errorf("意外错误: %v", err)
+			}
+		}()
+	}
+	wg.Wait()
 }

@@ -23,6 +23,7 @@ func (a *desktopApp) openMain() {
 		OnTimetableWeek:    a.selectTimetableWeek,
 		OnTimetableRefresh: func() { a.startTimetableSync() },
 		OnElectricityMonth: a.startElectricityQuery,
+		OnElectricityPoll:  a.startElectricityPoll,
 		OnCampusAction:     a.startCampusAction,
 		OnSaveSettings:     a.saveSettingsFromPage,
 	}); err != nil {
@@ -40,6 +41,7 @@ func (a *desktopApp) mainState() ui.MainWindowState {
 	state := a.view
 	state.Version = version + " (" + commit + ")"
 	state.Days = append([]model.DaySchedule(nil), a.view.Days...)
+	electricityErr, campusErr := a.electricityErr, a.campusErr
 	a.viewMu.Unlock()
 
 	status := a.engine.Status()
@@ -48,15 +50,17 @@ func (a *desktopApp) mainState() ui.MainWindowState {
 	state.Campus = status.CampusStatus
 	if status.ElectricityError != "" {
 		state.ElectricityError = status.ElectricityError
-	} else if a.electricityErr != "" {
-		state.ElectricityError = a.electricityErr
+	} else if electricityErr != "" {
+		state.ElectricityError = electricityErr
 	}
 	if status.CampusError != "" {
 		state.CampusError = status.CampusError
-	} else if a.campusErr != "" {
-		state.CampusError = a.campusErr
+	} else if campusErr != "" {
+		state.CampusError = campusErr
 	}
-	state.AutoMode = a.currentSettings().AutoMode
+	settings := a.currentSettings()
+	state.AutoMode = settings.AutoMode
+	state.SettingsForm = desktop.ToSettingsForm(settings)
 	// 今天的课表还未回来时，用本周缓存的对应天兜底，避免首帧显示「暂无」。
 	if !state.HasToday && len(state.Days) > 0 {
 		today := a.engine.Deps().Clock.Now()
@@ -93,7 +97,9 @@ func (a *desktopApp) bootstrapTimetable() {
 	cfg := a.currentSettings().TimetableConfig()
 	if err := a.loadCachedTimetable(ctx, cfg, generation); err != nil {
 		a.viewMu.Lock()
-		a.view.TimetableError = model.MessageOf(err)
+		if generation == a.snapshotGenerations.current() {
+			a.view.TimetableError = model.MessageOf(err)
+		}
 		a.viewMu.Unlock()
 	}
 	if strings.TrimSpace(cfg.StudentID) == "" || cfg.EduPassword == "" {
@@ -271,6 +277,33 @@ func (a *desktopApp) startElectricityQuery(month string) {
 	}()
 }
 
+// startElectricityPoll 是电费页「立即查询电费」：走 PollOnce，
+// 保留轮询告警与退避语义（docs/windows.md §3.3）；月份查询才走 QueryElectricity。
+func (a *desktopApp) startElectricityPoll() {
+	if !a.beginJob("electricity") {
+		return
+	}
+	a.viewMu.Lock()
+	a.view.ElectricityLoading = true
+	a.view.ElectricityError = ""
+	a.viewMu.Unlock()
+	a.postMainUpdate()
+	go func() {
+		defer a.finishJob("electricity")
+		ctx, cancel := a.commandContext()
+		defer cancel()
+		err := a.engine.PollOnce(ctx)
+		a.viewMu.Lock()
+		a.view.ElectricityLoading = false
+		if err != nil {
+			a.electricityErr = model.MessageOf(err)
+		} else {
+			a.electricityErr = ""
+		}
+		a.viewMu.Unlock()
+	}()
+}
+
 func (a *desktopApp) startCampusAction(action string) {
 	if !a.beginJob("campus") {
 		return
@@ -342,10 +375,12 @@ func (a *desktopApp) refreshAll() {
 			defer wg.Done()
 			err := a.engine.PollOnce(ctx)
 			a.viewMu.Lock()
-			if err != nil {
-				a.electricityErr = model.MessageOf(err)
-			} else {
-				a.electricityErr = ""
+			if generation == a.snapshotGenerations.current() {
+				if err != nil {
+					a.electricityErr = model.MessageOf(err)
+				} else {
+					a.electricityErr = ""
+				}
 			}
 			a.viewMu.Unlock()
 		}()
@@ -353,19 +388,24 @@ func (a *desktopApp) refreshAll() {
 			defer wg.Done()
 			_, err := a.engine.ProbeCampus(ctx)
 			a.viewMu.Lock()
-			if err != nil {
-				a.campusErr = model.MessageOf(err)
-			} else {
-				a.campusErr = ""
+			if generation == a.snapshotGenerations.current() {
+				if err != nil {
+					a.campusErr = model.MessageOf(err)
+				} else {
+					a.campusErr = ""
+				}
 			}
 			a.viewMu.Unlock()
 		}()
 		wg.Wait()
 		a.finishTimetable(cancel, generation)
 		a.viewMu.Lock()
-		a.view.Refreshing = false
-		a.view.ElectricityLoading = false
-		a.view.CampusLoading = false
+		// 换账号会重置视图并推进代次：旧刷新的收尾不得清掉新视图的加载态。
+		if generation == a.snapshotGenerations.current() {
+			a.view.Refreshing = false
+			a.view.ElectricityLoading = false
+			a.view.CampusLoading = false
+		}
 		a.viewMu.Unlock()
 		a.postMainUpdate()
 	}()

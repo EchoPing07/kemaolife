@@ -18,7 +18,6 @@ var (
 	procIntersectClip  = gdi32.NewProc("IntersectClipRect")
 	procSelectClipRgn  = gdi32.NewProc("SelectClipRgn")
 	procSelectObject   = gdi32.NewProc("SelectObject")
-	procDeleteObject   = gdi32.NewProc("DeleteObject")
 	procCreatePen      = gdi32.NewProc("CreatePen")
 	procRectangle      = gdi32.NewProc("Rectangle")
 	procDrawText       = user32.NewProc("DrawTextW")
@@ -112,16 +111,44 @@ func mainRect(x, y, right, bottom int32) RECT {
 	return RECT{Left: x, Top: y, Right: right, Bottom: bottom}
 }
 
+// GDI 刷子 / 画笔进程级缓存：滚动等高频重绘下每次创建销毁是纯浪费，
+// 调色板固定、数量有限，句柄可跨 DC 复用，随进程退出释放。
+var (
+	mainGdiMu   sync.Mutex
+	mainBrushes = map[uintptr]uintptr{}
+	mainPens    = map[uintptr]uintptr{}
+)
+
+func mainBrush(color uintptr) uintptr {
+	mainGdiMu.Lock()
+	defer mainGdiMu.Unlock()
+	if b := mainBrushes[color]; b != 0 {
+		return b
+	}
+	b, _, _ := procCreateSolidBr.Call(color)
+	mainBrushes[color] = b
+	return b
+}
+
+func mainPen(color uintptr) uintptr {
+	mainGdiMu.Lock()
+	defer mainGdiMu.Unlock()
+	if p := mainPens[color]; p != 0 {
+		return p
+	}
+	p, _, _ := procCreatePen.Call(psSolid, 1, color)
+	mainPens[color] = p
+	return p
+}
+
 func (c mainCanvas) fill(r RECT, color uintptr) {
-	brush, _, _ := procCreateSolidBr.Call(color)
-	if brush != 0 {
+	if brush := mainBrush(color); brush != 0 {
 		procFillRect.Call(c.dc, uintptr(unsafe.Pointer(&r)), brush)
-		procDeleteObject.Call(brush)
 	}
 }
 
 func (c mainCanvas) line(x1, y1, x2, y2 int32, color uintptr) {
-	pen, _, _ := procCreatePen.Call(psSolid, 1, color)
+	pen := mainPen(color)
 	if pen == 0 {
 		return
 	}
@@ -130,7 +157,6 @@ func (c mainCanvas) line(x1, y1, x2, y2 int32, color uintptr) {
 	procMoveToEx.Call(c.dc, uintptr(x1), uintptr(y1), 0)
 	procLineTo.Call(c.dc, uintptr(x2), uintptr(y2))
 	procSelectObject.Call(c.dc, old)
-	procDeleteObject.Call(pen)
 }
 
 var (
@@ -210,12 +236,10 @@ func (w *mainWindow) pageTitle(c mainCanvas, left, right int32, title, subtitle 
 
 func (w *mainWindow) card(c mainCanvas, r RECT, title string) {
 	c.fill(r, mainCard)
-	pen, _, _ := procCreatePen.Call(psSolid, 1, mainLine)
-	if pen != 0 {
+	if pen := mainPen(mainLine); pen != 0 {
 		old, _, _ := procSelectObject.Call(c.dc, pen)
 		procRectangle.Call(c.dc, uintptr(r.Left), uintptr(r.Top), uintptr(r.Right), uintptr(r.Bottom))
 		procSelectObject.Call(c.dc, old)
-		procDeleteObject.Call(pen)
 	}
 	c.useFont(16, 700).label(title, r.Left+w.scale(18), r.Top+w.scale(15),
 		r.Right-r.Left-w.scale(36), w.scale(27), mainTextColor)
@@ -223,7 +247,21 @@ func (w *mainWindow) card(c mainCanvas, r RECT, title string) {
 
 func (w *mainWindow) paintToday(c mainCanvas, left, right, bottom int32) {
 	date := mainTextOr(w.state.TodayDate, w.state.Today.Date.String())
-	w.pageTitle(c, left, right, "今天", mainTextOr(date, "校园信息一览"))
+	subtitle := mainTextOr(date, "校园信息一览")
+	// 周次 / 星期 / 是否学期内来自 DaySchedule DTO（docs/windows.md §3.1）。
+	if w.state.HasToday {
+		today := w.state.Today
+		if today.Week > 0 {
+			subtitle += " · 第 " + strconv.Itoa(today.Week) + " 周"
+		}
+		if today.WeekdayCn != "" {
+			subtitle += " · 星期" + today.WeekdayCn
+		}
+		if !today.InSemester {
+			subtitle += " · 不在学期内"
+		}
+	}
+	w.pageTitle(c, left, right, "今天", subtitle)
 	top := w.scale(112)
 	cardBottom := bottom
 	if cardBottom < top+w.scale(330) {
@@ -271,6 +309,11 @@ func (w *mainWindow) paintTodaySchedule(c mainCanvas, card RECT) {
 		return
 	}
 	entries := w.state.Today.Entries
+	if !w.state.Today.InSemester {
+		c.useFont(20, 600).label("不在学期内", x, y+w.scale(18), width, w.scale(38), mainTextColor)
+		w.paintTodayCardStatus(c, card, w.state.TimetableLoading, w.state.TimetableError)
+		return
+	}
 	c.useFont(14, 400).label("共 "+strconv.Itoa(len(entries))+" 节课", x, y, width, w.scale(28), mainAccent)
 	y += w.scale(42)
 	if len(entries) == 0 {
@@ -564,7 +607,7 @@ func (w *mainWindow) paintElectricity(c mainCanvas, left, right, bottom int32) {
 	w.pageTitle(c, left, right, "电费", "余额、采集时间与每月每日用量")
 	c.useFont(14, 400).label("月份", left, w.scale(75), w.scale(70), w.scale(24), mainMuted)
 	if w.state.ElectricityLoading {
-		c.useFont(13, 400).label("正在查询…", left+w.scale(336), w.scale(77), w.scale(130), w.scale(24), mainAccent)
+		c.useFont(13, 400).label("正在查询…", left+w.scale(466), w.scale(77), w.scale(130), w.scale(24), mainAccent)
 	}
 	card := mainRect(left, w.scale(118), right, w.scale(276))
 	w.card(c, card, "电费摘要")
@@ -585,7 +628,10 @@ func (w *mainWindow) paintElectricity(c mainCanvas, left, right, bottom int32) {
 		}
 		c.useFont(18, 600).label(daily, left+w.scale(414), w.scale(172), w.scale(135), w.scale(34), mainTextColor)
 		c.useFont(12, 400).label("近 7 日均量", left+w.scale(414), w.scale(211), w.scale(135), w.scale(24), mainMuted)
-		meta := "采集：" + mainTextOr(report.Status.CollectedAt, "—") + "    数据截至：" + mainTextOr(report.Usage.DataUntil, "—")
+		// 「数据截至」绑定采集时刻 collectedAt（docs/windows.md §3.3）；
+		// dataUntil 是用量统计的截止日期，措辞与 Android 端一致。
+		meta := "数据截至：" + mainTextOr(report.Status.CollectedAt, "—") +
+			"    用量统计至：" + mainTextOr(report.Usage.DataUntil, "—")
 		c.useFont(12, 400).label(meta, left+w.scale(570), w.scale(176), right-left-w.scale(590), w.scale(50), mainMuted)
 	}
 	if w.state.ElectricityError != "" {
@@ -632,6 +678,11 @@ func (w *mainWindow) paintCampus(c mainCanvas, left, right int32) {
 	if w.state.CampusLoading {
 		c.useFont(13, 400).label("正在执行，请稍候…", left+w.scale(24), w.scale(224),
 			right-left-w.scale(48), w.scale(25), mainMuted)
+	}
+	// 最近一次本机动作 / 轮询的脱敏错误（docs/windows.md §3.4）。
+	if w.state.CampusError != "" {
+		c.useFont(12, 400).text(w.state.CampusError, mainRect(left+w.scale(24), w.scale(254),
+			right-w.scale(24), w.scale(300)), dtLeft|dtWordBreak|dtEndEllipsis, mainMuted)
 	}
 	c.useFont(13, 400).label("检查时间："+mainTextOr(w.state.Campus.CheckedAt, "尚未检查"),
 		left+w.scale(24), w.scale(315), right-left-w.scale(48), w.scale(30), mainMuted)
@@ -687,8 +738,28 @@ func (w *mainWindow) updateScrollbars() {
 	if w.electricScroll > maximum {
 		w.electricScroll = maximum
 	}
+	// 无用量行时 Max 不得为 -1（SCROLLINFO 范围非法）。
+	electricMax := int32(len(w.state.Report.Usage.Days))*w.scale(28) - 1
+	if electricMax < 0 {
+		electricMax = 0
+	}
 	info = mainScrollInfo{Size: uint32(unsafe.Sizeof(mainScrollInfo{})), Mask: sifAll,
-		Min: 0, Max: int32(len(w.state.Report.Usage.Days))*w.scale(28) - 1, Page: uint32(page), Pos: w.electricScroll}
+		Min: 0, Max: electricMax, Page: uint32(page), Pos: w.electricScroll}
 	procSetScrollInfo.Call(w.ctl[IDMainElectricityScroll], sbCtl, uintptr(unsafe.Pointer(&info)), 1)
 	Enable(w.ctl[IDMainElectricityScroll], maximum > 0)
+
+	top, bottom := w.settingsViewport()
+	g := w.settingsGeometry()
+	viewport, maximum := settingsScrollMetrics(top, bottom, g.quietY+w.scale(30))
+	if w.settingsScroll > maximum {
+		w.settingsScroll = maximum
+	}
+	settingsMax := g.quietY + w.scale(30) - top - 1
+	if settingsMax < 0 {
+		settingsMax = 0
+	}
+	info = mainScrollInfo{Size: uint32(unsafe.Sizeof(mainScrollInfo{})), Mask: sifAll,
+		Min: 0, Max: settingsMax, Page: uint32(viewport), Pos: w.settingsScroll}
+	procSetScrollInfo.Call(w.ctl[IDMainSettingsScroll], sbCtl, uintptr(unsafe.Pointer(&info)), 1)
+	Enable(w.ctl[IDMainSettingsScroll], maximum > 0)
 }

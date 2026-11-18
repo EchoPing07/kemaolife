@@ -33,6 +33,10 @@ type Status struct {
 // 因此可以在任何平台上用 fake 跑单测 —— 但只有 Windows 端会实例化它。
 type Engine struct {
 	mu sync.Mutex
+	// pollMu 串行化 PollOnce 的三个入口（常驻循环 / 托盘按钮 / 刷新全部）：
+	// 既避免并发重复查询，也保护只在 PollOnce 内读写的 alertState，
+	// 防止同一阈值被并发判定出两次通知。
+	pollMu sync.Mutex
 
 	deps     app.Deps
 	campus   app.CampusDeps
@@ -208,6 +212,8 @@ func (e *Engine) ProbeCampus(ctx context.Context) (model.CampusState, error) {
 //
 // 失败只走退避与状态更新，不弹余额通知（docs/windows.md §6 规则 5）。
 func (e *Engine) PollOnce(ctx context.Context) error {
+	e.pollMu.Lock()
+	defer e.pollMu.Unlock()
 	cfg := e.settings()
 	var preflightErr error
 
@@ -252,9 +258,13 @@ func (e *Engine) PollOnce(ctx context.Context) error {
 		if preflightErr != nil {
 			s.LastError = model.MessageOf(preflightErr)
 			s.CampusError = s.LastError
-		} else {
+		} else if cfg.AutoMode {
 			s.LastError = ""
 			s.CampusError = ""
+		} else {
+			// 手动模式没有前置认证：校园网动作失败原因由 DoCampus 管理，
+			// 电费成功不能静默抹掉（docs/windows.md §3.4）。
+			s.LastError = s.CampusError
 		}
 		s.ElectricityError = ""
 		s.LastCheckedAt = now
@@ -285,7 +295,13 @@ func (e *Engine) QueryElectricity(ctx context.Context, yearMonth string) error {
 		cfg.ElectricityConfig(e.deps.DefaultCustomerCode), yearMonth)
 	if err != nil {
 		err = withSettingsHint(err)
-		e.setElectricityError(func(s *Status) { s.LastError = model.CodeMessage(model.CodeOf(err)) })
+		// 凭据类错误保留 withSettingsHint 补的修复指引；其余只用领域码的
+		// 标准文案，避免把用户输入 / 上游细节带进托盘提示。
+		msg := model.CodeMessage(model.CodeOf(err))
+		if model.CodeOf(err) == model.CodeCredentialMissing {
+			msg = model.MessageOf(err)
+		}
+		e.setElectricityError(func(s *Status) { s.LastError = msg })
 		return err
 	}
 
@@ -294,7 +310,8 @@ func (e *Engine) QueryElectricity(ctx context.Context, yearMonth string) error {
 		s.Report = report
 		s.HasReport = true
 		s.LastCheckedAt = now
-		s.LastError = ""
+		// 月份查询只清电费域错误；校园网错误由校园网动作管理，不被抹掉。
+		s.LastError = s.CampusError
 		s.ElectricityError = ""
 	})
 	return nil
