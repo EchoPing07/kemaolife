@@ -16,8 +16,8 @@
 | CLI `cmd` 目录 | `cmd/kemaolife/` |
 | CLI 配置 / 缓存（linux / darwin） | `~/.config/kemaolife/config.json`（`0600`）/ `~/.cache/kemaolife/`（遵循 `XDG_CACHE_HOME`） |
 | CLI skill | `skills/kemaolife/SKILL.md` |
-| Windows 二进制 / `cmd` 目录 | `kemaolife-agent.exe` / `cmd/kemaolife-agent/` |
-| Windows 平台标识 | 自启值 `KemaolifeAgent`、进程 AUMID `Kemaolife.Agent`（用于归类托盘 `NIF_INFO` 通知）、数据目录 `%LOCALAPPDATA%\Kemaolife\` |
+| Windows 二进制 / `cmd` 目录 | `kemaolife-desktop.exe` / `cmd/kemaolife-desktop/` |
+| Windows 平台标识 | 自启值 `KemaolifeDesktop`、进程 AUMID `Kemaolife.Desktop`（用于归类托盘 `NIF_INFO` 通知）、数据目录 `%LOCALAPPDATA%\Kemaolife\` |
 | Android Go 门面 | `cmd/kemaolife-mobile/`，`package kemaolife`；`gomobile bind -target=android -androidapi 24 -javapkg com.github.echoping07.kemaolife.bridge -o android/app/libs/kemaolife.aar ./cmd/kemaolife-mobile` |
 | Android app | applicationId / namespace / Kotlin 主包 `com.github.echoping07.kemaolife` |
 
@@ -26,7 +26,7 @@
 1. Android 包名全小写：`EchoPing07` 在 applicationId 段小写化为 `echoping07`；`com.github.<user>.<repo>` 与 module path 的 `github.com/<user>/<repo>` 同源反向。
 2. 生成 Java 类实测落在 `com.github.echoping07.kemaolife.bridge.kemaolife.Kemaolife`（`-javapkg` 只决定前缀，末段固定取 Go 包名）；Kotlin 调 `Kemaolife.init(...)` / `Kemaolife.call(...)`。改包名须同步 `android/.../data/Bridge.kt` 与 `android/README.md`。
 3. 仓库与文档不出现任何凭据明文；学校代码属学校事实，可用内置默认值（当前 `3126`）；示例中的用户自填值写 `<学校代码>`。
-4. CLI 支持 linux / darwin（源码构建 + 预编译产物），windows 为后续计划；桌面端仅 Windows、移动端仅 Android。内部标识（`cmd` 目录名、二进制名、AUMID、Android 包名、产物名）冻结，不因支持平台扩展而改名。
+4. CLI 支持 linux / darwin（源码构建 + 预编译产物），windows 为后续计划；桌面端仅 Windows、移动端仅 Android。内部标识（`cmd` 目录名、二进制名、AUMID、Android 包名、产物名）冻结，不因支持平台扩展而改名。Windows 端命名用 `desktop`：托盘程序是给人的；`agent` 一词仅指 CLI 侧的 AI agent。
 
 ## 2. CLI 命令
 

@@ -26,7 +26,7 @@
 | 端 | 形态 | 给谁用 | 能做什么 |
 |---|---|---|---|
 | **CLI**（linux / darwin） | 单二进制 `kemaolife` + 子命令 + Agent Skill | agent | 课表四维度查询（每次先刷新，断网回落旧快照）、电费余额与每日用量一次查 |
-| **Windows** | `kemaolife-agent.exe` 原生托盘常驻 | 人 | 电费轮询（默认 4 小时）+ 阈值提醒、校园网判态与手动 / 自动认证、开机自启一次 |
+| **Windows** | `kemaolife-desktop.exe` 原生托盘常驻 | 人 | 电费轮询（默认 4 小时）+ 阈值提醒、校园网判态与手动 / 自动认证、开机自启一次 |
 | **Android** | Kotlin / Compose 原生 App，三 tab | 人 | 单页周视图 + 横向翻页、WakeUp CSV 导出、电费与校园网手动动作、取件码跳转；缓存优先，无后台 |
 
 三端一律原生 UI，不引入浏览器内核。Windows 不做课表主界面，Android 不加后台服务，CLI 不做 GUI。CLI 与桌面端不共享配置与凭据存储。

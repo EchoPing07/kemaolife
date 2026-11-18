@@ -36,7 +36,7 @@
 │ ExportTimetableCSV                                                     │
 │ EnsureCampusNetwork / GetCampusNetworkStatus                           │
 │ LoginCampusNetwork / LogoutCampusNetwork / ReloginCampusNetwork        │
-│ （告警判定不在 app：core/alert.Evaluate 纯函数，由 agent.Engine 调）  │
+│ （告警判定不在 app：core/alert.Evaluate 纯函数，由 desktop.Engine 调）  │
 ├────────────────────────────────────────────────────────────────────────┤
 │ internal/core · 纯领域逻辑                                 【100% 复用】│
 │ timetable: client / snapshot / parse / query(纯函数) / export(纯函数)  │
@@ -60,7 +60,7 @@
 
 依赖方向恒向下：`core` 不 import `app`，`app` 不 import `cmd`，`core` 绝不 import `platform` 实现。
 
-`internal/agent` 是 Windows 端常驻编排（轮询 / 告警 / 托盘状态机），只依赖 `core` + ports + `app`，无平台调用，可跨平台单测。托盘与通知属呈现层，归 `cmd/kemaolife-agent/ui`，不进 `internal/platform`。
+`internal/desktop` 是 Windows 端常驻编排（轮询 / 告警 / 托盘状态机），只依赖 `core` + ports + `app`，无平台调用，可跨平台单测。托盘与通知属呈现层，归 `cmd/kemaolife-desktop/ui`，不进 `internal/platform`。
 
 ## 3. 目录结构
 
@@ -86,7 +86,7 @@ kemaolife/                         # GitHub: EchoPing07/kemaolife
 │   │   ├── alert/evaluate.go      # ★ 纯函数：阈值判定 + 去重 + 充值后重置
 │   │   ├── porttest/              # 端口内存 fake（KVStore / Clock / Notifier / HTTPDoer）
 │   │   └── ports.go               # 只定义接口
-│   ├── agent/                     # Windows 端编排（轮询 / 告警 / 托盘状态机，无平台调用）
+│   ├── desktop/                   # Windows 端编排（轮询 / 告警 / 托盘状态机，无平台调用）
 │   ├── app/                       # 用例编排
 │   │   ├── deps.go                # Deps：组装平台实现
 │   │   ├── timetable.go           # SyncTimetable
@@ -111,7 +111,7 @@ kemaolife/                         # GitHub: EchoPing07/kemaolife
 │       └── requestlog.go          # Android 请求记录（包在既有 Transport 外层，见 privacy.md §7）
 ├── cmd/
 │   ├── kemaolife/                 # CLI（linux / darwin）：单二进制 + 子命令
-│   ├── kemaolife-agent/           # Windows：托盘 + 开机自启 + ticker（GUI 子系统无控制台）
+│   ├── kemaolife-desktop/         # Windows：托盘 + 开机自启 + ticker（GUI 子系统无控制台）
 │   │   ├── console_windows.go     # FreeConsole 兜底
 │   │   └── ui/                    # 纯 Win32（syscall 直调 user32/gdi32/shell32），内嵌图标、菜单与通知
 │   └── kemaolife-mobile/          # Android：gomobile bind 薄门面（§6）
@@ -177,7 +177,7 @@ type CampusNetwork interface {
 | `NoRedirectDoer` | CAS 跨主机逐跳重定向 | 手动吸收路径参数里的 Cookie，避免自动跟随丢会话 |
 | `HTTPDoer` | 代理、TLS、强制 IPv4、超时 | `httptest` 可模拟「会话失效返回 200」、双层 JSON、业务错误码 |
 | `Clock` | 时区 | 周次、学期边界、`inSemester`、告警去重可注入任意日期做单测 |
-| `Notifier` | Windows 通知 / no-op | 告警判定纯函数化；Windows 实现是 `cmd/kemaolife-agent/ui.Tray.Notify` |
+| `Notifier` | Windows 通知 / no-op | 告警判定纯函数化；Windows 实现是 `cmd/kemaolife-desktop/ui.Tray.Notify` |
 | `NetworkReady` | Portal / 其他认证方式 | `core` 只放纯函数；探测 / 登录的 HTTP I/O 与自签证书策略锁在平台层 |
 | `CampusNetwork` | 手动判态 / 登录 / 下线 / 重登 | Windows 与 Android 适配器实现同一组原语，`app` 用例不关心平台 |
 
@@ -221,7 +221,7 @@ func ReloginCampusNetwork(ctx context.Context, d CampusDeps) error
 | `SyncTimetable` | 显式 `sync`（只刷新不查询） | 不调 | 打开 App（不受最小查询间隔约束）、切回课表 tab（按间隔）、手动刷新 / 设置页「测试」（不受节流） |
 | `ExportTimetableCSV` | 不调 | 不调 | 课表页「导出课表」：只读快照，SAF 落盘 |
 | `CheckElectricity` | 显式 `kemaolife electricity` | 启动立即查一次，之后 ticker 默认 4 小时；菜单可「立即查询电费」 | 打开 App + 进入更多按间隔 + 手动刷新 |
-| `alert.Evaluate` | 不调 | 电费成功后由 `agent.Engine` 调用 | 不调 |
+| `alert.Evaluate` | 不调 | 电费成功后由 `desktop.Engine` 调用 | 不调 |
 | `EnsureCampusNetwork` | 不调 | 仅自动模式，每轮电费轮询前置 | 不调 |
 | `GetCampusNetworkStatus` 等 | 不调 | 启动立即判态一次，之后独立 ticker 默认 120s；手动按钮用 `CampusNetwork` | 「更多」页 / 手动动作前（默认仅 WiFi 下探测） |
 | 结果去向 | stdout（`--json` 只出数据） | 托盘状态 + 悬浮提示 + 系统通知 | Compose 三 tab |
@@ -254,7 +254,7 @@ CLI 不调用校园网用例。校园网用例用独立的 `app.CampusDeps`（`C
 
 ## 7. Windows 原生层
 
-Windows 是一个原生托盘程序，不是浏览器套壳：用标准库 `syscall` 直调 user32 / gdi32 / shell32 与 advapi32 / crypt32 实现托盘、菜单、设置窗口、通知、自启注册表项与 DPAPI，单二进制、免 .NET / WebView2 / 第三方依赖。通知由托盘 `NIF_INFO` 承载，进程启动时设置 `Kemaolife.Agent` AUMID 用于归类；不承诺 WinRT Toast 或操作中心归档。
+Windows 是一个原生托盘程序，不是浏览器套壳：用标准库 `syscall` 直调 user32 / gdi32 / shell32 与 advapi32 / crypt32 实现托盘、菜单、设置窗口、通知、自启注册表项与 DPAPI，单二进制、免 .NET / WebView2 / 第三方依赖。通知由托盘 `NIF_INFO` 承载，进程启动时设置 `Kemaolife.Desktop` AUMID 用于归类；不承诺 WinRT Toast 或操作中心归档。
 
 校园网默认手动模式，自动模式才做轮询前置：
 
@@ -272,7 +272,7 @@ Windows 是一个原生托盘程序，不是浏览器套壳：用标准库 `sysc
 |---|---|---|
 | `internal/core/**` | 标准库、`encoding/json`、`http.Request`（经接口）、`time.Time`（经接口） | 路径、`syscall`、平台包、UI 库、全局可变状态、直接 `time.Now()`、`fmt.Print*` |
 | `internal/app/**` | `core` + ports | 平台包、UI、直接文件 I/O |
-| `internal/agent/**` | `core` + ports + `app` | 平台包、UI、`runtime.GOOS`、直接 `time.Now()`、`fmt.Print*` |
+| `internal/desktop/**` | `core` + ports + `app` | 平台包、UI、`runtime.GOOS`、直接 `time.Now()`、`fmt.Print*` |
 | `internal/platform/**` | 平台 API、build tags、cgo/purego | 业务逻辑、DTO 定义 |
 | `cmd/**` | 参数解析、输出格式、触发循环、原生 UI、组装 `Deps` | 业务逻辑、协议解析、浏览器内核 |
 | `android/**` | Compose UI、渲染、凭据加密、生命周期 | 课表/电费/认证计算、浏览器内核 |

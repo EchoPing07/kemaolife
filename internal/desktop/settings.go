@@ -1,4 +1,4 @@
-package agent
+package desktop
 
 import (
 	"encoding/json"
@@ -14,7 +14,7 @@ import (
 )
 
 // ConfigStoreKey 是 Windows 侧配置在 KVStore 中的键。
-const ConfigStoreKey = "agent/config"
+const ConfigStoreKey = "desktop/config"
 
 // ErrSettingsClamped 表示设置已保存并生效，但有间隔被下限钳制。
 // 它不是失败：UI 要显示提示，不能按「保存失败」把窗口留在错误态。

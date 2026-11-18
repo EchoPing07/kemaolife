@@ -2,7 +2,7 @@
 <#
     科贸生活 Windows 便携包安装脚本（docs/windows.md §2「安装与卸载」）。
 
-    只做三件事：把 kemaolife-agent.exe 复制到固定目录、建开始菜单快捷方式、启动一次。
+    只做三件事：把 kemaolife-desktop.exe 复制到固定目录、建开始菜单快捷方式、启动一次。
     刻意不写自启项：自启只由设置窗口「保存」时写入（该项默认勾选），保证注册表里的
     路径与 os.Executable() 一致；脚本代写会和用户后来开关设置打架。
 #>
@@ -14,8 +14,8 @@ param(
 $ErrorActionPreference = 'Stop'
 
 $AppName     = '科贸生活'
-$ExeName     = 'kemaolife-agent.exe'
-$ProcessName = 'kemaolife-agent'
+$ExeName     = 'kemaolife-desktop.exe'
+$ProcessName = 'kemaolife-desktop'
 $InstallDir  = Join-Path $env:LOCALAPPDATA 'Programs\Kemaolife'
 $DataDir     = Join-Path $env:LOCALAPPDATA 'Kemaolife'
 $SrcDir      = $PSScriptRoot
@@ -25,7 +25,7 @@ function Write-Step([string]$Message) {
     Write-Host "  $Message"
 }
 
-function Stop-RunningAgent {
+function Stop-RunningDesktop {
     $procs = @(Get-Process -Name $ProcessName -ErrorAction SilentlyContinue)
     if ($procs.Count -eq 0) { return }
     Write-Step "检测到正在运行的 $AppName，先结束进程（运行中的 exe 无法覆盖）"
@@ -50,7 +50,7 @@ if (-not (Test-Path -LiteralPath $SrcExe)) {
     throw "找不到 $ExeName。请把本脚本与 $ExeName 解压到同一个目录后再运行。"
 }
 
-Stop-RunningAgent
+Stop-RunningDesktop
 
 Write-Step "安装目录：$InstallDir"
 if (-not (Test-Path -LiteralPath $InstallDir)) {

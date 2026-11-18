@@ -92,7 +92,7 @@ Fork 后从 `main` 建短生命周期分支，命名 `<类型>/<简述>`，例�
 ## 4. 代码与分层要求
 
 - 单 Go module；Go 代码 `gofmt` + `go vet` 干净，错误用 `%w` 包装，不用 `panic` 处理业务错误。
-- 分层与依赖约束见 [架构设计 §8](docs/architecture.md)：`internal/core` / `internal/app` / `internal/agent` 中不得出现 `runtime.GOOS`、路径拼接、`os.Getenv`、`syscall`、直接 `time.Now()`、`fmt.Print*`。
+- 分层与依赖约束见 [架构设计 §8](docs/architecture.md)：`internal/core` / `internal/app` / `internal/desktop` 中不得出现 `runtime.GOOS`、路径拼接、`os.Getenv`、`syscall`、直接 `time.Now()`、`fmt.Print*`。
 - 新增平台差异先加端口（`internal/core/ports.go`），再写适配器；每个新端口实现要有内存 fake。
 - 时间统一经 `Clock` 获取，构造 `time.Time` 明确 `time.Local`；列表输出显式排序（课表按起始节次 + 课程名，每日用量按日期升序）。
 - 新增第三方依赖前先在 Issue 说明理由并取得确认；标准库能解决的用标准库。
@@ -111,8 +111,8 @@ go list -deps ./internal/core/... | grep -E 'x/sys/windows|gioui|fyne|android' &
 # 三端硬约束：无浏览器内核
 grep -rniE 'webview|cef|wails|pwa|electron|tauri' --include='*.go' --include='*.kt' . && echo FAIL
 
-# 分层：core / app / agent 里不该有平台判断
-grep -rn 'runtime.GOOS' internal/core internal/app internal/agent && echo FAIL
+# 分层：core / app / desktop 里不该有平台判断
+grep -rn 'runtime.GOOS' internal/core internal/app internal/desktop && echo FAIL
 
 # 隐私：把占位模板替换成自己已知的真实敏感值（每行一个）后逐个检查；
 # 模板自身会出现在 AGENTS.md / CONTRIBUTING.md / ci.yml / release.yml，需排除以免自匹配误报。
@@ -136,7 +136,7 @@ GOOS=darwin  GOARCH=arm64 go vet ./cmd/kemaolife/... ./internal/platform/...
 GOOS=windows GOARCH=amd64 go build ./internal/...
 GOOS=windows GOARCH=arm64 go build ./internal/...
 # 托盘端必须是 GUI 子系统（见 docs/windows.md）
-GOOS=windows GOARCH=amd64 go build -ldflags "-H=windowsgui" -o kemaolife-agent.exe ./cmd/kemaolife-agent/
+GOOS=windows GOARCH=amd64 go build -ldflags "-H=windowsgui" -o kemaolife-desktop.exe ./cmd/kemaolife-desktop/
 GOOS=android GOARCH=arm64 go build ./internal/... ./cmd/kemaolife-mobile/
 ```
 

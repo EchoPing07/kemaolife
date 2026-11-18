@@ -1,12 +1,12 @@
 //go:build windows
 
-// Package ui 是 kemaolife-agent 的原生 Win32 薄封装。
+// Package ui 是 kemaolife-desktop 的原生 Win32 薄封装。
 //
 // 只用 Go 标准库 syscall 直调 user32 / gdi32 / shell32，不引入 golang.org/x/sys，
 // 也不使用任何浏览器内核（AGENTS §2.2 A1、§2 A5）。
 //
 // 这一层只做「窗口、控件、菜单、图标、系统通知」，不含任何业务判断：
-// 业务状态由 cmd/kemaolife-agent 传入，UI 只负责显示与回调。
+// 业务状态由 cmd/kemaolife-desktop 传入，UI 只负责显示与回调。
 package ui
 
 import (
@@ -220,7 +220,7 @@ func CloseHandle(h uintptr) {
 // 双开会出两个托盘图标、各自轮询，既重复请求又会「关掉一个还剩一个」。
 // 互斥量创建失败不阻断启动：单实例是体验优化，不是功能前提。
 func AcquireSingleInstance() (release func(), ok bool) {
-	h, exists, err := CreateMutex("KemaolifeAgent.SingleInstance")
+	h, exists, err := CreateMutex("KemaolifeDesktop.SingleInstance")
 	if err != nil {
 		return func() {}, true
 	}

@@ -14,11 +14,11 @@ param(
 $ErrorActionPreference = 'Stop'
 
 $AppName     = '科贸生活'
-$ExeName     = 'kemaolife-agent.exe'
-$ProcessName = 'kemaolife-agent'
+$ExeName     = 'kemaolife-desktop.exe'
+$ProcessName = 'kemaolife-desktop'
 $InstallDir  = Join-Path $env:LOCALAPPDATA 'Programs\Kemaolife'
 $DataDir     = Join-Path $env:LOCALAPPDATA 'Kemaolife'
-$RunValue    = 'KemaolifeAgent'
+$RunValue    = 'KemaolifeDesktop'
 $RunKey      = 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Run'
 
 function Write-Step([string]$Message) {
