@@ -824,11 +824,11 @@ func (w *mainWindow) updateScrollbars() {
 
 	top, bottom := w.settingsViewport()
 	g := w.settingsGeometry()
-	viewport, maximum := settingsScrollMetrics(top, bottom, g.quietY+w.scale(30))
+	viewport, maximum := settingsScrollMetrics(top, bottom, g.updateRow+w.scale(30))
 	if w.settingsScroll > maximum {
 		w.settingsScroll = maximum
 	}
-	settingsMax := g.quietY + w.scale(30) - top - 1
+	settingsMax := g.updateRow + w.scale(30) - top - 1
 	if settingsMax < 0 {
 		settingsMax = 0
 	}

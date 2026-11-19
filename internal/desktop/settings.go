@@ -54,6 +54,10 @@ type Settings struct {
 	DaysThreshold    int     `json:"daysThreshold"`
 	QuietStartHour   int     `json:"quietStartHour"`
 	QuietEndHour     int     `json:"quietEndHour"`
+
+	// AutoUpdateCheck 开启后每次启动后台检查一次新版本（docs/windows.md §3.5）。
+	// 默认 false；老配置无此字段，升级后行为不变。
+	AutoUpdateCheck bool `json:"autoUpdateCheck,omitempty"`
 }
 
 // 校园网状态探测间隔的默认值与下限（docs/windows.md）。
@@ -71,6 +75,7 @@ func DefaultSettings() Settings {
 	return Settings{
 		AutoMode:         false, // 默认手动
 		AutoStart:        true,  // 登录时自启一次
+		AutoUpdateCheck:  false, // 默认不自动检查更新
 		PollSeconds:      int(alert.DefaultPollInterval / time.Second),
 		CampusProbeSecs:  DefaultCampusProbeSeconds,
 		BalanceThreshold: alert.DefaultBalanceThreshold,

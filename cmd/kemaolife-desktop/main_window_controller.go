@@ -26,6 +26,7 @@ func (a *desktopApp) openMain() {
 		OnElectricityPoll:  a.startElectricityPoll,
 		OnCampusAction:     a.startCampusAction,
 		OnSaveSettings:     a.saveSettingsFromPage,
+		OnCheckUpdate:      func() { a.startUpdateCheck(true) },
 	}); err != nil {
 		ui.MessageBox(desktopAppName, "打开主窗口失败："+err.Error(), ui.MB_OK|ui.MB_ICONERROR)
 		return
@@ -419,6 +420,47 @@ func (a *desktopApp) refreshAll() {
 		}
 		a.viewMu.Unlock()
 		a.postMainUpdate()
+	}()
+}
+
+// startUpdateCheck 检查 GitHub Releases 是否有新版本（docs/windows.md §3.5）。
+//
+// manual=true 是设置页按钮：结果与失败都显示在页内；
+// manual=false 是启动自动检查：失败静默，只有发现新版本才弹系统通知。
+// 检查不自动下载、不自动安装，升级仍走 Releases 手动下载。
+func (a *desktopApp) startUpdateCheck(manual bool) {
+	if !a.beginJob("update") {
+		return
+	}
+	a.viewMu.Lock()
+	a.view.UpdateChecking = true
+	if manual {
+		a.view.UpdateHint = "正在检查…"
+	}
+	a.viewMu.Unlock()
+	a.postMainUpdate()
+	go func() {
+		defer a.finishJob("update")
+		ctx, cancel := context.WithTimeout(a.rootCtx, 20*time.Second)
+		defer cancel()
+		info, err := desktop.CheckUpdate(ctx, a.engine.Deps().HTTP, version)
+		a.viewMu.Lock()
+		a.view.UpdateChecking = false
+		switch {
+		case err != nil:
+			if manual {
+				a.view.UpdateHint = err.Error()
+			}
+		case info.HasUpdate:
+			a.view.UpdateHint = "发现新版本 " + info.Latest + "，请到 GitHub Releases 下载更新"
+		default:
+			a.view.UpdateHint = "已是最新版本（" + version + "）"
+		}
+		a.viewMu.Unlock()
+		if err == nil && info.HasUpdate && !manual {
+			_ = a.tray.Notify(desktop.AppName, "发现新版本 "+info.Latest+"（当前 "+version+
+				"），下载地址：https://github.com/EchoPing07/kemaolife/releases")
+		}
 	}()
 }
 

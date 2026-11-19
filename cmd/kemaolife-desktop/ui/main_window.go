@@ -47,6 +47,10 @@ type MainWindowState struct {
 	// SettingsForm 是设置页当前生效的取值为基准；密码字段恒为空。
 	SettingsForm desktop.SettingsForm
 	SettingsHint string
+	// UpdateChecking / UpdateHint 是「检查更新」的加载态与结果文案，
+	// 与三个功能域的状态互不覆盖。
+	UpdateChecking bool
+	UpdateHint     string
 
 	Refreshing bool
 }
@@ -64,6 +68,8 @@ type MainWindowHandler struct {
 	OnCampusAction     func(string) // refresh / login / logout / relogin
 	// OnSaveSettings 在 UI 线程做校验与落盘，返回要显示在设置页的提示文本。
 	OnSaveSettings func(desktop.SettingsResult) string
+	// OnCheckUpdate 只启动后台检查，结果经 UpdateMainWindow 回到设置页。
+	OnCheckUpdate func()
 }
 
 // 主窗口命令 ID。课表课程块与表格行由 GDI 命中测试，不占用命令 ID。
@@ -591,6 +597,13 @@ func (w *mainWindow) applyState() {
 		SetText(w.ctl[IDMainElectricityMonth], month)
 		w.monthShown = month
 	}
+	Enable(w.ctl[IDSetCheckUpdate], !w.state.UpdateChecking)
+	if w.state.UpdateChecking {
+		SetText(w.ctl[IDSetCheckUpdate], "检查中…")
+	} else {
+		SetText(w.ctl[IDSetCheckUpdate], "检查更新")
+	}
+	SetText(w.ctl[IDSetUpdateHint], w.state.UpdateHint)
 }
 
 func mainDisplayMonth(s MainWindowState) string {
@@ -747,9 +760,9 @@ func MainProc(hwnd uintptr, msg uint32, wParam, lParam uintptr) uintptr {
 			if w != nil {
 				switch wParam {
 				case w.ctl[IDSetGroupFirst], w.ctl[IDSetGroupSecond],
-					w.ctl[IDSetGroupThird], w.ctl[IDSetGroupThird+1]:
+					w.ctl[IDSetGroupThird], w.ctl[IDSetGroupThird+1], w.ctl[IDSetGroupThird+2]:
 					color = mainAccent
-				case w.ctl[IDSetHint], w.ctl[IDSetQuietSep]:
+				case w.ctl[IDSetHint], w.ctl[IDSetQuietSep], w.ctl[IDSetUpdateHint]:
 					color = mainMuted
 				}
 			}
@@ -804,11 +817,11 @@ func (w *mainWindow) command(id int) {
 		if w.handler.OnCampusAction != nil {
 			w.handler.OnCampusAction(actions[id])
 		}
-	case IDSetSave, IDSetRevert:
+	case IDSetSave, IDSetRevert, IDSetCheckUpdate:
 		w.commandSettings(id)
-	case IDSetAutoMode, IDSetWiredOnly, IDSetAutoStart, IDSetStudentID, IDSetEduPass, IDSetCustomer,
+	case IDSetAutoMode, IDSetWiredOnly, IDSetAutoStart, IDSetAutoUpdate, IDSetStudentID, IDSetEduPass, IDSetCustomer,
 		IDSetCampusUser, IDSetCampusPass, IDSetCampusFing, IDSetPollSecs, IDSetProbeSecs,
-		IDSetBalance, IDSetDays, IDSetQuietFrom, IDSetQuietTo, IDSetHint:
+		IDSetBalance, IDSetDays, IDSetQuietFrom, IDSetQuietTo, IDSetHint, IDSetUpdateHint:
 		// 输入框 / 复选框自身不需要派生动作，吞掉通知避免 PlaySound。
 		return
 	}
@@ -900,13 +913,13 @@ func (w *mainWindow) settingsViewport() (top, bottom int32) {
 func (w *mainWindow) settingsMaxScroll() int32 {
 	top, bottom := w.settingsViewport()
 	g := w.settingsGeometry()
-	_, maxScroll := settingsScrollMetrics(top, bottom, g.quietY+w.scale(30))
+	_, maxScroll := settingsScrollMetrics(top, bottom, g.updateRow+w.scale(30))
 	return maxScroll
 }
 
 func (w *mainWindow) scrollSettings(code uint32, pos int32) {
 	top, bottom := w.settingsViewport()
-	viewport, maximum := settingsScrollMetrics(top, bottom, w.settingsGeometry().quietY+w.scale(30))
+	viewport, maximum := settingsScrollMetrics(top, bottom, w.settingsGeometry().updateRow+w.scale(30))
 	w.setSettingsScroll(w.scrollValue(code, pos, w.settingsScroll, viewport, maximum))
 }
 

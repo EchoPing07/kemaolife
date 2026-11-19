@@ -44,6 +44,7 @@ func ToSettingsForm(s Settings) SettingsForm {
 		AutoMode:          s.AutoMode,
 		WiredOnly:         s.CampusWiredOnly,
 		AutoStart:         s.AutoStart,
+		AutoUpdateCheck:   s.AutoUpdateCheck,
 		PollSeconds:       s.PollSeconds,
 		CampusProbeSecs:   s.CampusProbeSecs,
 		BalanceThreshold:  strconv.FormatFloat(s.BalanceThreshold, 'f', -1, 64),
@@ -74,6 +75,7 @@ func ParseSettingsResult(res SettingsResult, base Settings) (Settings, error) {
 	next.AutoMode = res.AutoMode
 	next.CampusWiredOnly = res.WiredOnly
 	next.AutoStart = res.AutoStart
+	next.AutoUpdateCheck = res.AutoUpdateCheck
 
 	poll, err := strconv.Atoi(strings.TrimSpace(res.PollSeconds))
 	if err != nil || poll <= 0 {
@@ -150,6 +152,7 @@ type SettingsForm struct {
 	AutoMode          bool
 	WiredOnly         bool
 	AutoStart         bool
+	AutoUpdateCheck   bool
 	PollSeconds       int
 	CampusProbeSecs   int
 	BalanceThreshold  string
@@ -169,6 +172,7 @@ type SettingsResult struct {
 	AutoMode          bool
 	WiredOnly         bool
 	AutoStart         bool
+	AutoUpdateCheck   bool
 	PollSeconds       string
 	CampusProbeSecs   string
 	BalanceThreshold  string
