@@ -231,6 +231,11 @@ func run() (err error) {
 
 	go a.bootstrapTimetable()
 
+	// 自动检查更新默认关闭；开启后每次启动只查一次，失败静默（docs/windows.md §3.5）。
+	if a.currentSettings().AutoUpdateCheck {
+		go a.startUpdateCheck(false)
+	}
+
 	ui.Run()
 	return nil
 }

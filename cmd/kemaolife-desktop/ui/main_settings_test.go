@@ -35,8 +35,9 @@ func TestSettingsLayoutVerticalOrder(t *testing.T) {
 	for _, y := range []int32{
 		g.eduTop, g.eduRows[0], g.eduRows[1], g.eduRows[2],
 		g.campusTop, g.campusRows[0], g.campusRows[1], g.campusRows[2],
-		g.modeTop, g.modeRows[0], g.modeRows[1], g.modeRows[2],
+		g.modeTop, g.modeRows[0], g.modeRows[1], g.modeRows[2], g.modeRows[3],
 		g.runTop, g.runRows[0], g.runRows[3], g.quietY,
+		g.updateTop, g.updateRow,
 		g.saveY, g.hintY,
 	} {
 		if y <= last {
@@ -53,7 +54,7 @@ func TestSettingsLayoutVerticalOrder(t *testing.T) {
 func TestSettingsScrollMetrics(t *testing.T) {
 	identity := func(dp int32) int32 { return dp }
 	g := settingsGeometryForWidth(216, 1092, identity)
-	contentBottom := g.quietY + 30
+	contentBottom := g.updateRow + 30
 
 	// 矮窗口（底部按钮固定在 saveY=500）：表单底部被视口裁掉，必须能滚。
 	viewport, maxScroll := settingsScrollMetrics(96, 492, contentBottom)

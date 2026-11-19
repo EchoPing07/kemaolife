@@ -27,6 +27,7 @@ const (
 	IDSetAutoMode    = 4020
 	IDSetAutoStart   = 4021
 	IDSetWiredOnly   = 4022
+	IDSetAutoUpdate  = 4023
 	IDSetPollSecs    = 4030
 	IDSetProbeSecs   = 4031
 	IDSetBalance     = 4032
@@ -34,6 +35,8 @@ const (
 	IDSetQuietFrom   = 4034
 	IDSetQuietTo     = 4035
 	IDSetQuietSep    = 4036
+	IDSetCheckUpdate = 4040
+	IDSetUpdateHint  = 4041
 	IDSetSave        = 4101
 	IDSetRevert      = 4102
 	IDSetHint        = 4201
@@ -106,13 +109,15 @@ type settingsLayout struct {
 	topOverride  int32
 	eduRows      [3]int32
 	campusRows   [3]int32
-	modeRows     [3]int32
+	modeRows     [4]int32
 	runRows      [5]int32
 	eduTop       int32
 	campusTop    int32
 	modeTop      int32
 	runTop       int32
 	quietY       int32
+	updateTop    int32
+	updateRow    int32
 	saveY        int32
 	hintY        int32
 	contentH     int32
@@ -158,10 +163,13 @@ func settingsGeometryForWidth(left, right int32, scale func(int32) int32) settin
 	g.campusTop = group("campus")
 	rows(3, g.campusRows[:])
 	g.modeTop = group("mode")
-	rows(3, g.modeRows[:])
+	rows(4, g.modeRows[:])
 	g.runTop = group("run")
 	rows(4, g.runRows[:])
 	g.quietY = y
+	y += rowStep
+	g.updateTop = group("update")
+	g.updateRow = y
 	y += rowStep
 
 	// 这里的 saveY 只是「表单内容结束高度」，真实位置由 settingsGeometry
@@ -237,6 +245,7 @@ func (w *mainWindow) buildSettingsControls() error {
 	checkbox(IDSetAutoMode, "未认证时自动登录（默认手动）")
 	checkbox(IDSetWiredOnly, "自动认证仅限有线网络（避免与宿舍路由器冲突）")
 	checkbox(IDSetAutoStart, "开机登录时自启动（只启动一次，不保活）")
+	checkbox(IDSetAutoUpdate, "启动时自动检查更新（默认关闭，发现新版本时提醒）")
 
 	group(IDSetGroupThird+1, "轮询与提醒")
 	label(IDSetLabelFirst+6, "电费间隔（秒）")
@@ -255,6 +264,16 @@ func (w *mainWindow) buildSettingsControls() error {
 		procSendMessage.Call(sep, WM_SETFONT, f, 1)
 	}
 	field(IDSetQuietTo, false)
+
+	group(IDSetGroupThird+2, "版本更新")
+	check := CreateChild(classNameButton, "检查更新", BS_PUSHBUTTON|WS_TABSTOP, panel, IDSetCheckUpdate)
+	ctl[IDSetCheckUpdate] = check
+	registerMainButton(check, btnGhost)
+	updateHint := CreateChild(classNameStatic, "", SS_LEFT, panel, IDSetUpdateHint)
+	ctl[IDSetUpdateHint] = updateHint
+	if f := mainFont(w.hwnd, 14, 400); f != 0 {
+		procSendMessage.Call(updateHint, WM_SETFONT, f, 1)
+	}
 
 	registerCueEdit(ctl[IDSetStudentID], "用于电费与课表查询")
 	registerCueEdit(ctl[IDSetEduPass], "留空保持不变")
@@ -336,6 +355,7 @@ func (w *mainWindow) layoutSettings() {
 	place(IDSetAutoMode, g.leftX, g.modeRows[0], g.colW, rowH)
 	place(IDSetWiredOnly, g.leftX, g.modeRows[1], g.colW, rowH)
 	place(IDSetAutoStart, g.leftX, g.modeRows[2], g.colW, rowH)
+	place(IDSetAutoUpdate, g.leftX, g.modeRows[3], g.colW, rowH)
 
 	place(IDSetGroupThird+1, g.leftX, g.runTop, g.colW, w.scale(26))
 	for i, id := range []int{IDSetPollSecs, IDSetProbeSecs, IDSetBalance, IDSetDays} {
@@ -347,6 +367,10 @@ func (w *mainWindow) layoutSettings() {
 	place(IDSetQuietFrom, g.leftX+g.labelW, g.quietY, w.scale(58), rowH)
 	place(IDSetQuietSep, g.leftX+g.labelW+w.scale(66), g.quietY+w.scale(3), w.scale(36), rowH)
 	place(IDSetQuietTo, g.leftX+g.labelW+w.scale(110), g.quietY, w.scale(58), rowH)
+
+	place(IDSetGroupThird+2, g.leftX, g.updateTop, g.colW, w.scale(26))
+	place(IDSetCheckUpdate, g.leftX, g.updateRow, w.scale(104), rowH)
+	place(IDSetUpdateHint, g.leftX+w.scale(116), g.updateRow+w.scale(3), g.colW-w.scale(116), rowH)
 
 	w.move(IDSetSave, g.leftX, g.saveY, w.scale(104), w.scale(32))
 	w.move(IDSetRevert, g.leftX+w.scale(116), g.saveY, w.scale(88), w.scale(32))
@@ -396,6 +420,9 @@ func (w *mainWindow) fillSettingsForm(form desktop.SettingsForm) {
 	if h := w.ctl[IDSetAutoStart]; h != 0 {
 		SetChecked(h, form.AutoStart)
 	}
+	if h := w.ctl[IDSetAutoUpdate]; h != 0 {
+		SetChecked(h, form.AutoUpdateCheck)
+	}
 	if h := w.ctl[IDSetHint]; h != 0 {
 		SetText(h, "")
 	}
@@ -424,6 +451,7 @@ func (w *mainWindow) collectSettings() desktop.SettingsResult {
 		AutoMode:          checked(IDSetAutoMode),
 		WiredOnly:         checked(IDSetWiredOnly),
 		AutoStart:         checked(IDSetAutoStart),
+		AutoUpdateCheck:   checked(IDSetAutoUpdate),
 		PollSeconds:       strings.TrimSpace(get(IDSetPollSecs)),
 		CampusProbeSecs:   strings.TrimSpace(get(IDSetProbeSecs)),
 		BalanceThreshold:  strings.TrimSpace(get(IDSetBalance)),
@@ -446,5 +474,9 @@ func (w *mainWindow) commandSettings(id int) {
 		}
 	case IDSetRevert:
 		w.fillSettingsForm(w.state.SettingsForm)
+	case IDSetCheckUpdate:
+		if w.handler.OnCheckUpdate != nil {
+			w.handler.OnCheckUpdate()
+		}
 	}
 }
