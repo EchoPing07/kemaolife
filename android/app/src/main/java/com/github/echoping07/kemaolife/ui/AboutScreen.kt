@@ -34,6 +34,7 @@ import com.github.echoping07.kemaolife.R
 import com.github.echoping07.kemaolife.ui.theme.appShape
 
 /** 公开的项目地址，不拼任何本机数据（P1 / P2）。 */
+private const val WEBSITE_URL = "https://echoping07.github.io/kemaolife/"
 private const val REPOSITORY_URL = "https://github.com/EchoPing07/kemaolife"
 private const val LICENSE_URL = "$REPOSITORY_URL/blob/main/LICENSE"
 private const val RELEASES_URL = "$REPOSITORY_URL/releases"
@@ -81,11 +82,19 @@ internal fun AboutScreen(state: AppState, viewModel: AppViewModel) {
         )
         Spacer(Modifier.padding(top = 16.dp))
         AboutRow(
+            icon = TabIcons.Website,
+            title = stringResource(R.string.about_website),
+            value = stringResource(R.string.about_website_value),
+            onClick = { open(WEBSITE_URL) },
+            position = GroupPosition.FIRST,
+        )
+        GroupGap()
+        AboutRow(
             icon = TabIcons.Github,
             title = "GitHub",
             value = "EchoPing07/kemaolife",
             onClick = { open(REPOSITORY_URL) },
-            position = GroupPosition.FIRST,
+            position = GroupPosition.MIDDLE,
         )
         GroupGap()
         AboutRow(
@@ -116,7 +125,7 @@ internal fun AboutScreen(state: AppState, viewModel: AppViewModel) {
 }
 
 /**
- * 三个外链共用一个入口：没有接收 ACTION_VIEW 的应用时提示一次，不让点击直接崩溃。
+ * 外链共用一个入口：没有接收 ACTION_VIEW 的应用时提示一次，不让点击直接崩溃。
  * LocalContext 通常是 Activity，非 Activity 上下文仍需补 NEW_TASK。
  */
 private fun openExternalLink(context: Context, url: String) {

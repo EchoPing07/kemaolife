@@ -70,8 +70,8 @@ Kotlin + Compose 原生 App，给人「随手看」：底栏三个 tab（**课�
 - **外观**：Android 12+ 莫奈动态取色默认开启，不支持的设备沿用预设主题；预设取 AOSP ThemePicker 的 8 个基础色；AMOLED 开关可随时设置，纯黑背景只在深色界面生效；「连续曲率圆角」默认关闭（标准圆弧），开启后全 App 改用连续曲率圆角，半径层级不变；偏好本机持久化，升级不做旧偏好迁移。
 - **日志**：请求记录开关默认关闭，下方列出已记录的请求，点条目看完整详情，可清空。记录只存 Go 进程内存、按原始字节保留报文，隐私边界见 [privacy.md §7](privacy.md)。
 - **交流**：点击走 QQ 官方「一键加群」发起加群申请（`mqqopensdkapi://bizAgent/qm/qr?url=<percent-encoded 内层 url>`，内层为官方生成的 `http://qm.qq.com/cgi-bin/qm/qr?...&k=<key>`，原样保留官方参数）；QQ 未安装或无接收者时回落 README 同一加群短链，均失败才本机提示。群号与 key 都是公开分发信息，链接不拼任何本机数据；key 按群生成，换群必须改常量并发版。
-- **分享**：经系统分享面板发送固定两行纯文本（`KeMao Life · 科贸生活` / `项目地址：https://github.com/EchoPing07/kemaolife`），不含任何查询结果 / 凭据 / 日志 / 接入详情，不联网。
-- **关于**：版本 / 设备与 Android / GitHub / MIT 许可 / 检查更新（§8）。
+- **分享**：经系统分享面板发送固定三行纯文本（`KeMao Life · 科贸生活` / `官网：https://echoping07.github.io/kemaolife/` / `项目地址：https://github.com/EchoPing07/kemaolife`），不含任何查询结果 / 凭据 / 日志 / 接入详情，不联网。
+- **关于**：版本 / 设备与 Android / 官网 / GitHub / MIT 许可 / 检查更新（§8），官网、GitHub 与开源许可同组外链。
 
 交流、分享、取件码、检查更新都是 Kotlin 呈现层能力：不读门面、不新增 `op`、不携带本机私有数据。
 

@@ -7,14 +7,15 @@ import android.content.Intent
 import android.widget.Toast
 import com.github.echoping07.kemaolife.R
 
+private const val PROJECT_WEBSITE_URL = "https://echoping07.github.io/kemaolife/"
 private const val PROJECT_REPOSITORY_URL = "https://github.com/EchoPing07/kemaolife"
 
 /**
- * 分享正文只放公开的项目信息：名称取 app_name，地址是仓库首页。
+ * 分享正文只放公开的项目信息：名称取 app_name，地址是官网与仓库首页。
  * 不拼入任何查询结果 / 凭据 / 日志内容，避免系统分享面板把本机私有数据带出去（P1 / P2）。
  */
 internal fun shareProjectText(appName: String): String =
-    "KeMao Life · $appName\n项目地址：$PROJECT_REPOSITORY_URL"
+    "KeMao Life · $appName\n官网：$PROJECT_WEBSITE_URL\n项目地址：$PROJECT_REPOSITORY_URL"
 
 /**
  * 拉起系统分享面板，而不是应用内自建一套目标列表：
