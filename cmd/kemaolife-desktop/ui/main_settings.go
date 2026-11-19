@@ -32,6 +32,7 @@ const (
 	IDSetDays        = 4033
 	IDSetQuietFrom   = 4034
 	IDSetQuietTo     = 4035
+	IDSetQuietSep    = 4036
 	IDSetSave        = 4101
 	IDSetRevert      = 4102
 	IDSetHint        = 4201
@@ -130,9 +131,10 @@ func (w *mainWindow) settingsGeometry() settingsLayout {
 func settingsGeometryForWidth(left, right int32, scale func(int32) int32) settingsLayout {
 	var g settingsLayout
 	g.leftX = left
-	g.colW = right - left
-	g.labelW = scale(96)
-	g.rowH = scale(24)
+	// 右侧让出滚动条槽：面板是不透明裁剪容器，盖住滚动条会让设置页滚不动。
+	g.colW = right - left - scale(23)
+	g.labelW = scale(118)
+	g.rowH = scale(28)
 
 	rowStep := scale(38)
 	y := scale(112)
@@ -203,7 +205,6 @@ func (w *mainWindow) buildSettingsControls() error {
 		if f := mainFont(w.hwnd, 14, 400); f != 0 {
 			procSendMessage.Call(e, WM_SETFONT, f, 1)
 		}
-		subclassChildWheel(e)
 		return e
 	}
 	checkbox := func(id int, text string) {
@@ -236,17 +237,35 @@ func (w *mainWindow) buildSettingsControls() error {
 	checkbox(IDSetAutoStart, "开机登录时自启动（只启动一次，不保活）")
 
 	group(IDSetGroupThird+1, "轮询与提醒")
-	label(IDSetLabelFirst+6, "电费间隔")
+	label(IDSetLabelFirst+6, "电费间隔（秒）")
 	field(IDSetPollSecs, false)
-	label(IDSetLabelFirst+7, "探测间隔")
+	label(IDSetLabelFirst+7, "探测间隔（秒）")
 	field(IDSetProbeSecs, false)
-	label(IDSetLabelFirst+8, "余额阈值")
+	label(IDSetLabelFirst+8, "余额阈值（度）")
 	field(IDSetBalance, false)
-	label(IDSetLabelFirst+9, "可用天数")
+	label(IDSetLabelFirst+9, "可用天数（天）")
 	field(IDSetDays, false)
-	label(IDSetLabelFirst+10, "静默时段")
+	label(IDSetLabelFirst+10, "静默时段（时）")
 	field(IDSetQuietFrom, false)
+	sep := CreateChild(classNameStatic, "至", SS_LEFT, panel, IDSetQuietSep)
+	ctl[IDSetQuietSep] = sep
+	if f := mainFont(w.hwnd, 14, 400); f != 0 {
+		procSendMessage.Call(sep, WM_SETFONT, f, 1)
+	}
 	field(IDSetQuietTo, false)
+
+	registerCueEdit(ctl[IDSetStudentID], "用于电费与课表查询")
+	registerCueEdit(ctl[IDSetEduPass], "留空保持不变")
+	registerCueEdit(ctl[IDSetCustomer], "留空使用内置默认 3126")
+	registerCueEdit(ctl[IDSetCampusUser], "校园网账号，独立于教务")
+	registerCueEdit(ctl[IDSetCampusPass], "留空保持不变")
+	registerCueEdit(ctl[IDSetCampusFing], "可留空")
+	registerCueEdit(ctl[IDSetPollSecs], "默认 14400，最低 600")
+	registerCueEdit(ctl[IDSetProbeSecs], "默认 120，最低 30")
+	registerCueEdit(ctl[IDSetBalance], "默认 10")
+	registerCueEdit(ctl[IDSetDays], "默认 3")
+	registerCueEdit(ctl[IDSetQuietFrom], "23")
+	registerCueEdit(ctl[IDSetQuietTo], "7")
 
 	// 保存 / 还原 / 提示固定在页面底部，不放进滚动面板。
 	hint := CreateChild(classNameStatic, "", SS_LEFT, w.hwnd, IDSetHint)
@@ -255,14 +274,12 @@ func (w *mainWindow) buildSettingsControls() error {
 		procSendMessage.Call(hint, WM_SETFONT, f, 1)
 	}
 
-	for id, text := range map[int]string{IDSetSave: "保存", IDSetRevert: "还原"} {
-		b := CreateChild(classNameButton, text, BS_PUSHBUTTON|WS_TABSTOP, w.hwnd, id)
-		ctl[id] = b
-		if f := mainFont(w.hwnd, 14, 400); f != 0 {
-			procSendMessage.Call(b, WM_SETFONT, f, 1)
-		}
-		subclassChildWheel(b)
-	}
+	save := CreateChild(classNameButton, "保存", BS_PUSHBUTTON|WS_TABSTOP, w.hwnd, IDSetSave)
+	ctl[IDSetSave] = save
+	registerMainButton(save, btnPrimary)
+	revert := CreateChild(classNameButton, "还原", BS_PUSHBUTTON|WS_TABSTOP, w.hwnd, IDSetRevert)
+	ctl[IDSetRevert] = revert
+	registerMainButton(revert, btnGhost)
 	return nil
 }
 
@@ -322,9 +339,10 @@ func (w *mainWindow) layoutSettings() {
 		labelAt(IDSetLabelFirst+6+i, g.runRows[i])
 		fieldAt(id, g.runRows[i])
 	}
-	// 静默时段：两个小输入框并排放在同一行。
+	// 静默时段：两个小输入框并排放在同一行，中间「至」分隔。
 	labelAt(IDSetLabelFirst+10, g.quietY)
 	place(IDSetQuietFrom, g.leftX+g.labelW, g.quietY, w.scale(58), rowH)
+	place(IDSetQuietSep, g.leftX+g.labelW+w.scale(66), g.quietY+w.scale(3), w.scale(36), rowH)
 	place(IDSetQuietTo, g.leftX+g.labelW+w.scale(110), g.quietY, w.scale(58), rowH)
 
 	w.move(IDSetSave, g.leftX, g.saveY, w.scale(104), w.scale(32))

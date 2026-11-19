@@ -7,6 +7,7 @@ import (
 	"strings"
 	"sync"
 	"syscall"
+	"time"
 	"unsafe"
 
 	"github.com/EchoPing07/kemaolife/internal/core/model"
@@ -334,13 +335,10 @@ func (w *mainWindow) scale(dp int32) int32 {
 	return scaleByDPI(dp, w.dpi)
 }
 
-func (w *mainWindow) addButton(id int, text string) {
+func (w *mainWindow) addButton(id int, text string, kind int) {
 	h := CreateChild(classNameButton, text, BS_PUSHBUTTON|WS_TABSTOP, w.hwnd, id)
 	w.ctl[id] = h
-	if font := mainFont(w.hwnd, 14, 400); font != 0 {
-		procSendMessage.Call(h, WM_SETFONT, font, 1)
-	}
-	subclassChildWheel(h)
+	registerMainButton(h, kind)
 }
 
 // 焦点控件的滚轮转发：WM_MOUSEWHEEL 发给焦点窗口而不是光标下的窗口，
@@ -388,22 +386,30 @@ func subclassChildWheel(h uintptr) {
 }
 
 func (w *mainWindow) buildControls() error {
-	for id, text := range map[int]string{
-		IDMainToday: "今天", IDMainTimetable: "课表", IDMainElectricity: "电费",
-		IDMainCampus: "校园网", IDMainSettings: "设置",
+	for _, b := range []struct {
+		id   int
+		text string
+		kind int
+	}{
+		{IDMainToday, "今天", btnNav},
+		{IDMainTimetable, "课表", btnNav},
+		{IDMainElectricity, "电费", btnNav},
+		{IDMainCampus, "校园网", btnNav},
+		{IDMainSettings, "设置", btnNav},
+		{IDMainRefreshAll, "刷新全部", btnPrimary},
+		{IDMainTodayRefresh, "刷新课表", btnGhost},
+		{IDMainTimetablePrev, "上一周", btnGhost},
+		{IDMainTimetableCurrent, "本周", btnGhost},
+		{IDMainTimetableNext, "下一周", btnGhost},
+		{IDMainTimetableRefresh, "刷新", btnGhost},
+		{IDMainElectricityQuery, "查询", btnGhost},
+		{IDMainElectricityPoll, "立即查询电费", btnPrimary},
+		{IDMainCampusRefresh, "刷新", btnGhost},
+		{IDMainCampusLogin, "登录", btnPrimary},
+		{IDMainCampusLogout, "下线", btnDanger},
+		{IDMainCampusRelogin, "重登", btnGhost},
 	} {
-		w.addButton(id, text)
-	}
-	for id, text := range map[int]string{
-		IDMainRefreshAll: "刷新全部", IDMainTodayRefresh: "刷新课表",
-		IDMainTimetablePrev: "上一周", IDMainTimetableCurrent: "本周",
-		IDMainTimetableNext: "下一周", IDMainTimetableRefresh: "刷新",
-		IDMainElectricityQuery: "查询", IDMainElectricityPoll: "立即查询电费",
-		IDMainCampusRefresh: "刷新",
-		IDMainCampusLogin:   "登录", IDMainCampusLogout: "下线",
-		IDMainCampusRelogin: "重登",
-	} {
-		w.addButton(id, text)
+		w.addButton(b.id, b.text, b.kind)
 	}
 	month := CreateChild(classNameEdit, "", ES_AUTOHSCROLL|WS_BORDER|WS_TABSTOP,
 		w.hwnd, IDMainElectricityMonth)
@@ -411,7 +417,7 @@ func (w *mainWindow) buildControls() error {
 	if font := mainFont(w.hwnd, 14, 400); font != 0 {
 		procSendMessage.Call(month, WM_SETFONT, font, 1)
 	}
-	subclassChildWheel(month)
+	registerCueEdit(month, "YYYY-MM")
 	for _, id := range []int{IDMainTimetableScroll, IDMainElectricityScroll, IDMainSettingsScroll} {
 		w.ctl[id] = CreateChild("SCROLLBAR", "", sbsVert, w.hwnd, id)
 	}
@@ -456,7 +462,7 @@ func (w *mainWindow) layout() {
 	w.move(IDMainRefreshAll, right-s(104), s(26), s(104), s(34))
 	w.move(IDMainTodayRefresh, right-s(216), s(26), s(104), s(34))
 
-	y := s(70)
+	y := s(96)
 	x := left
 	for _, item := range []struct {
 		id    int
@@ -471,7 +477,7 @@ func (w *mainWindow) layout() {
 	w.move(IDMainElectricityQuery, left+s(230), y, s(88), s(32))
 	w.move(IDMainElectricityPoll, left+s(326), y, s(128), s(32))
 
-	buttonY := s(226)
+	buttonY := s(322)
 	x = left
 	for _, item := range []struct {
 		id    int
@@ -482,9 +488,9 @@ func (w *mainWindow) layout() {
 		x += s(item.width + 10)
 	}
 
-	gridTop, gridBottom := s(116), bottom
+	gridTop, gridBottom := s(140), bottom
 	w.move(IDMainTimetableScroll, right-s(15), gridTop, s(15), gridBottom-gridTop)
-	tableTop := s(306)
+	tableTop := s(356)
 	w.move(IDMainElectricityScroll, right-s(15), tableTop, s(15), bottom-tableTop)
 	if w.page == mainPageSettings {
 		g := w.settingsGeometry()
@@ -495,6 +501,13 @@ func (w *mainWindow) layout() {
 	if w.page == mainPageSettings {
 		w.layoutSettings()
 	}
+	// 移动控件后强制全部子控件按新矩形重绘：自绘按钮若沿用旧矩形画过
+	// 一次，移动后会在让出的边缘留下色条残影。
+	for _, h := range w.ctl {
+		if h != 0 {
+			procInvalidateRect.Call(h, 0, 1)
+		}
+	}
 }
 
 func (w *mainWindow) setPage(page int) {
@@ -504,10 +517,7 @@ func (w *mainWindow) setPage(page int) {
 		IDMainSettings: mainPageSettings}
 	for id, p := range navPages {
 		w.show(id, true)
-		SetFontBold(w.ctl[id], p == page)
-		if font := mainFont(w.hwnd, 14, map[bool]int32{false: 400, true: 700}[p == page]); font != 0 {
-			procSendMessage.Call(w.ctl[id], WM_SETFONT, font, 1)
-		}
+		setMainButtonActive(w.ctl[id], p == page)
 	}
 	for id := range w.ctl {
 		if _, nav := navPages[id]; !nav {
@@ -536,6 +546,9 @@ func (w *mainWindow) setPage(page int) {
 	case mainPageSettings:
 		w.show(IDMainSettingsScroll, true)
 	}
+	// 切页也要重摆控件：设置页滚动条只在 layout 里按当前页定位，
+	// 不重摆会停留在创建时的 0 尺寸，表现为「设置页滚不动」。
+	w.layout()
 	w.applyState()
 	w.updateScrollbars()
 	if page == mainPageSettings {
@@ -724,9 +737,21 @@ func MainProc(hwnd uintptr, msg uint32, wParam, lParam uintptr) uintptr {
 	case WM_ERASEBKGND:
 		return 1
 	case WM_CTLCOLORSTATIC, WM_CTLCOLORBTN:
-		// 设置页标签 / 分组标题 / 复选框：背景与自绘页面同色，否则留下灰块。
+		// 设置页标签 / 分组标题 / 复选框：背景与自绘页面同色，否则留下灰块；
+		// 文字颜色按控件角色区分（分组标题用主色，提示行用弱化色）。
 		if brush := controlBackground(); brush != 0 {
 			SetBkMode(wParam, transparentMode)
+			color := mainTextColor
+			if w != nil {
+				switch wParam {
+				case w.ctl[IDSetGroupFirst], w.ctl[IDSetGroupSecond],
+					w.ctl[IDSetGroupThird], w.ctl[IDSetGroupThird+1]:
+					color = mainAccent
+				case w.ctl[IDSetHint], w.ctl[IDSetQuietSep]:
+					color = mainMuted
+				}
+			}
+			SetTextColor(wParam, color)
 			return brush
 		}
 	}
@@ -815,7 +840,7 @@ func (w *mainWindow) scrollValue(code uint32, pos, current, page, maximum int32)
 
 func (w *mainWindow) timetableMetrics() (top, bodyTop, bottom, maxScroll int32) {
 	_, _, _, bottom = w.contentRect()
-	top = w.scale(116)
+	top = w.scale(140)
 	bodyTop = top + w.scale(52)
 	bodyHeight := w.scale(12 * 56)
 	viewport := bottom - bodyTop
@@ -831,7 +856,7 @@ func (w *mainWindow) timetableMetrics() (top, bodyTop, bottom, maxScroll int32) 
 
 func (w *mainWindow) electricityMetrics() (top, bodyTop, bottom, maxScroll int32) {
 	_, _, _, bottom = w.contentRect()
-	top = w.scale(306)
+	top = w.scale(356)
 	bodyTop = top + w.scale(32)
 	rows := len(w.state.Report.Usage.Days)
 	bodyHeight := w.scale(int32(rows * 28))
@@ -934,6 +959,15 @@ func mainStateLabel(state model.CampusState) string {
 func mainTextOr(value, fallback string) string {
 	if strings.TrimSpace(value) == "" {
 		return fallback
+	}
+	return value
+}
+
+// mainTimeText 把 DTO 的 RFC3339 时刻转成本机可读格式（呈现层格式化，
+// 不改 DTO）；解析失败时原样展示，不丢信息。
+func mainTimeText(value string) string {
+	if t, err := time.Parse(time.RFC3339, strings.TrimSpace(value)); err == nil {
+		return t.Local().Format("2006-01-02 15:04")
 	}
 	return value
 }

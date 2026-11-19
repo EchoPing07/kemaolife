@@ -186,14 +186,36 @@ func (c mainCanvas) clip(r RECT) {
 func (c mainCanvas) clearClip() { procSelectClipRgn.Call(c.dc, 0) }
 
 var (
-	mainBackground = rgb(247, 248, 250)
-	mainSidebar    = rgb(241, 244, 247)
-	mainCard       = rgb(255, 255, 255)
-	mainLine       = rgb(222, 227, 232)
-	mainTextColor  = rgb(37, 48, 58)
-	mainMuted      = rgb(105, 117, 127)
-	mainAccent     = rgb(48, 104, 128)
+	mainBackground   = rgb(244, 246, 249)
+	mainSidebar      = rgb(21, 34, 48)
+	mainSidebarHi    = rgb(34, 51, 70)
+	mainSidebarText  = rgb(203, 214, 226)
+	mainSidebarMuted = rgb(120, 137, 156)
+	mainCard         = rgb(255, 255, 255)
+	mainLine         = rgb(224, 229, 235)
+	mainTextColor    = rgb(28, 39, 51)
+	mainMuted        = rgb(99, 111, 124)
+	mainAccent       = rgb(0, 102, 140)
+	mainAccentHi     = rgb(0, 119, 164)
+	mainAccentLo     = rgb(0, 83, 114)
+	mainAccentSoft   = rgb(223, 238, 245)
+	mainGreen        = rgb(21, 148, 76)
+	mainAmber        = rgb(196, 110, 10)
+	mainSlate        = rgb(108, 120, 133)
+	mainDanger       = rgb(197, 48, 48)
 )
+
+// campusStateColor 把三态映射成语义色：在线绿 / 未认证琥珀 / 其余灰。
+func campusStateColor(state model.CampusState) uintptr {
+	switch state {
+	case model.CampusOnline:
+		return mainGreen
+	case model.CampusUnauth:
+		return mainAmber
+	default:
+		return mainSlate
+	}
+}
 
 func (w *mainWindow) paint() {
 	var ps mainPaintStruct
@@ -208,12 +230,14 @@ func (w *mainWindow) paint() {
 	c := mainCanvas{hwnd: w.hwnd, dc: dc}.useFont(15, 400)
 	c.fill(client, mainBackground)
 	c.fill(mainRect(0, 0, w.scale(194), client.Bottom), mainSidebar)
-	c.line(w.scale(194), 0, w.scale(194), client.Bottom, mainLine)
 
 	left, _, right, bottom := w.contentRect()
-	brand := c.useFont(25, 700)
-	brand.label("科贸生活", w.scale(22), w.scale(28), w.scale(156), w.scale(38), mainTextColor)
-	c.useFont(13, 400).label("校园日常，安静呈现", w.scale(22), w.scale(69), w.scale(160), w.scale(22), mainMuted)
+	c.useFont(25, 700).label("科贸生活", w.scale(22), w.scale(28), w.scale(156), w.scale(38), rgb(240, 245, 250))
+	c.useFont(12, 400).label("校园日常，安静呈现", w.scale(22), w.scale(69), w.scale(160), w.scale(22), mainSidebarMuted)
+	if w.state.Version != "" {
+		c.useFont(11, 400).label(w.state.Version, w.scale(22), client.Bottom-w.scale(32),
+			w.scale(158), w.scale(20), mainSidebarMuted)
+	}
 
 	switch w.page {
 	case mainPageToday:
@@ -234,13 +258,15 @@ func (w *mainWindow) pageTitle(c mainCanvas, left, right int32, title, subtitle 
 	c.useFont(13, 400).label(subtitle, left, w.scale(65), right-left, w.scale(25), mainMuted)
 }
 
-func (w *mainWindow) card(c mainCanvas, r RECT, title string) {
+func (w *mainWindow) card(c mainCanvas, r RECT, title string, tick uintptr) {
 	c.fill(r, mainCard)
 	if pen := mainPen(mainLine); pen != 0 {
 		old, _, _ := procSelectObject.Call(c.dc, pen)
 		procRectangle.Call(c.dc, uintptr(r.Left), uintptr(r.Top), uintptr(r.Right), uintptr(r.Bottom))
 		procSelectObject.Call(c.dc, old)
 	}
+	// 卡片顶部色条：标识所属域 / 状态，让三张摘要卡一眼可分。
+	c.fill(mainRect(r.Left+1, r.Top+1, r.Right-1, r.Top+w.scale(4)), tick)
 	c.useFont(16, 700).label(title, r.Left+w.scale(18), r.Top+w.scale(15),
 		r.Right-r.Left-w.scale(36), w.scale(27), mainTextColor)
 }
@@ -264,8 +290,8 @@ func (w *mainWindow) paintToday(c mainCanvas, left, right, bottom int32) {
 	w.pageTitle(c, left, right, "今天", subtitle)
 	top := w.scale(112)
 	cardBottom := bottom
-	if cardBottom < top+w.scale(330) {
-		cardBottom = top + w.scale(330)
+	if cardBottom < top+w.scale(300) {
+		cardBottom = top + w.scale(300)
 	}
 	gap := w.scale(16)
 	width := (right - left - gap*2) / 3
@@ -277,32 +303,37 @@ func (w *mainWindow) paintToday(c mainCanvas, left, right, bottom int32) {
 		r := mainRect(x, top, x+width, cardBottom)
 		switch i {
 		case 0:
-			w.card(c, r, "今日课表")
+			w.card(c, r, "今日课表", mainAccent)
 			w.paintTodaySchedule(c, r)
 		case 1:
-			w.card(c, r, "电费")
+			w.card(c, r, "电费", mainAmber)
 			w.paintTodayElectricity(c, r)
 		case 2:
-			w.card(c, r, "校园网")
+			w.card(c, r, "校园网", campusStateColor(w.state.Campus.State))
 			w.paintTodayCampus(c, r)
 		}
 	}
 }
 
+// paintTodayCardStatus 在卡片固定区域（顶部 204 逻辑像素以下）画加载与
+// 错误提示，不再贴着卡片底边 —— 底边附近已有「采集 / 检查」等常驻行。
 func (w *mainWindow) paintTodayCardStatus(c mainCanvas, card RECT, loading bool, errText string) {
 	x := card.Left + w.scale(18)
 	width := card.Right - card.Left - w.scale(36)
+	y := card.Top + w.scale(204)
 	if loading {
-		c.useFont(12, 400).label("正在刷新…", x, card.Top+w.scale(40), width, w.scale(22), mainAccent)
+		c.useFont(12, 400).label("正在刷新…", x, y, width, w.scale(22), mainAccent)
+		y += w.scale(26)
 	}
 	if errText != "" {
-		c.useFont(12, 400).text(errText, mainRect(x, card.Bottom-w.scale(74), card.Right-w.scale(18), card.Bottom-w.scale(12)),
+		c.useFont(12, 400).text(errText, mainRect(x, y, card.Right-w.scale(18), card.Bottom-w.scale(12)),
 			dtLeft|dtWordBreak|dtEndEllipsis, mainMuted)
 	}
 }
 
 func (w *mainWindow) paintTodaySchedule(c mainCanvas, card RECT) {
 	x, y, width := card.Left+w.scale(18), card.Top+w.scale(64), card.Right-card.Left-w.scale(36)
+	hasStatus := w.state.TimetableLoading || w.state.TimetableError != ""
 	if !w.state.HasToday {
 		c.useFont(15, 400).label("暂无今日课表", x, y, width, w.scale(30), mainMuted)
 		w.paintTodayCardStatus(c, card, w.state.TimetableLoading, w.state.TimetableError)
@@ -318,10 +349,15 @@ func (w *mainWindow) paintTodaySchedule(c mainCanvas, card RECT) {
 	y += w.scale(42)
 	if len(entries) == 0 {
 		c.useFont(20, 600).label("今天没有课", x, y+w.scale(18), width, w.scale(38), mainTextColor)
+		w.paintTodayCardStatus(c, card, w.state.TimetableLoading, w.state.TimetableError)
 		return
 	}
+	limit := card.Bottom - w.scale(14)
+	if hasStatus {
+		limit = card.Top + w.scale(196)
+	}
 	for i, entry := range entries {
-		if y+w.scale(48) > card.Bottom-w.scale(14) {
+		if y+w.scale(48) > limit {
 			c.useFont(13, 400).label("…", x, y, width, w.scale(22), mainMuted)
 			break
 		}
@@ -336,33 +372,36 @@ func (w *mainWindow) paintTodaySchedule(c mainCanvas, card RECT) {
 			break
 		}
 	}
+	w.paintTodayCardStatus(c, card, w.state.TimetableLoading, w.state.TimetableError)
 }
 
 func (w *mainWindow) paintTodayElectricity(c mainCanvas, card RECT) {
-	x, y, width := card.Left+w.scale(18), card.Top+w.scale(72), card.Right-card.Left-w.scale(36)
+	x, y, width := card.Left+w.scale(18), card.Top+w.scale(64), card.Right-card.Left-w.scale(36)
 	if !w.state.HasReport {
 		c.useFont(15, 400).label("尚未获取电费数据", x, y, width, w.scale(32), mainMuted)
 		w.paintTodayCardStatus(c, card, w.state.ElectricityLoading, w.state.ElectricityError)
 		return
 	}
 	status := w.state.Report.Status
-	c.useFont(29, 700).label(mainFormatFloat(status.Balance)+" "+mainTextOr(status.Unit, "度"),
-		x, y, width, w.scale(48), mainAccent)
-	c.useFont(13, 400).label("剩余电费", x, y+w.scale(51), width, w.scale(24), mainMuted)
+	c.useFont(28, 700).label(mainFormatFloat(status.Balance)+" "+mainTextOr(status.Unit, "度"),
+		x, y, width, w.scale(46), mainAccent)
+	c.useFont(13, 400).label("剩余电费", x, y+w.scale(48), width, w.scale(22), mainMuted)
 	if status.EstimatedDays != nil {
 		c.useFont(14, 400).label("预计可用 "+strconv.Itoa(*status.EstimatedDays)+" 天",
-			x, y+w.scale(96), width, w.scale(28), mainTextColor)
+			x, y+w.scale(78), width, w.scale(26), mainTextColor)
 	}
-	c.useFont(12, 400).label("采集："+mainTextOr(status.CollectedAt, "—"),
-		x, card.Bottom-w.scale(47), width, w.scale(24), mainMuted)
+	c.useFont(12, 400).label("采集："+mainTextOr(mainTimeText(status.CollectedAt), "—"),
+		x, y+w.scale(108), width, w.scale(22), mainMuted)
+	w.paintTodayCardStatus(c, card, w.state.ElectricityLoading, w.state.ElectricityError)
 }
 
 func (w *mainWindow) paintTodayCampus(c mainCanvas, card RECT) {
-	x, y, width := card.Left+w.scale(18), card.Top+w.scale(76), card.Right-card.Left-w.scale(36)
-	c.useFont(26, 700).label(mainStateLabel(w.state.Campus.State), x, y, width, w.scale(45), mainAccent)
-	c.useFont(13, 400).label("当前状态", x, y+w.scale(51), width, w.scale(24), mainMuted)
-	c.useFont(12, 400).label("检查："+mainTextOr(w.state.Campus.CheckedAt, "尚未检查"),
-		x, y+w.scale(99), width, w.scale(24), mainMuted)
+	x, y, width := card.Left+w.scale(18), card.Top+w.scale(64), card.Right-card.Left-w.scale(36)
+	c.useFont(26, 700).label(mainStateLabel(w.state.Campus.State), x, y, width, w.scale(44),
+		campusStateColor(w.state.Campus.State))
+	c.useFont(13, 400).label("当前状态", x, y+w.scale(48), width, w.scale(22), mainMuted)
+	c.useFont(12, 400).label("检查："+mainTextOr(mainTimeText(w.state.Campus.CheckedAt), "尚未检查"),
+		x, y+w.scale(78), width, w.scale(22), mainMuted)
 	w.paintTodayCardStatus(c, card, w.state.CampusLoading, w.state.CampusError)
 }
 
@@ -467,14 +506,20 @@ func (w *mainWindow) courseBlocks() []mainCourseBlock {
 	return all
 }
 
-var courseColors = []uintptr{
-	rgb(225, 238, 243), rgb(232, 237, 249), rgb(239, 235, 247),
-	rgb(237, 242, 229), rgb(249, 238, 224), rgb(247, 231, 234),
+// courseColors 是课程块的底色 + 左侧色条：同一门课跨周同色，色条让
+// 相邻课程在浅色底上仍有清晰边界。
+var courseColors = []struct{ fill, edge uintptr }{
+	{rgb(222, 237, 245), rgb(0, 102, 140)},
+	{rgb(228, 233, 249), rgb(64, 86, 161)},
+	{rgb(237, 231, 247), rgb(121, 82, 158)},
+	{rgb(230, 241, 228), rgb(58, 125, 68)},
+	{rgb(249, 237, 220), rgb(186, 112, 20)},
+	{rgb(248, 229, 233), rgb(176, 64, 92)},
 }
 
 // courseColorFor 按课程名稳定取色：同一门课在任意周、任意天都是同一颜色，
 // 便于跨周识别；名字为空时才用固定首色，不引入随机性。
-func courseColorFor(name string) uintptr {
+func courseColorFor(name string) struct{ fill, edge uintptr } {
 	if name == "" {
 		return courseColors[0]
 	}
@@ -494,10 +539,7 @@ func (w *mainWindow) paintTimetable(c mainCanvas, left, right, bottom int32) {
 		}
 	}
 	w.pageTitle(c, left, right, "课表", week)
-	if w.state.TimetableLoading {
-		c.useFont(13, 400).label("正在加载…", right-w.scale(270), w.scale(70), w.scale(120), w.scale(25), mainAccent)
-	}
-	gridTop := w.scale(116)
+	gridTop := w.scale(140)
 	headerH, rowH := w.scale(52), w.scale(56)
 	timeW := w.scale(58)
 	gridRight := right - w.scale(21)
@@ -508,9 +550,23 @@ func (w *mainWindow) paintTimetable(c mainCanvas, left, right, bottom int32) {
 	gridRight = left + timeW + dayW*7
 	bodyTop, bodyBottom := gridTop+headerH, bottom
 
+	// 今天列淡底色，跨周也能一眼定位当天。
+	todayCol := -1
+	for i := 0; i < 7 && i < len(w.state.Days); i++ {
+		if !w.state.Days[i].Date.IsZero() && w.state.Days[i].Date.String() == w.state.TodayDate {
+			todayCol = i
+			break
+		}
+	}
+
 	// 先画可滚动正文，再固定画表头，避免课程块滚到表头上。
 	c.clip(mainRect(left, bodyTop, gridRight+1, bodyBottom))
 	c.fill(mainRect(left, bodyTop-w.timetableScroll, gridRight, bodyTop+rowH*12-w.timetableScroll), mainCard)
+	if todayCol >= 0 {
+		x := left + timeW + int32(todayCol)*dayW
+		c.fill(mainRect(x, bodyTop-w.timetableScroll, x+dayW, bodyTop+rowH*12-w.timetableScroll),
+			rgb(238, 246, 250))
+	}
 	for i := 0; i < 12; i++ {
 		y := bodyTop + int32(i)*rowH - w.timetableScroll
 		c.useFont(13, 400).text(strconv.Itoa(i+1), mainRect(left, y, left+timeW, y+rowH),
@@ -536,14 +592,16 @@ func (w *mainWindow) paintTimetable(c mainCanvas, left, right, bottom int32) {
 		if visible.Bottom > bodyBottom {
 			visible.Bottom = bodyBottom
 		}
+		color := courseColorFor(block.entry.Name)
 		c.clip(visible)
-		c.fill(r, courseColorFor(block.entry.Name))
+		c.fill(r, color.fill)
+		c.fill(mainRect(r.Left, r.Top, r.Left+w.scale(3), r.Bottom), color.edge)
 		name := mainTextOr(block.entry.Name, "未命名课程")
-		textRect := mainRect(r.Left+w.scale(7), r.Top+w.scale(5), r.Right-w.scale(6), r.Bottom-w.scale(4))
+		textRect := mainRect(r.Left+w.scale(10), r.Top+w.scale(5), r.Right-w.scale(6), r.Bottom-w.scale(4))
 		c.useFont(13, 600).text(name, textRect, dtLeft|dtWordBreak|dtEndEllipsis, mainTextColor)
 		if block.to-block.from >= 1 && columnW >= w.scale(78) && r.Bottom-r.Top >= w.scale(86) {
 			loc := mainTextOr(block.entry.Location, "—")
-			c.useFont(11, 400).text(loc, mainRect(r.Left+w.scale(7), r.Bottom-w.scale(29),
+			c.useFont(11, 400).text(loc, mainRect(r.Left+w.scale(10), r.Bottom-w.scale(29),
 				r.Right-w.scale(6), r.Bottom-w.scale(6)), dtLeft|dtSingleLine|dtEndEllipsis, mainMuted)
 		}
 		c.clearClip()
@@ -578,8 +636,13 @@ func (w *mainWindow) paintTimetable(c mainCanvas, left, right, bottom int32) {
 			}
 		}
 		x := left + timeW + int32(i)*dayW
-		c.useFont(12, 600).text(label, mainRect(x, gridTop+w.scale(4), x+dayW, bodyTop-w.scale(3)),
-			dtCenter|dtVcenter|dtWordBreak, mainTextColor)
+		color, weight := mainTextColor, int32(600)
+		if i == todayCol {
+			color, weight = mainAccent, 700
+			c.fill(mainRect(x+1, bodyTop-w.scale(3), x+dayW, bodyTop), mainAccent)
+		}
+		c.useFont(12, weight).text(label, mainRect(x, gridTop+w.scale(4), x+dayW, bodyTop-w.scale(3)),
+			dtCenter|dtVcenter|dtWordBreak, color)
 	}
 	c.line(left, gridTop, gridRight, gridTop, mainLine)
 	c.line(left, bodyTop, gridRight, bodyTop, mainLine)
@@ -599,52 +662,61 @@ func (w *mainWindow) paintTimetable(c mainCanvas, left, right, bottom int32) {
 		c.useFont(18, 400).text("暂无课表，点击“刷新”同步", mainRect(left+w.scale(90), bodyTop+w.scale(90),
 			gridRight-w.scale(40), bodyTop+w.scale(140)), dtCenter|dtSingleLine, mainMuted)
 	}
-	// 状态放在工具栏右侧，避免占用课表最后一行。
-	c.useFont(11, 400).label(status, left+w.scale(350), w.scale(75), gridRight-left-w.scale(350), w.scale(20), mainMuted)
+	// 状态与加载提示同在副标题行：状态从左侧 210 起、加载提示固定在右端，
+	// 两者区间不相交，窄窗口也不会叠压。
+	c.useFont(11, 400).label(status, left+w.scale(210), w.scale(66),
+		right-left-w.scale(360), w.scale(20), mainMuted)
+	if w.state.TimetableLoading {
+		c.useFont(12, 400).label("正在加载…", right-w.scale(140), w.scale(65), w.scale(130), w.scale(22), mainAccent)
+	}
 }
 
 func (w *mainWindow) paintElectricity(c mainCanvas, left, right, bottom int32) {
 	w.pageTitle(c, left, right, "电费", "余额、采集时间与每月每日用量")
-	c.useFont(14, 400).label("月份", left, w.scale(75), w.scale(70), w.scale(24), mainMuted)
+	c.useFont(14, 400).label("月份", left, w.scale(101), w.scale(70), w.scale(24), mainMuted)
 	if w.state.ElectricityLoading {
-		c.useFont(13, 400).label("正在查询…", left+w.scale(466), w.scale(77), w.scale(130), w.scale(24), mainAccent)
+		c.useFont(13, 400).label("正在查询…", left+w.scale(466), w.scale(101), w.scale(130), w.scale(24), mainAccent)
 	}
-	card := mainRect(left, w.scale(118), right, w.scale(276))
-	w.card(c, card, "电费摘要")
+	card := mainRect(left, w.scale(140), right, w.scale(310))
+	w.card(c, card, "电费摘要", mainAmber)
 	if !w.state.HasReport {
-		c.useFont(18, 400).label("暂无数据，请输入 YYYY-MM 后查询", left+w.scale(20), w.scale(174),
+		c.useFont(18, 400).label("暂无数据，请输入 YYYY-MM 后查询", left+w.scale(20), w.scale(196),
 			right-left-w.scale(40), w.scale(36), mainMuted)
 	} else {
 		report := w.state.Report
 		c.useFont(28, 700).label(mainFormatFloat(report.Status.Balance)+" "+mainTextOr(report.Status.Unit, "度"),
-			left+w.scale(20), w.scale(166), w.scale(210), w.scale(42), mainAccent)
-		c.useFont(13, 400).label("剩余", left+w.scale(22), w.scale(211), w.scale(180), w.scale(24), mainMuted)
+			left+w.scale(20), w.scale(182), w.scale(210), w.scale(44), mainAccent)
+		c.useFont(13, 400).label("剩余", left+w.scale(22), w.scale(229), w.scale(180), w.scale(24), mainMuted)
 		c.useFont(18, 600).label(mainFormatFloat(report.Usage.MonthUse),
-			left+w.scale(250), w.scale(172), w.scale(145), w.scale(34), mainTextColor)
-		c.useFont(12, 400).label("本月用量", left+w.scale(250), w.scale(211), w.scale(145), w.scale(24), mainMuted)
+			left+w.scale(250), w.scale(188), w.scale(145), w.scale(34), mainTextColor)
+		c.useFont(12, 400).label("本月用量", left+w.scale(250), w.scale(229), w.scale(145), w.scale(24), mainMuted)
 		daily := "—"
 		if report.Status.DailyAvg != nil {
 			daily = mainFormatFloat(*report.Status.DailyAvg)
 		}
-		c.useFont(18, 600).label(daily, left+w.scale(414), w.scale(172), w.scale(135), w.scale(34), mainTextColor)
-		c.useFont(12, 400).label("近 7 日均量", left+w.scale(414), w.scale(211), w.scale(135), w.scale(24), mainMuted)
+		c.useFont(18, 600).label(daily, left+w.scale(414), w.scale(188), w.scale(135), w.scale(34), mainTextColor)
+		c.useFont(12, 400).label("近 7 日均量", left+w.scale(414), w.scale(229), w.scale(135), w.scale(24), mainMuted)
 		// 「数据截至」绑定采集时刻 collectedAt（docs/windows.md §3.3）；
-		// dataUntil 是用量统计的截止日期，措辞与 Android 端一致。
-		meta := "数据截至：" + mainTextOr(report.Status.CollectedAt, "—") +
+		// dataUntil 是用量统计的截止日期。整行横贯卡片底部，窄窗口也不截断。
+		meta := "数据截至：" + mainTextOr(mainTimeText(report.Status.CollectedAt), "—") +
 			"    用量统计至：" + mainTextOr(report.Usage.DataUntil, "—")
-		c.useFont(12, 400).label(meta, left+w.scale(570), w.scale(176), right-left-w.scale(590), w.scale(50), mainMuted)
+		c.useFont(12, 400).label(meta, left+w.scale(20), w.scale(270), right-left-w.scale(40), w.scale(24), mainMuted)
 	}
 	if w.state.ElectricityError != "" {
-		c.useFont(12, 400).label(w.state.ElectricityError, left+w.scale(570), w.scale(230),
-			right-left-w.scale(590), w.scale(25), mainMuted)
+		c.useFont(12, 400).label(w.state.ElectricityError, left+w.scale(4), w.scale(318),
+			right-left-w.scale(8), w.scale(24), mainDanger)
 	}
 
-	tableTop := w.scale(306)
+	tableTop := w.scale(356)
 	tableRight := right - w.scale(21)
 	dateW := (tableRight - left) * 2 / 3
-	c.fill(mainRect(left, tableTop, tableRight, tableTop+w.scale(32)), rgb(241, 244, 247))
+	c.fill(mainRect(left, tableTop, tableRight, tableTop+w.scale(32)), rgb(236, 241, 246))
 	c.useFont(13, 600).label("日期", left+w.scale(14), tableTop, dateW-w.scale(18), w.scale(32), mainMuted)
-	c.useFont(13, 600).text("用量", mainRect(left+dateW, tableTop, tableRight-w.scale(14), tableTop+w.scale(32)),
+	usageHeader := "用量"
+	if w.state.HasReport {
+		usageHeader += "（" + mainTextOr(w.state.Report.Status.Unit, "度") + "）"
+	}
+	c.useFont(13, 600).text(usageHeader, mainRect(left+dateW, tableTop, tableRight-w.scale(14), tableTop+w.scale(32)),
 		dtRight|dtVcenter|dtSingleLine, mainMuted)
 	bodyTop := tableTop + w.scale(32)
 	rowH := w.scale(28)
@@ -655,7 +727,7 @@ func (w *mainWindow) paintElectricity(c mainCanvas, left, right, bottom int32) {
 			continue
 		}
 		if i%2 == 1 {
-			c.fill(mainRect(left, y, tableRight, y+rowH), rgb(251, 252, 253))
+			c.fill(mainRect(left, y, tableRight, y+rowH), rgb(248, 250, 252))
 		}
 		c.useFont(13, 400).label(day.Date, left+w.scale(14), y, dateW-w.scale(18), rowH, mainTextColor)
 		c.useFont(13, 400).text(mainFormatFloat(day.Use), mainRect(left+dateW, y, tableRight-w.scale(14), y+rowH),
@@ -671,35 +743,34 @@ func (w *mainWindow) paintElectricity(c mainCanvas, left, right, bottom int32) {
 
 func (w *mainWindow) paintCampus(c mainCanvas, left, right int32) {
 	w.pageTitle(c, left, right, "校园网", "只展示连接状态与检查时间")
-	card := mainRect(left, w.scale(112), right, w.scale(404))
-	w.card(c, card, "连接状态")
-	c.useFont(32, 700).label(mainStateLabel(w.state.Campus.State), left+w.scale(22), w.scale(164),
-		right-left-w.scale(44), w.scale(52), mainAccent)
-	if w.state.CampusLoading {
-		c.useFont(13, 400).label("正在执行，请稍候…", left+w.scale(24), w.scale(224),
-			right-left-w.scale(48), w.scale(25), mainMuted)
+	card := mainRect(left, w.scale(112), right, w.scale(306))
+	w.card(c, card, "连接状态", campusStateColor(w.state.Campus.State))
+	mode := "手动模式"
+	if w.state.AutoMode {
+		mode = "自动模式"
 	}
+	c.useFont(12, 400).text(mode, mainRect(right-w.scale(150), w.scale(128), right-w.scale(18), w.scale(152)),
+		dtRight|dtSingleLine|dtEndEllipsis, mainMuted)
+	c.useFont(30, 700).label(mainStateLabel(w.state.Campus.State), left+w.scale(22), w.scale(158),
+		right-left-w.scale(44), w.scale(50), campusStateColor(w.state.Campus.State))
+	c.useFont(13, 400).label("检查时间："+mainTextOr(mainTimeText(w.state.Campus.CheckedAt), "尚未检查"),
+		left+w.scale(24), w.scale(216), right-left-w.scale(48), w.scale(26), mainMuted)
 	// 最近一次本机动作 / 轮询的脱敏错误（docs/windows.md §3.4）。
-	if w.state.CampusError != "" {
-		c.useFont(12, 400).text(w.state.CampusError, mainRect(left+w.scale(24), w.scale(254),
-			right-w.scale(24), w.scale(300)), dtLeft|dtWordBreak|dtEndEllipsis, mainMuted)
+	if w.state.CampusLoading {
+		c.useFont(12, 400).label("正在执行，请稍候…", left+w.scale(24), w.scale(250),
+			right-left-w.scale(48), w.scale(22), mainAccent)
+	} else if w.state.CampusError != "" {
+		c.useFont(12, 400).text(w.state.CampusError, mainRect(left+w.scale(24), w.scale(250),
+			right-w.scale(24), w.scale(296)), dtLeft|dtWordBreak|dtEndEllipsis, mainMuted)
 	}
-	c.useFont(13, 400).label("检查时间："+mainTextOr(w.state.Campus.CheckedAt, "尚未检查"),
-		left+w.scale(24), w.scale(315), right-left-w.scale(48), w.scale(30), mainMuted)
-	c.useFont(12, 400).label("账号、认证与轮询选项请在设置中修改。", left+w.scale(24), w.scale(354),
-		right-left-w.scale(48), w.scale(24), mainMuted)
+	// 按钮行在卡片下方（layout 的 buttonY=322），提示再下一行，互不叠压。
+	c.useFont(12, 400).label("账号、认证与轮询选项请在设置中修改。", left+w.scale(2), w.scale(370),
+		right-left-w.scale(4), w.scale(24), mainMuted)
 }
 
 func (w *mainWindow) paintSettings(c mainCanvas, left, right int32) {
-	// 表单本身是原生控件，这里只画页面标题；版本号放在提示行右侧，
-	// 避免与控件区的「保存 / 还原」以及提示文本重叠。
+	// 表单本身是原生控件，这里只画页面标题；版本号固定展示在侧边栏底部。
 	w.pageTitle(c, left, right, "设置", "账号、认证、轮询与提醒")
-	if w.state.Version != "" {
-		g := w.settingsGeometry()
-		c.useFont(12, 400).text(w.state.Version,
-			mainRect(right-w.scale(260), g.hintY, right, g.hintY+w.scale(24)),
-			dtRight|dtSingleLine|dtEndEllipsis, mainMuted)
-	}
 }
 
 func (w *mainWindow) courseAt(x, y int32) *mainCourseHit {

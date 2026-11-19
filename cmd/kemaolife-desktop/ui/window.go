@@ -423,52 +423,7 @@ var (
 
 var (
 	procCreateFont = gdi32.NewProc("CreateFontW")
-	procSendDlgMsg = user32.NewProc("SendMessageW")
 )
-
-var (
-	fontMu    sync.Mutex
-	fontCache = map[int32]uintptr{}
-)
-
-// SetFontBold 给控件设置粗体 / 常规字体（分节标题用）。
-//
-// 字体句柄缓存在进程级 map 里：每次调用都 CreateFontW 会在反复开关
-// 设置窗口后耗尽 GDI 对象（Windows 有 10k 上限）。
-func SetFontBold(hwnd uintptr, bold bool) {
-	weight := int32(400)
-	if bold {
-		weight = 700
-	}
-	if font := cachedFont(weight); font != 0 {
-		procSendDlgMsg.Call(hwnd, WM_SETFONT, font, 1)
-	}
-}
 
 // WM_SETFONT 消息号。
 const WM_SETFONT = 0x0030
-
-// cachedFont 返回指定字重的「微软雅黑 9pt」字体句柄（进程内复用）。
-//
-// 用雅黑而不是系统默认宋体：中文界面在 125%/150% 缩放下雅黑更清晰。
-func cachedFont(weight int32) uintptr {
-	fontMu.Lock()
-	defer fontMu.Unlock()
-	if f, ok := fontCache[weight]; ok {
-		return f
-	}
-	face := strPtr("Microsoft YaHei UI")
-	// CreateFontW(h, w, esc, orient, weight, italic, underline, strikeout,
-	//             charset, outprec, clipprec, quality, pitch, face)
-	h, _, _ := procCreateFont.Call(
-		uintptr(16), 0, 0, 0, uintptr(weight), 0, 0, 0,
-		1,       // DEFAULT_CHARSET
-		0, 0, 5, // CLEARTYPE_QUALITY
-		0, uintptr(unsafe.Pointer(face)),
-	)
-	if h == 0 {
-		return 0
-	}
-	fontCache[weight] = h
-	return h
-}

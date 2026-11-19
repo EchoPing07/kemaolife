@@ -188,13 +188,21 @@ type CampusNetwork interface {
 dialer := &net.Dialer{Timeout: 5 * time.Second}
 transport := &http.Transport{
     DialContext: func(ctx context.Context, network, addr string) (net.Conn, error) {
-        return dialer.DialContext(ctx, "tcp4", addr) // 强制 IPv4
+        return dialer.DialContext(ctx, "tcp4", addr) // 强制 IPv4；Windows 另叠加源地址绑定 / fake-ip 回落（见下）
     },
     TLSHandshakeTimeout: 10 * time.Second,
 }
 ```
 
 `Deps.HTTP` 是教务与电费共用的单一 `HTTPDoer`，`tcp4` 同时作用于两者；Portal 为独立平台适配器，不在此客户端内。
+
+**代理 TUN 环境（Windows）**：Clash / Mihomo 等以 TUN 接管默认路由并把 DNS 劫持成
+fake-ip（198.18.0.0/15）时，探测地址会被送去代理节点而非被 BRAS 拦截，学校服务器也
+拒绝非校园网来源，表现为「人在校园网却判 offline / 教务同步失败」。Windows 适配器
+（`portal_bind_windows.go` / `httptun_windows.go`）对此做两件事：拨号优先绑定物理网卡
+源地址（数据包不经过 TUN），失败回落普通拨号；系统解析落在 fake-ip 段时改用绑定源地址
+的 UDP 向公共 DNS 复核真实 IPv4。198.18.0.0/15 是基准测试保留段，不会与真实校园网地址
+冲突；其它平台不注入这两个钩子，行为不变。
 
 ## 5. 用例层：触发器留在外面
 
