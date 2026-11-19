@@ -18,39 +18,46 @@ var (
 	user32   = syscall.NewLazyDLL("user32.dll")
 	kernel32 = syscall.NewLazyDLL("kernel32.dll")
 	gdi32    = syscall.NewLazyDLL("gdi32.dll")
+	shcore   = syscall.NewLazyDLL("shcore.dll")
 )
 
 var (
-	procRegisterClassEx = user32.NewProc("RegisterClassExW")
-	procCreateWindowEx  = user32.NewProc("CreateWindowExW")
-	procDefWindowProc   = user32.NewProc("DefWindowProcW")
-	procGetMessage      = user32.NewProc("GetMessageW")
-	procTranslateMsg    = user32.NewProc("TranslateMessage")
-	procDispatchMsg     = user32.NewProc("DispatchMessageW")
-	procPostQuitMessage = user32.NewProc("PostQuitMessage")
-	procPostMessage     = user32.NewProc("PostMessageW")
-	procShowWindow      = user32.NewProc("ShowWindow")
-	procUpdateWindow    = user32.NewProc("UpdateWindow")
-	procSetWindowText   = user32.NewProc("SetWindowTextW")
-	procGetWindowText   = user32.NewProc("GetWindowTextW")
-	procGetWindowTextLn = user32.NewProc("GetWindowTextLengthW")
-	procSendMessage     = user32.NewProc("SendMessageW")
-	procMessageBox      = user32.NewProc("MessageBoxW")
-	procCreatePopupMenu = user32.NewProc("CreatePopupMenu")
-	procAppendMenu      = user32.NewProc("AppendMenuW")
-	procTrackPopupMenu  = user32.NewProc("TrackPopupMenu")
-	procDestroyMenu     = user32.NewProc("DestroyMenu")
-	procSetForeground   = user32.NewProc("SetForegroundWindow")
-	procGetCursorPos    = user32.NewProc("GetCursorPos")
-	procLoadCursor      = user32.NewProc("LoadCursorW")
-	procSetFocus        = user32.NewProc("SetFocus")
-	procEnableWindow    = user32.NewProc("EnableWindow")
-	procSetWindowPos    = user32.NewProc("SetWindowPos")
-	procAdjustRect      = user32.NewProc("AdjustWindowRectEx")
-	procGetSystemMetr   = user32.NewProc("GetSystemMetrics")
-	procGetDpiForWindow = user32.NewProc("GetDpiForWindow")
-	procSetDpiAwareness = user32.NewProc("SetProcessDpiAwarenessContext")
-	procInvalidateRect  = user32.NewProc("InvalidateRect")
+	procRegisterClassEx  = user32.NewProc("RegisterClassExW")
+	procCreateWindowEx   = user32.NewProc("CreateWindowExW")
+	procDefWindowProc    = user32.NewProc("DefWindowProcW")
+	procGetMessage       = user32.NewProc("GetMessageW")
+	procTranslateMsg     = user32.NewProc("TranslateMessage")
+	procDispatchMsg      = user32.NewProc("DispatchMessageW")
+	procPostQuitMessage  = user32.NewProc("PostQuitMessage")
+	procPostMessage      = user32.NewProc("PostMessageW")
+	procShowWindow       = user32.NewProc("ShowWindow")
+	procUpdateWindow     = user32.NewProc("UpdateWindow")
+	procSetWindowText    = user32.NewProc("SetWindowTextW")
+	procGetWindowText    = user32.NewProc("GetWindowTextW")
+	procGetWindowTextLn  = user32.NewProc("GetWindowTextLengthW")
+	procSendMessage      = user32.NewProc("SendMessageW")
+	procMessageBox       = user32.NewProc("MessageBoxW")
+	procCreatePopupMenu  = user32.NewProc("CreatePopupMenu")
+	procAppendMenu       = user32.NewProc("AppendMenuW")
+	procTrackPopupMenu   = user32.NewProc("TrackPopupMenu")
+	procDestroyMenu      = user32.NewProc("DestroyMenu")
+	procSetForeground    = user32.NewProc("SetForegroundWindow")
+	procGetCursorPos     = user32.NewProc("GetCursorPos")
+	procLoadCursor       = user32.NewProc("LoadCursorW")
+	procSetFocus         = user32.NewProc("SetFocus")
+	procEnableWindow     = user32.NewProc("EnableWindow")
+	procSetWindowPos     = user32.NewProc("SetWindowPos")
+	procAdjustRect       = user32.NewProc("AdjustWindowRectEx")
+	procGetSystemMetr    = user32.NewProc("GetSystemMetrics")
+	procGetDpiForWindow  = user32.NewProc("GetDpiForWindow")
+	procSetDpiAwareness  = user32.NewProc("SetProcessDpiAwarenessContext")
+	procInvalidateRect   = user32.NewProc("InvalidateRect")
+	procSystemParam      = user32.NewProc("SystemParametersInfoW")
+	procMonitorFromPoint = user32.NewProc("MonitorFromPoint")
+	procGetDpiForMonitor = shcore.NewProc("GetDpiForMonitor")
+	procGetParent        = user32.NewProc("GetParent")
+	procSetWindowLongPtr = user32.NewProc("SetWindowLongPtrW")
+	procCallWindowProc   = user32.NewProc("CallWindowProcW")
 
 	procGetModuleHndl = kernel32.NewProc("GetModuleHandleW")
 
@@ -59,13 +66,15 @@ var (
 
 // 窗口消息（只列用到的）。
 const (
-	WM_DESTROY       = 0x0002
-	WM_CLOSE         = 0x0010
-	WM_COMMAND       = 0x0111
-	WM_LBUTTONUP     = 0x0202
-	WM_LBUTTONDBLCLK = 0x0203
-	WM_RBUTTONUP     = 0x0205
-	WM_APP           = 0x8000
+	WM_DESTROY         = 0x0002
+	WM_CLOSE           = 0x0010
+	WM_QUERYENDSESSION = 0x0011
+	WM_ENDSESSION      = 0x0016
+	WM_COMMAND         = 0x0111
+	WM_LBUTTONUP       = 0x0202
+	WM_LBUTTONDBLCLK   = 0x0203
+	WM_RBUTTONUP       = 0x0205
+	WM_APP             = 0x8000
 )
 
 // 控件样式与通用常量。
@@ -78,8 +87,9 @@ const (
 	WS_BORDER      = 0x00800000
 	WS_TABSTOP     = 0x00010000
 
-	SW_HIDE = 0
-	SW_SHOW = 5
+	SW_HIDE    = 0
+	SW_SHOW    = 5
+	SW_RESTORE = 9
 
 	SWP_NOZORDER   = 0x0004
 	SWP_NOACTIVATE = 0x0010
@@ -153,15 +163,21 @@ type WNDCLASSEX struct {
 }
 
 // EnablePerMonitorDPI 让窗口在高分屏上按物理像素绘制，避免位图缩放导致文字发虚。
-func EnablePerMonitorDPI() {
-	procSetDpiAwareness.Call(dpiPerMonitorAwareV2)
+//
+// 只在进程启动时调用一次且必须早于任何窗口创建：之后再设无效。
+// 返回是否设置成功，失败时 DPI 会退化为系统缩放（文字仍可读，但布局按 96 算）。
+func EnablePerMonitorDPI() bool {
+	r, _, _ := procSetDpiAwareness.Call(dpiPerMonitorAwareV2)
+	return r != 0
 }
 
 // Scale 把设计用的逻辑像素换算成当前 DPI 下的物理像素。
 func Scale(hwnd uintptr, dp int32) int32 {
 	dpi := uint32(96)
 	if hwnd != 0 {
-		if d, _, err := procGetDpiForWindow.Call(hwnd); err == nil && d >= 72 {
+		// 注意：成功调用时 syscall 返回的 err 是 Errno(0) 而非 nil，
+		// 不能用 err == nil 判成功，否则 DPI 永远是 96，高缩放下窗口会缩水。
+		if d, _, _ := procGetDpiForWindow.Call(hwnd); d >= 72 {
 			dpi = uint32(d)
 		}
 	}

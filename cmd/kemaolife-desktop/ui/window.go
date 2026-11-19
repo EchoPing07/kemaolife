@@ -15,8 +15,7 @@ type WndProc func(hwnd uintptr, msg uint32, wParam, lParam uintptr) uintptr
 
 // 窗口类名（注册一次，多窗口复用同一过程）。
 const (
-	TrayClass   = "KemaolifeTrayWindow"
-	SettingsCls = "KemaolifeSettingsWindow"
+	TrayClass = "KemaolifeTrayWindow"
 )
 
 // 自定义消息：后台 goroutine 通过它把状态变化送回 UI 线程。
@@ -25,8 +24,8 @@ const (
 // 不能直接改控件文本 —— 否则表现为「界面卡死」或「文本不刷新」。
 const (
 	WM_STATUS_UPDATE = WM_APP + 1 // 状态文本变了
-	WM_QUERY_DONE    = WM_APP + 3 // 一次轮询结束（触发菜单重建）
-	WM_OPEN_SETTINGS = WM_APP + 4 // 请求打开设置窗口
+	WM_QUERY_DONE    = WM_APP + 3 // 一次轮询结束（刷新托盘与主窗口）
+	WM_SHOW_MAIN     = WM_APP + 4 // 重复启动请求唤起主窗口（经托盘窗口转 UI 线程）
 )
 
 // wmTrayCallback 是 Shell_NotifyIcon 回调消息号（与通知实现里的常量一致）。
@@ -177,6 +176,9 @@ func Enable(hwnd uintptr, on bool) {
 	procEnableWindow.Call(hwnd, v)
 }
 
+// Restore 把最小化的窗口恢复为之前的大小与位置（未最小化时相当于激活）。
+func Restore(hwnd uintptr) { procShowWindow.Call(hwnd, SW_RESTORE) }
+
 // Show 显示 / 隐藏窗口。
 func Show(hwnd uintptr, show bool) {
 	if !show {
@@ -282,12 +284,71 @@ func AdjustToClient(hwnd uintptr, style, exStyle uint32, cw, ch int32) (int32, i
 	return r.Right - r.Left, r.Bottom - r.Top
 }
 
-// CenterOnScreen 把窗口放到主屏中央。
+// monitorDPI 返回主屏当前 DPI（每显示器 DPI 感知下的有效值）。
+//
+// 窗口刚创建、尚未落到显示器时 GetDpiForWindow 会返回 96，
+// 因此初始尺寸必须按显示器 DPI 计算，而不是按窗口 DPI。
+func monitorDPIFor(hwnd uintptr) uint32 {
+	// 窗口已经落到显示器时，GetDpiForWindow 是唯一可靠的来源：
+	// 它返回该窗口当前所在显示器的有效 DPI，且与 WM_DPICHANGED 一致。
+	if hwnd != 0 {
+		if d, _, _ := procGetDpiForWindow.Call(hwnd); d >= 72 {
+			return uint32(d)
+		}
+	}
+	return monitorDPI()
+}
+
+func monitorDPI() uint32 {
+	const (
+		monitorDefaultToPrimary = 1
+		mdttEffectiveDPI        = 0
+	)
+	pt := POINT{}
+	monitor, _, _ := procMonitorFromPoint.Call(uintptr(unsafe.Pointer(&pt)), monitorDefaultToPrimary)
+	if monitor == 0 {
+		return 96
+	}
+	var x, y uint32
+	if r, _, _ := procGetDpiForMonitor.Call(monitor, mdttEffectiveDPI,
+		uintptr(unsafe.Pointer(&x)), uintptr(unsafe.Pointer(&y))); r != 0 || x < 72 {
+		return 96
+	}
+	return x
+}
+
+// scaleByDPI 把逻辑像素换算成物理像素（指定 DPI）。
+func scaleByDPI(dp int32, dpi uint32) int32 {
+	return int32(float64(dp) * float64(dpi) / 96.0)
+}
+
+// WorkArea 返回主屏工作区（不含任务栏），单位物理像素。
+func WorkArea() (x0, y0, x1, y1 int32) {
+	// SystemParametersInfoW(SPI_GETWORKAREA, 0, &rect, 0)：
+	// 第三个参数是**指向 RECT 的指针**，由本函数提供缓冲，不是系统返回的地址。
+	const spiGetWorkArea = 0x0030
+	var r RECT
+	ok, _, _ := procSystemParam.Call(spiGetWorkArea, 0, uintptr(unsafe.Pointer(&r)), 0)
+	if ok != 0 && r.Right > r.Left && r.Bottom > r.Top {
+		return r.Left, r.Top, r.Right, r.Bottom
+	}
+	w, h := ScreenSize()
+	return 0, 0, w, h
+}
+
+// CenterOnScreen 把窗口放到主屏中央，并在工作区放不下时收缩，
+// 避免在 1366×768 这类屏幕上默认窗口高过屏幕、底部按钮点不到。
 func CenterOnScreen(hwnd uintptr, w, h int32) {
-	// 先把窗口（含非客户区）尺寸设好，再算居中位置。
-	screenW, screenH := ScreenSize()
-	x := (screenW - w) / 2
-	y := (screenH - h) / 2
+	waLeft, waTop, waRight, waBottom := WorkArea()
+	availW, availH := waRight-waLeft, waBottom-waTop
+	if availW > 0 && w > availW {
+		w = availW
+	}
+	if availH > 0 && h > availH {
+		h = availH
+	}
+	x := waLeft + (availW-w)/2
+	y := waTop + (availH-h)/2
 	if x < 0 {
 		x = 0
 	}
@@ -362,52 +423,7 @@ var (
 
 var (
 	procCreateFont = gdi32.NewProc("CreateFontW")
-	procSendDlgMsg = user32.NewProc("SendMessageW")
 )
-
-var (
-	fontMu    sync.Mutex
-	fontCache = map[int32]uintptr{}
-)
-
-// SetFontBold 给控件设置粗体 / 常规字体（分节标题用）。
-//
-// 字体句柄缓存在进程级 map 里：每次调用都 CreateFontW 会在反复开关
-// 设置窗口后耗尽 GDI 对象（Windows 有 10k 上限）。
-func SetFontBold(hwnd uintptr, bold bool) {
-	weight := int32(400)
-	if bold {
-		weight = 700
-	}
-	if font := cachedFont(weight); font != 0 {
-		procSendDlgMsg.Call(hwnd, WM_SETFONT, font, 1)
-	}
-}
 
 // WM_SETFONT 消息号。
 const WM_SETFONT = 0x0030
-
-// cachedFont 返回指定字重的「微软雅黑 9pt」字体句柄（进程内复用）。
-//
-// 用雅黑而不是系统默认宋体：中文界面在 125%/150% 缩放下雅黑更清晰。
-func cachedFont(weight int32) uintptr {
-	fontMu.Lock()
-	defer fontMu.Unlock()
-	if f, ok := fontCache[weight]; ok {
-		return f
-	}
-	face := strPtr("Microsoft YaHei UI")
-	// CreateFontW(h, w, esc, orient, weight, italic, underline, strikeout,
-	//             charset, outprec, clipprec, quality, pitch, face)
-	h, _, _ := procCreateFont.Call(
-		uintptr(16), 0, 0, 0, uintptr(weight), 0, 0, 0,
-		1,       // DEFAULT_CHARSET
-		0, 0, 5, // CLEARTYPE_QUALITY
-		0, uintptr(unsafe.Pointer(face)),
-	)
-	if h == 0 {
-		return 0
-	}
-	fontCache[weight] = h
-	return h
-}

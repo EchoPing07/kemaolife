@@ -25,6 +25,12 @@ type HTTPDoer struct {
 	mu     sync.Mutex
 }
 
+// resolveHostIPv4 由 Windows 适配器注入（httptun_windows.go）：代理 TUN 的
+// fake-ip DNS 会把域名解析成 198.18.x.x，按 fake-ip 拨号会被送去代理节点，
+// 学校服务器拒绝非校园网来源。注入后先解析出真实 IPv4 再拨号。
+// 其它平台为 nil，保持系统解析 + 直接拨号。
+var resolveHostIPv4 func(ctx context.Context, host string) ([]net.IP, error)
+
 // NewHTTPDoer 构造适配器；timeout<=0 时用 30s。
 func NewHTTPDoer(timeout time.Duration) *HTTPDoer {
 	if timeout <= 0 {
@@ -35,7 +41,32 @@ func NewHTTPDoer(timeout time.Duration) *HTTPDoer {
 		Proxy: http.ProxyFromEnvironment,
 		DialContext: func(ctx context.Context, network, addr string) (net.Conn, error) {
 			// 强制 IPv4：不是优选，是禁用 v6。
-			return dialer.DialContext(ctx, "tcp4", addr)
+			if resolveHostIPv4 == nil && localSourceDial == nil {
+				return dialer.DialContext(ctx, "tcp4", addr)
+			}
+			host, port, err := net.SplitHostPort(addr)
+			if err != nil {
+				return dialer.DialContext(ctx, "tcp4", addr)
+			}
+			ips, err := lookupIPv4(ctx, host)
+			if err != nil || len(ips) == 0 {
+				return dialer.DialContext(ctx, "tcp4", addr)
+			}
+			var lastErr error
+			for _, ip := range ips {
+				target := net.JoinHostPort(ip.String(), port)
+				if localSourceDial != nil {
+					if conn, e := localSourceDial(ctx, "tcp4", target); e == nil {
+						return conn, nil
+					}
+				}
+				conn, e := dialer.DialContext(ctx, "tcp4", target)
+				if e == nil {
+					return conn, nil
+				}
+				lastErr = e
+			}
+			return nil, lastErr
 		},
 		TLSHandshakeTimeout:   10 * time.Second,
 		ResponseHeaderTimeout: timeout,
@@ -44,6 +75,24 @@ func NewHTTPDoer(timeout time.Duration) *HTTPDoer {
 		ForceAttemptHTTP2:     true,
 	}
 	return &HTTPDoer{client: &http.Client{Timeout: timeout, Transport: transport}, base: transport}
+}
+
+// lookupIPv4 解析主机 IPv4；有注入解析器时用它（fake-ip 回落），否则系统解析。
+func lookupIPv4(ctx context.Context, host string) ([]net.IP, error) {
+	if resolveHostIPv4 != nil {
+		return resolveHostIPv4(ctx, host)
+	}
+	addrs, err := net.DefaultResolver.LookupIPAddr(ctx, host)
+	if err != nil {
+		return nil, err
+	}
+	var out []net.IP
+	for _, a := range addrs {
+		if ip := a.IP.To4(); ip != nil {
+			out = append(out, ip)
+		}
+	}
+	return out, nil
 }
 
 // SetRequestLog 安装请求记录器（nil 表示不记录）。

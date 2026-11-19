@@ -64,8 +64,9 @@ func SetAutoStart(enable bool) error {
 		return nil
 	}
 
-	// 路径可能含空格（Program Files），必须整体加引号，否则 Windows 会截断命令行。
-	value := `"` + exe + `"`
+	// 登录自启只恢复常驻托盘；主窗口由用户双击程序或点击托盘打开。
+	// 参数属于 Windows 端进程契约，不能与手动双击共用同一条启动路径。
+	value := `"` + exe + `" --background`
 	val := utf16(value)
 	r, _, e := procRegSetValue.Call(
 		key,

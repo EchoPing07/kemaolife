@@ -31,6 +31,25 @@ const (
 	settleDelay   = 3 * time.Second
 )
 
+// localSourceDial 由 Windows 适配器注入（portal_bind_windows.go）：
+// 代理 TUN 接管默认路由时，绑定物理网卡源地址可让探测 / 认证请求
+// 绕过 TUN 直达 BRAS / Portal。其它平台为 nil，拨号行为不变。
+var localSourceDial func(ctx context.Context, network, address string) (net.Conn, error)
+
+// sourceAwareDial 先尝试绑定本机源地址，失败回落普通拨号。
+func sourceAwareDial(timeout time.Duration) func(context.Context, string, string) (net.Conn, error) {
+	plain := (&net.Dialer{Timeout: timeout}).DialContext
+	if localSourceDial == nil {
+		return plain
+	}
+	return func(ctx context.Context, network, address string) (net.Conn, error) {
+		if conn, err := localSourceDial(ctx, network, address); err == nil {
+			return conn, nil
+		}
+		return plain(ctx, network, address)
+	}
+}
+
 // PortalCredential 是校园网凭据：独立字段，不复用教务密码。
 //
 // 只在内存里出现，落盘由调用方经 DPAPI 加密（P5）。
@@ -75,7 +94,7 @@ func NewPortalNetwork(cred func() PortalCredential, userAgent string) *PortalNet
 		},
 		Transport: &http.Transport{
 			Proxy:       nil, // 探测必须直连校园网，不能被系统代理劫持
-			DialContext: (&net.Dialer{Timeout: probeTimeout}).DialContext,
+			DialContext: sourceAwareDial(probeTimeout),
 			// 探测地址是内网，走代理会直接判 offline。
 			DisableKeepAlives: true,
 		},
@@ -85,7 +104,7 @@ func NewPortalNetwork(cred func() PortalCredential, userAgent string) *PortalNet
 		Timeout: portalTimeout,
 		Transport: &http.Transport{
 			Proxy:       nil,
-			DialContext: (&net.Dialer{Timeout: 10 * time.Second}).DialContext,
+			DialContext: sourceAwareDial(10 * time.Second),
 			TLSClientConfig: &tls.Config{
 				// 自签证书：**只**作用于 Portal 客户端（AGENTS §5.4）。
 				// 教务 / 电费的 HTTPDoer 是另一个 client，绝不共享此配置。

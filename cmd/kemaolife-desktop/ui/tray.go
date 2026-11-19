@@ -19,6 +19,7 @@ const (
 	IDProbe   = 1104 // 立即探测一次校园网状态（不登录）
 
 	IDRefresh  = 1201 // 立即查询一次电费
+	IDOpenMain = 1300
 	IDSettings = 1301
 	IDExit     = 1401
 )

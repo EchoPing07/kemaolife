@@ -18,6 +18,7 @@
 | CLI skill | `skills/kemaolife/SKILL.md` |
 | Windows 二进制 / `cmd` 目录 | `kemaolife-desktop.exe` / `cmd/kemaolife-desktop/` |
 | Windows 平台标识 | 自启值 `KemaolifeDesktop`、进程 AUMID `Kemaolife.Desktop`（用于归类托盘 `NIF_INFO` 通知）、数据目录 `%LOCALAPPDATA%\Kemaolife\` |
+| Windows 启动参数 | `--background`：仅新实例初始驻留托盘、不显示主窗口；普通双击无参数时显示主窗口。注册表自启命令为 `"<kemaolife-desktop.exe 的绝对路径>" --background` |
 | Android Go 门面 | `cmd/kemaolife-mobile/`，`package kemaolife`；`gomobile bind -target=android -androidapi 24 -javapkg com.github.echoping07.kemaolife.bridge -o android/app/libs/kemaolife.aar ./cmd/kemaolife-mobile` |
 | Android app | applicationId / namespace / Kotlin 主包 `com.github.echoping07.kemaolife` |
 
@@ -26,7 +27,8 @@
 1. Android 包名全小写：`EchoPing07` 在 applicationId 段小写化为 `echoping07`；`com.github.<user>.<repo>` 与 module path 的 `github.com/<user>/<repo>` 同源反向。
 2. 生成 Java 类实测落在 `com.github.echoping07.kemaolife.bridge.kemaolife.Kemaolife`（`-javapkg` 只决定前缀，末段固定取 Go 包名）；Kotlin 调 `Kemaolife.init(...)` / `Kemaolife.call(...)`。改包名须同步 `android/.../data/Bridge.kt` 与 `android/README.md`。
 3. 仓库与文档不出现任何凭据明文；学校代码属学校事实，可用内置默认值（当前 `3126`）；示例中的用户自填值写 `<学校代码>`。
-4. CLI 支持 linux / darwin（源码构建 + 预编译产物），windows 为后续计划；桌面端仅 Windows、移动端仅 Android。内部标识（`cmd` 目录名、二进制名、AUMID、Android 包名、产物名）冻结，不因支持平台扩展而改名。Windows 端命名用 `desktop`：托盘程序是给人的；`agent` 一词仅指 CLI 侧的 AI agent。
+4. CLI 支持 linux / darwin（源码构建 + 预编译产物），windows 为后续计划；桌面端仅 Windows、移动端仅 Android。内部标识（`cmd` 目录名、二进制名、AUMID、Android 包名、产物名）冻结，不因支持平台扩展而改名。Windows 端命名用 `desktop`：主窗口 + 托盘程序是给人的；`agent` 一词仅指 CLI 侧的 AI agent。
+5. Windows 主窗口固定为今天 / 课表 / 电费 / 校园网 / 设置五页。关闭主窗口只隐藏到托盘；重复启动不带 `--background` 时唤起已有主窗口（已有实例仅驻留托盘、主窗口尚未创建时，通知其创建并显示）；重复启动带 `--background` 时直接退出，不改变已有实例的窗口状态；托盘左键打开主窗口并定位「今天」。窗口行为与完整规则见 [windows.md](windows.md)。
 
 ## 2. CLI 命令
 
@@ -57,6 +59,8 @@ kemaolife electricity [--month YYYY-MM]         # 一次返回剩余电费 + 每
 | 教务 | 学号、教务密码 | `config init` 交互录入；默认关闭回显（无法关闭时 `stderr` 明确警告并继续读取，输入可能被看到）、不进命令行参数、不写日志 |
 | 电费 | 学号（默认继承教务，可在 Android 设置页关闭「继承教务信息」后单独配置）、学校代码 `customercode` | 学校代码有内置默认值，支持自定义覆盖；电费接口无密码（`api-docs/002` §1 无鉴权）；实际学号由 `Config.ElectricityStudent()` 决定：独立学号非空（去空白后）则用独立学号，否则回落教务学号 |
 | 校园网 | 不存 | CLI 无校园网功能 |
+
+Windows 配置与 CLI 分域独立，不共享文件：学号、教务密码、学校代码、校园网独立凭据及轮询 / 告警设置统一经用户级 DPAPI 加密后存于 `%LOCALAPPDATA%\Kemaolife\`，课表快照含 Cookie，同样加密存储。主窗口 / 托盘只消费本机状态和既有 DTO，不新增配置门面或对外字段。
 
 学校代码默认值 **3126**（学校事实，非个人隐私），写在 `cmd` 层并支持 `-ldflags -X main.defaultCustomerCode=...` 覆盖；用户可 `config set customercode <学校代码>` 再覆盖。**禁止**写成 `internal/core` 包级常量或对外发布的通用常量。`config show` 用 `customerCodeSource: "default" | "custom" | "missing"` 标注来源；`missing` 仅在默认值与用户配置都为空时出现。
 
@@ -132,7 +136,7 @@ kemaolife electricity [--month YYYY-MM]         # 一次返回剩余电费 + 每
    - 因此「会话失效」必须统一报 `3002`，不得降级成 `4002`；`4002` 留给真正的结构变更（上游改版）。协议事实见 `api-docs/001-timetable` §1。
 6. **登录前必须先登出 CAS SSO 会话**：快照里的 `CAS_SessionId` 仍有效时，`GET /cas_server/login` 不给登录表单而是直接 `302` 发 ticket（不校验账号密码）。必须先 `GET /cas_server/logout`（不需凭据，失败不阻断），否则既误报 `4002`，又会在换账号时用旧账号的 SSO 会话换票。协议事实见 `api-docs/001-timetable` §1 / §2.1。
 
-Android 的动作划分不同：**查询只读缓存**（`CacheOnly`，0 请求，`stale` 恒 `false`），**联网刷新是独立动作**（`timetable.sync`）。Android 的离线标记是 UI 本地状态，只由 `timetable.sync` 的成败维护，不是信封 `stale` 字段；本节 `stale:true` 语义专指 CLI 的 `RefreshFirst` 链路。触发策略见 [android.md](android.md)。
+Android 的动作划分与 CLI 不同，Windows 桌面也采用缓存与刷新分离：**查询只读缓存**（`CacheOnly`，0 请求，`stale` 恒 `false`），**联网刷新是独立动作**（Android 经 `timetable.sync`，Windows 直接调用 `SyncTimetable`）。Android 的离线标记是 UI 本地状态，只由 `timetable.sync` 的成败维护，不是信封 `stale` 字段；Windows 启动先读快照再后台同步，切周不联网，同步错误在页面单独显示。本节 `stale:true` 语义专指 CLI 的 `RefreshFirst` 链路。Android 触发策略见 [android.md](android.md)，Windows 触发策略见 [windows.md](windows.md)。
 
 ## 5. JSON 信封
 
@@ -166,7 +170,7 @@ CLI `--json` 与 Android 门面共用同一信封，字段名一致。
 | `data` | object | 业务数据，`ok:false` 时缺省 |
 | `error` | object | `{code, message}`，`ok:false` 时存在 |
 | `ts` | string | 响应生成时间（RFC3339，本地时区） |
-| `stale` | bool | 课表查询恒给出。`RefreshFirst`（CLI）刷新失败沿用旧快照时为 `true`，否则 `false`；`CacheOnly`（Android 查询类 `op`）**恒 `false`**——纯读缓存没有「本次刷新失败」这回事，Android 的离线标记由 UI 依据独立 `timetable.sync` 的结果单独维护。非课表命令可缺省 |
+| `stale` | bool | 课表查询恒给出。`RefreshFirst`（CLI）刷新失败沿用旧快照时为 `true`，否则 `false`；`CacheOnly`（Windows 今天 / 课表页与 Android 查询类 `op`）**恒 `false`**——纯读缓存没有「本次刷新失败」这回事，Windows 页面与 Android UI 的同步错误依据独立刷新结果单独维护。非课表命令可缺省 |
 | `syncedAt` | string | 快照同步时间；课表查询恒给出（`RefreshFirst` 刷新成功时是本次时间、`stale:true` 或 `CacheOnly` 时是本地快照的同步时间）；CLI 与 Android 的 `timetable sync` 也给出 |
 
 `error.code` 使用 §8 的 `1001`–`5001` 域；CLI 退出码 `0/1/2/3/4` 由该域映射得出，**JSON 信封内不出现退出码**。`ok:false` 时 `data` 缺省，`ok:true` 时 `error` 缺省。所有示例按 Go 强类型 DTO 编解码。
@@ -255,7 +259,7 @@ func Call(reqJSON string) string { /* ... */ }
 | `config show` | `{ "studentId", "eduPassword", "customerCode", "customerCodeSource", "configPath" }` |
 | `--version --json` | `{ "version", "commit" }` |
 
-Windows 端不暴露 CLI / JSON 信封，托盘菜单、悬浮提示与设置窗口只消费本机状态与 DTO，不新增对外字段。
+Windows 端不暴露 CLI / JSON 信封，五页主窗口、托盘菜单、悬浮提示与设置页只消费本机状态与 DTO，不新增对外字段。Windows 的 `GetSchedule` / `GetWeekSchedule` 使用 `CacheOnly`，`SyncTimetable` 独立刷新；电费完整报告使用既有 `ElectricityReport`，不另设 Windows DTO。
 
 `DaySchedule` 示例为字段示意；`<...>` 是占位符字符串，实际数值字段按字段表编码。
 
@@ -386,9 +390,9 @@ Windows 端不暴露 CLI / JSON 信封，托盘菜单、悬浮提示与设置窗
 
 `state`：`online`（已在线）｜`unauth`（未认证）｜`offline`（不在校园网 / 探测失败）。
 
-- 该 DTO 供 **Windows 托盘**与 **Android「更多」页**使用；**CLI 不暴露**。`checkedAt` 由 `app.GetCampusNetworkStatus` 用注入的 `Clock` 补齐；托盘 UI 本身不展示该时刻。`errorMsg` 来自上游 `Location`，必须经已知安全短语白名单过滤后才进入 DTO，未命中时置空；该字段是历史提示，不参与三态判定，Windows 托盘菜单与 Android「更多」页校园网卡片均不渲染它，手动判态 / 动作失败原因另由各端错误提示呈现；自动判态失败归 `offline`，不展示失败原因。
+- 该 DTO 供 **Windows 主窗口与托盘**及 **Android「更多」页**使用；**CLI 不暴露**。`checkedAt` 由 `app.GetCampusNetworkStatus` 用注入的 `Clock` 补齐；托盘 UI 本身不展示该时刻。`errorMsg` 来自上游 `Location`，必须经已知安全短语白名单过滤后才进入 DTO，未命中时置空；该字段是历史提示，不参与三态判定，Windows 主窗口 / 托盘菜单与 Android「更多」页校园网卡片均不渲染它，手动判态 / 动作失败原因另由各端错误提示呈现；自动判态失败归 `offline`，不展示失败原因。
 - `brasName` / `brasAddress` / `vlan` 是可选的学校侧接入信息，`deviceIp` / `mac` 是可选的本机探测详情，旧客户端可忽略；展示与隐私边界见 [privacy.md §4](privacy.md)。
-- 探测失败（超时 / 非 302 / 无 `Location`）返回 `ok:true` + `state:"offline"`，**不是错误**；`campusnet.login` / `logout` / `relogin` 在 `offline` 态调用返回 `4001`。Windows 托盘手动动作绕过门面直接调 `app` 用例，仍按同一语义处理。
+- 探测失败（超时 / 非 302 / 无 `Location`）返回 `ok:true` + `state:"offline"`，**不是错误**；`campusnet.login` / `logout` / `relogin` 在 `offline` 态调用返回 `4001`。Windows 主窗口与托盘的手动动作绕过门面直接调 `app` 用例，仍按同一语义处理。
 - 「下线」为统一术语（`api-docs/003`），不写「登出」；「重登」= 先探测判态，若已在线则下线并复探（约 2~3s 生效等待），若原本未认证则跳过下线；随后登录并复探确认。`distoken` 由每次下线前的探测现取。
 
 ## 8. 错误码

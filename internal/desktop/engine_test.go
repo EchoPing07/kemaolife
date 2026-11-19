@@ -3,11 +3,13 @@ package desktop_test
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -25,6 +27,7 @@ type fakeCampus struct {
 	mu sync.Mutex
 
 	state    model.CampusState
+	status   model.CampusStatus
 	distoken string
 
 	loginCalls   int
@@ -47,7 +50,9 @@ func (f *fakeCampus) Status(context.Context) (model.CampusStatus, error) {
 	if f.statusErr != nil {
 		return model.CampusStatus{}, f.statusErr
 	}
-	return model.CampusStatus{State: f.state}, nil
+	status := f.status
+	status.State = f.state
+	return status, nil
 }
 
 func (f *fakeCampus) Login(context.Context) error {
@@ -122,7 +127,7 @@ func electricityServer(t *testing.T, balance float64, dayUse float64) *httptest.
 			body := fmt.Sprintf(`{"result":"0","existflag":"1","roomfullname":"<校区>_<楼栋>_<楼层>_<房间>","roomverify":"<roomverify>","detaillist":[{"businesstype":"0","odd":"%.2f","status":"1"}]}`, balance)
 			writeOuter(w, body)
 		case "getusedetail":
-			body := fmt.Sprintf(`{"result":"0","yearmonth":"2026-11","monthuse":"63.13","opdtdate":"2026-11-04","dayuselist":[{"date":"2026-11-04","dayuse":%.2f}]}`, dayUse)
+			body := fmt.Sprintf(`{"result":"0","yearmonth":"%s","monthuse":"63.13","opdtdate":"2026-11-04","dayuselist":[{"date":"2026-11-04","dayuse":%.2f}]}`, r.Form.Get("yearmonth"), dayUse)
 			writeOuter(w, body)
 		case "getstuindexpage":
 			writeOuter(w, `{"result":"0","modlist":[{"collecdate":"2026-11-04 22:41:37"}]}`)
@@ -209,8 +214,8 @@ func TestPollAutoModeEnsuresCampusNetwork(t *testing.T) {
 	if login != 1 {
 		t.Errorf("未认证态应触发登录, got %d", login)
 	}
-	if st := eng.Status(); st.Campus != model.CampusOnline {
-		t.Errorf("状态应被刷新为 online, got %q", st.Campus)
+	if st := eng.Status(); st.CampusStatus.State != model.CampusOnline {
+		t.Errorf("状态应被刷新为 online, got %q", st.CampusStatus.State)
 	}
 	if !eng.Status().HasReport {
 		t.Error("应拿到电费数据")
@@ -268,6 +273,137 @@ func TestPollAutoModePreflightErrorClearsAfterRecovery(t *testing.T) {
 	}
 }
 
+// 手动月份查询更新完整报告，但不告警，也不改变轮询失败退避。
+func TestQueryElectricityManualMonth(t *testing.T) {
+	var mu sync.Mutex
+	var months []string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_ = r.ParseForm()
+		var param struct {
+			Cmd       string `json:"cmd"`
+			YearMonth string `json:"yearmonth"`
+		}
+		_ = json.Unmarshal([]byte(r.Form.Get("param")), &param)
+		if param.Cmd == "getusedetail" {
+			month := param.YearMonth
+			mu.Lock()
+			months = append(months, month)
+			mu.Unlock()
+			writeOuter(w, fmt.Sprintf(`{"result":"0","yearmonth":%q,"monthuse":"63.13","opdtdate":"2026-10-31","dayuselist":[{"date":"2026-10-30","dayuse":1},{"date":"2026-10-31","dayuse":2}]}`, month))
+			return
+		}
+		if param.Cmd == "getbindroom" {
+			writeOuter(w, `{"result":"0","existflag":"1","roomfullname":"<校区>_<楼栋>_<楼层>_<房间>","roomverify":"<roomverify>","detaillist":[{"businesstype":"0","odd":"5.00","status":"1"}]}`)
+			return
+		}
+		http.Error(w, "unexpected request", http.StatusInternalServerError)
+	}))
+	defer srv.Close()
+
+	eng, rec, clock := buildEngine(t, newFakeCampus(model.CampusOnline), defaultSettings(), srv)
+	if err := eng.QueryElectricity(context.Background(), "2026-10"); err != nil {
+		t.Fatalf("QueryElectricity: %v", err)
+	}
+
+	st := eng.Status()
+	if !st.HasReport {
+		t.Fatal("手动查询成功后应有完整报告")
+	}
+	if st.Report.Usage.YearMonth != "2026-10" || st.Report.Usage.MonthUse != 63.13 ||
+		len(st.Report.Usage.Days) != 2 || st.Report.Status.Balance != 5 ||
+		st.Report.Status.EstimatedDays == nil || *st.Report.Status.EstimatedDays != 3 {
+		t.Errorf("报告未完整更新: %+v", st.Report)
+	}
+	if got, want := st.LastCheckedAt, clock.Now(); !got.Equal(want) {
+		t.Errorf("LastCheckedAt = %v, want %v", got, want)
+	}
+	if st.LastError != "" {
+		t.Errorf("成功应清空 LastError, got %q", st.LastError)
+	}
+	if rec.Count() != 0 {
+		t.Errorf("历史月份查询不应告警, got %d 次", rec.Count())
+	}
+	mu.Lock()
+	gotMonths := append([]string(nil), months...)
+	mu.Unlock()
+	if len(gotMonths) != 1 || gotMonths[0] != "2026-10" {
+		t.Errorf("getusedetail 月份 = %v, want [2026-10]", gotMonths)
+	}
+
+	// 手动查询不改告警状态：同一引擎的默认刷新仍应发出首次低余额提醒。
+	if err := eng.PollOnce(context.Background()); err != nil {
+		t.Fatalf("默认 PollOnce: %v", err)
+	}
+	if rec.Count() != 1 {
+		t.Errorf("PollOnce 应保留告警, got %d 次", rec.Count())
+	}
+}
+
+// 手动查询失败只写脱敏错误，保留旧报告与检查时间，不推进退避。
+func TestQueryElectricityFailurePreservesReportAndBackoff(t *testing.T) {
+	srv := electricityServer(t, 50, 1)
+	eng, rec, _ := buildEngine(t, newFakeCampus(model.CampusOnline), defaultSettings(), srv)
+	if err := eng.QueryElectricity(context.Background(), "2026-11"); err != nil {
+		t.Fatalf("准备旧报告: %v", err)
+	}
+	before := eng.Status()
+
+	eng.ReportError(model.NewError(model.CodeNetworkDown, "待清除的轮询错误"))
+	if err := eng.QueryElectricity(context.Background(), "2026-10"); err != nil {
+		t.Fatalf("再次查询: %v", err)
+	}
+	if eng.Status().LastError != "" {
+		t.Error("手动查询成功应清除旧 LastError")
+	}
+
+	eng.SetClock(porttest.NewFakeClock(time.Date(2026, 11, 6, 12, 0, 0, 0, time.Local)))
+	err := eng.QueryElectricity(context.Background(), "invalid")
+	if err == nil {
+		t.Fatal("非法月份应返回错误")
+	}
+	st := eng.Status()
+	if st.LastError != model.CodeMessage(model.CodeOf(err)) || strings.Contains(st.LastError, "invalid") {
+		t.Errorf("LastError 应只保留脱敏领域文案: %q", st.LastError)
+	}
+	if !st.LastCheckedAt.Equal(before.LastCheckedAt) {
+		t.Errorf("失败不应修改 LastCheckedAt: %v", st.LastCheckedAt)
+	}
+	if st.Report.Usage.YearMonth != "2026-10" || len(st.Report.Usage.Days) != 1 {
+		t.Errorf("失败不应覆盖已有报告: %+v", st.Report)
+	}
+	if rec.Count() != 0 {
+		t.Errorf("手动查询不应发送通知, got %d 次", rec.Count())
+	}
+}
+
+// 手动查询与自动模式无关，不应触发校园网前置认证。
+func TestQueryElectricityDoesNotRunCampusPreflight(t *testing.T) {
+	campus := newFakeCampus(model.CampusUnauth)
+	settings := defaultSettings()
+	settings.AutoMode = true
+	srv := electricityServer(t, 50, 1)
+	eng, _, _ := buildEngine(t, campus, settings, srv)
+
+	if err := eng.QueryElectricity(context.Background(), "2026-10"); err != nil {
+		t.Fatalf("QueryElectricity: %v", err)
+	}
+	login, logout, relogin, ensure := campus.counts()
+	if login != 0 || logout != 0 || relogin != 0 || ensure != 0 {
+		t.Errorf("手动月份查询不得触发校园网动作: login=%d logout=%d relogin=%d ensure=%d",
+			login, logout, relogin, ensure)
+	}
+}
+
+func TestEngineDeps(t *testing.T) {
+	srv := electricityServer(t, 50, 1)
+	eng, _, _ := buildEngine(t, newFakeCampus(model.CampusOnline), defaultSettings(), srv)
+	deps := eng.Deps()
+	if deps.HTTP == nil || deps.Store == nil || deps.ConfigStore == nil || deps.Clock == nil ||
+		deps.ElectricityEndpoint != srv.URL || deps.DefaultCustomerCode != "3126" {
+		t.Errorf("Deps 应返回已组装端口: %+v", deps)
+	}
+}
+
 // 跌破阈值只提醒一次（验收 7）。
 func TestPollAlertsOncePerThreshold(t *testing.T) {
 	campus := newFakeCampus(model.CampusOnline)
@@ -285,6 +421,95 @@ func TestPollAlertsOncePerThreshold(t *testing.T) {
 	last, _ := rec.Last()
 	if !strings.Contains(last.Body, "数据截至") {
 		t.Errorf("通知正文必须含「数据截至」: %q", last.Body)
+	}
+}
+
+// 三个入口（常驻循环 / 托盘按钮 / 刷新全部）可能同时触发 PollOnce：
+// 并发不得重复查询出两次同阈值告警（配合 -race 检测 alertState 竞争）。
+func TestPollOnceConcurrentNotifiesOnce(t *testing.T) {
+	campus := newFakeCampus(model.CampusOnline)
+	srv := electricityServer(t, 5, 1)
+	eng, rec, _ := buildEngine(t, campus, defaultSettings(), srv)
+
+	var wg sync.WaitGroup
+	for i := 0; i < 8; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			if err := eng.PollOnce(context.Background()); err != nil {
+				t.Errorf("PollOnce: %v", err)
+			}
+		}()
+	}
+	wg.Wait()
+	if rec.Count() != 1 {
+		t.Fatalf("并发轮询同一阈值应只提醒一次, got %d 次", rec.Count())
+	}
+}
+
+// 凭据类月份查询错误必须保留「设置…」修复指引，不能被标准码文案吃掉。
+func TestQueryElectricityCredentialErrorKeepsSettingsHint(t *testing.T) {
+	srv := electricityServer(t, 50, 1)
+	settings := defaultSettings()
+	settings.StudentID = ""
+	eng, _, _ := buildEngine(t, newFakeCampus(model.CampusOnline), settings, srv)
+
+	if err := eng.QueryElectricity(context.Background(), "2026-10"); err == nil {
+		t.Fatal("缺学号应报错")
+	}
+	if got := eng.Status().LastError; !strings.Contains(got, "设置") {
+		t.Errorf("凭据错误应保留修复指引: %q", got)
+	}
+}
+
+// 电费成功（默认轮询与月份查询）不得抹掉校园网动作失败原因：
+// 两个域是独立链路，错误各归各管（docs/windows.md §3.4）。
+func TestElectricitySuccessKeepsCampusError(t *testing.T) {
+	campus := newFakeCampus(model.CampusUnauth)
+	campus.loginErr = model.NewError(model.CodeUpstreamRejected, "<校园网凭据错误>")
+	srv := electricityServer(t, 50, 1)
+	eng, _, _ := buildEngine(t, campus, defaultSettings(), srv)
+
+	if err := eng.DoCampus(context.Background(), desktop.ActionLogin); err == nil {
+		t.Fatal("登录应失败")
+	}
+	want := eng.Status().CampusError
+	if want == "" {
+		t.Fatal("登录失败应记录校园网错误")
+	}
+
+	if err := eng.QueryElectricity(context.Background(), "2026-10"); err != nil {
+		t.Fatalf("QueryElectricity: %v", err)
+	}
+	if got := eng.Status(); got.CampusError != want || got.LastError != want || got.ElectricityError != "" {
+		t.Errorf("月份查询成功不得抹掉校园网错误: %+v", got)
+	}
+
+	if err := eng.PollOnce(context.Background()); err != nil {
+		t.Fatalf("PollOnce: %v", err)
+	}
+	if got := eng.Status(); got.CampusError != want || got.LastError != want || got.ElectricityError != "" {
+		t.Errorf("手动模式轮询成功不得抹掉校园网错误: %+v", got)
+	}
+}
+
+// 已取消的 ctx（进程退出 / 换账号）不得发出查询，也不得计进失败退避。
+func TestPollOnceCanceledContextSkipsQuery(t *testing.T) {
+	var hits atomic.Int32
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		hits.Add(1)
+		writeOuter(w, `{"result":"0"}`)
+	}))
+	t.Cleanup(srv.Close)
+	eng, _, _ := buildEngine(t, newFakeCampus(model.CampusOnline), defaultSettings(), srv)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	if err := eng.PollOnce(ctx); !errors.Is(err, context.Canceled) {
+		t.Fatalf("取消的轮询应直接返回 context.Canceled, got %v", err)
+	}
+	if hits.Load() != 0 {
+		t.Errorf("取消的轮询不得发出请求, got %d 次", hits.Load())
 	}
 }
 
@@ -319,12 +544,14 @@ func TestPollFailureDoesNotNotify(t *testing.T) {
 func TestTrayLineText(t *testing.T) {
 	days := 3
 	st := desktop.Status{
-		Campus:        model.CampusOnline,
-		HasReport:     true,
-		Balance:       35.99,
-		Unit:          "度",
-		CollectedAt:   time.Date(2026, 11, 4, 22, 41, 37, 0, time.Local).Format(time.RFC3339),
-		EstimatedDays: &days,
+		CampusStatus: model.CampusStatus{State: model.CampusOnline},
+		HasReport:    true,
+		Report: model.ElectricityReport{Status: model.ElectricityStatus{
+			Balance:       35.99,
+			Unit:          "度",
+			CollectedAt:   time.Date(2026, 11, 4, 22, 41, 37, 0, time.Local).Format(time.RFC3339),
+			EstimatedDays: &days,
+		}},
 	}
 	campus, power := desktop.TrayLine(st)
 	if campus != "校园网：已在线" {
@@ -357,8 +584,10 @@ func TestTrayLineText(t *testing.T) {
 // 上游长文案（如「正在进行外网拨号请稍候…」）不得进单行的菜单状态行。
 func TestTrayLineDropsUpstreamMessage(t *testing.T) {
 	st := desktop.Status{
-		Campus:    model.CampusOnline,
-		CampusMsg: "正在进行外网拨号请稍候…",
+		CampusStatus: model.CampusStatus{
+			State:    model.CampusOnline,
+			ErrorMsg: "正在进行外网拨号请稍候…",
+		},
 	}
 	campus, _ := desktop.TrayLine(st)
 	if campus != "校园网：已在线" {
@@ -374,7 +603,12 @@ func TestTrayLineStates(t *testing.T) {
 		model.CampusOffline: "不在校园网",
 	}
 	for state, want := range cases {
-		campus, _ := desktop.TrayLine(desktop.Status{Campus: state})
+		campus, _ := desktop.TrayLine(desktop.Status{
+			CampusStatus: model.CampusStatus{State: state},
+		})
+		if got := desktop.CampusStateText(state); got != want {
+			t.Errorf("CampusStateText(%q) = %q, want %q", state, got, want)
+		}
 		if !strings.Contains(campus, want) {
 			t.Errorf("state %q → %q, want 含 %q", state, campus, want)
 		}
@@ -470,8 +704,8 @@ func TestProbeCampusDoesNotLogin(t *testing.T) {
 		t.Errorf("探测不得触发任何认证动作: login=%d logout=%d relogin=%d ensure=%d",
 			login, logout, relogin, ensure)
 	}
-	if st := eng.Status(); st.CampusCheckedAt.IsZero() {
-		t.Error("探测后应记录 CampusCheckedAt")
+	if st := eng.Status(); st.CampusStatus.CheckedAt == "" {
+		t.Error("探测后应记录 CampusStatus.CheckedAt")
 	}
 	// 探测时刻只存不展：菜单行就是简短状态。
 	if campus, _ := desktop.TrayLine(eng.Status()); campus != "校园网：未认证" {
@@ -589,15 +823,15 @@ func TestDoCampusRefreshesStatus(t *testing.T) {
 	if err := eng.DoCampus(context.Background(), desktop.ActionLogin); err != nil {
 		t.Fatalf("ActionLogin: %v", err)
 	}
-	if st := eng.Status(); st.Campus != model.CampusOnline {
-		t.Errorf("登录后状态 = %q, want online", st.Campus)
+	if st := eng.Status(); st.CampusStatus.State != model.CampusOnline {
+		t.Errorf("登录后状态 = %q, want online", st.CampusStatus.State)
 	}
 
 	if err := eng.DoCampus(context.Background(), desktop.ActionLogout); err != nil {
 		t.Fatalf("ActionLogout: %v", err)
 	}
-	if st := eng.Status(); st.Campus != model.CampusUnauth {
-		t.Errorf("下线后状态 = %q, want unauth", st.Campus)
+	if st := eng.Status(); st.CampusStatus.State != model.CampusUnauth {
+		t.Errorf("下线后状态 = %q, want unauth", st.CampusStatus.State)
 	}
 }
 
@@ -631,8 +865,8 @@ func TestProbeCampusNetworkFailureIsOffline(t *testing.T) {
 		t.Errorf("state = %q, want offline", state)
 	}
 	st := eng.Status()
-	if st.Campus != model.CampusOffline || st.LastError != "" {
-		t.Errorf("offline 不应写错误提示: state=%q LastError=%q", st.Campus, st.LastError)
+	if st.CampusStatus.State != model.CampusOffline || st.LastError != "" {
+		t.Errorf("offline 不应写错误提示: state=%q LastError=%q", st.CampusStatus.State, st.LastError)
 	}
 	login, logout, relogin, ensure := campus.counts()
 	if login != 0 || logout != 0 || relogin != 0 || ensure != 0 {
@@ -680,7 +914,7 @@ func TestRunCampusProbeOnlyProbes(t *testing.T) {
 	// 超时判断只用固定次数的轮询，不读取系统时间（AGENTS §7）。
 	checked := false
 	for i := 0; i < 1000; i++ {
-		if !eng.Status().CampusCheckedAt.IsZero() {
+		if eng.Status().CampusStatus.CheckedAt != "" {
 			checked = true
 			break
 		}

@@ -39,7 +39,7 @@
 - 新增第四个功能域、多学校 / 多账号抽象、代查他人数据。
 - 电费充值、绑房间、解绑房间。
 - 浏览器内核方案（WebView / CEF / Wails / PWA / Electron / Tauri）。
-- Windows 课表主界面、Android 后台服务 / 自启动 / 桌面小组件、统计图表、TUI / GUI 富文本输出。
+- Android 后台服务 / 自启动 / 桌面小组件、统计图表、TUI / GUI 富文本输出（CLI 端）。Windows 主窗口按 [windows.md](docs/windows.md) 提供五页原生界面。
 - 学校系统自身的漏洞与账号问题。
 
 范围依据见各端文档的「不做的事」一节与 [架构设计](docs/architecture.md)。

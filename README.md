@@ -21,28 +21,28 @@
 
 ## 三端
 
-**CLI 被问、Windows 主动说、Android 随手看。** 差异集中在触发器、呈现与平台能力，业务逻辑一份。
+**CLI 被问、Windows 主窗看且托盘主动说、Android 随手看。** 差异集中在触发器、呈现与平台能力，业务逻辑一份。
 
 | 端 | 形态 | 给谁用 | 能做什么 |
 |---|---|---|---|
 | **CLI**（linux / darwin） | 单二进制 `kemaolife` + 子命令 + Agent Skill | agent | 课表四维度查询（每次先刷新，断网回落旧快照）、电费余额与每日用量一次查 |
-| **Windows** | `kemaolife-desktop.exe` 原生托盘常驻 | 人 | 电费轮询（默认 4 小时）+ 阈值提醒、校园网判态与手动 / 自动认证、开机自启一次 |
+| **Windows** | `kemaolife-desktop.exe` 原生主窗口 + 托盘常驻 | 人 | 今天 / 课表 / 电费 / 校园网 / 设置五页；完整周课表缓存切周与独立刷新、电费轮询（默认 4 小时）+ 阈值提醒、校园网判态与手动 / 自动认证、开机自启一次 |
 | **Android** | Kotlin / Compose 原生 App，三 tab | 人 | 单页周视图 + 横向翻页、WakeUp CSV 导出、电费与校园网手动动作、取件码跳转；缓存优先，无后台 |
 
-三端一律原生 UI，不引入浏览器内核。Windows 不做课表主界面，Android 不加后台服务，CLI 不做 GUI。CLI 与桌面端不共享配置与凭据存储。
+三端一律原生 UI，不引入浏览器内核。Windows 采用主窗口 + 托盘，Android 不加后台服务，CLI 不做 GUI。CLI 与桌面端不共享配置与凭据存储。
 
 ## 快速开始
 
 从 [Releases](https://github.com/EchoPing07/kemaolife/releases) 下载对应产物（五类 12 个包，清单见 [构建与发布](./docs/release.md)）：
 
 - **CLI**：解压 tar.gz 后 `install -m 0755 kemaolife ~/.local/bin/kemaolife`，然后 `kemaolife config init` → `kemaolife --json timetable`。详见 [CLI 手册](./docs/cli.md)。
-- **Windows**：解压 zip 后双击 `install.bat`，无需管理员权限。详见 [Windows 托盘](./docs/windows.md)。
+- **Windows**：解压 zip 后双击 `install.bat`，无需管理员权限。详见 [Windows 主窗口与托盘](./docs/windows.md)。
 - **Android**：下载对应架构的 APK 直接安装（多数手机用 `arm64-v8a`），新版覆盖安装即可保留凭据。详见 [Android App](./docs/android.md)。
 
 ## 它怎么工作
 
 ```
-教务系统 ──CAS 登录──► 快照 ──本地计算──► 课表（CLI 每次查询先刷新；Android 查询纯读缓存）
+教务系统 ──CAS 登录──► 快照 ──本地计算──► 课表（CLI 每次查询先刷新；Windows / Android 查询纯读缓存，Windows 启动及手动独立同步）
 水电后端 ──余额 + 每日用量──► 可用天数估算 ──►（Windows）阈值提醒
 Portal   ──探测 302──► 判态 ──► 登录 / 下线 / 重登（Windows 手动 / 自动；Android 全手动）
 ```
@@ -54,7 +54,7 @@ Portal   ──探测 302──► 判态 ──► 登录 / 下线 / 重登（W
 | 文档 | 内容 |
 |---|---|
 | [CLI 手册](./docs/cli.md) | 安装、配置、命令、输出解读、macOS 注意事项 |
-| [Windows 托盘](./docs/windows.md) | 安装、托盘行为、轮询与告警规则、设置 |
+| [Windows 主窗口与托盘](./docs/windows.md) | 安装、五页主窗口、课表缓存与刷新、托盘行为、轮询与告警规则、设置 |
 | [Android App](./docs/android.md) | 安装、缓存优先与触发策略、三 tab 功能 |
 | [对外契约参考](./docs/contract.md) | 命名、CLI 命令与退出码、JSON 信封、门面 `op`、DTO、错误码 |
 | [架构设计](./docs/architecture.md) | 分层、端口、用例、gomobile 复用、依赖约束 |
