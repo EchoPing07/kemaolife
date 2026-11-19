@@ -135,6 +135,8 @@
     <string name="logs_mask_hint">记录只保存在本机内存，关闭开关或退出应用即清除；内容含 Cookie 与账号信息，请勿截图外发。</string>
     <string name="about_version">版本</string>
     <string name="about_system">系统</string>
+    <string name="about_website">官网</string>
+    <string name="about_website_value">echoping07.github.io/kemaolife</string>
     <string name="about_license">开源许可</string>
     <string name="about_license_value">MIT License</string>
 
