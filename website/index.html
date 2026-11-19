@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <meta name="description" content="科贸生活 KeMao Life：课表日程、宿舍电费、校园网认证一体。Android / Windows 托盘 / Linux macOS CLI 三端原生，轻量零打扰。">
+  <meta name="description" content="科贸生活 KeMao Life：课表日程、宿舍电费、校园网认证一体。Android / Windows 托盘 / Linux MacOS CLI 三端原生，轻量零打扰。">
   <meta name="theme-color" content="#F3F4FA">
   <link rel="icon" type="image/jpeg" href="assets/icon.jpg">
   <link rel="apple-touch-icon" href="assets/icon.jpg">
@@ -15,79 +15,7 @@
   <meta property="og:image" content="https://echoping07.github.io/kemaolife/assets/icon.jpg">
   <title>科贸生活 · KeMao Life</title>
   <link rel="stylesheet" href="assets/site.css">
-  <style>
-    :root {
-      --monet-bg: #F3F4FA;
-      --monet-ink: #1A1B22;
-    }
-    body {
-      background-color: var(--monet-bg);
-      color: var(--monet-ink);
-      font-family: 'DM Sans', 'PingFang SC', 'Microsoft YaHei', 'Noto Sans CJK SC', -apple-system, BlinkMacSystemFont, sans-serif;
-      font-feature-settings: 'cv02', 'cv03', 'cv04', 'cv11';
-      -webkit-font-smoothing: antialiased;
-      -moz-osx-font-smoothing: grayscale;
-      overflow-x: hidden;
-    }
-    .monet-canvas {
-      background:
-        radial-gradient(55% 40% at 50% 0%, rgba(224, 225, 255, 0.55) 0%, rgba(243, 244, 250, 0) 100%),
-        #F3F4FA;
-    }
-    .monet-card {
-      background: #FFFFFF;
-      box-shadow:
-        0 1px 2px rgba(26, 27, 34, 0.03),
-        0 12px 32px -8px rgba(74, 83, 166, 0.07);
-    }
-    .nav-active {
-      background-color: #FFFFFF;
-      color: #1A1B22;
-      box-shadow: 0 1px 3px rgba(26, 27, 34, 0.08);
-    }
-    .os-active {
-      background-color: #4A53A6;
-      color: #FFFFFF;
-      box-shadow: 0 2px 8px rgba(74, 83, 166, 0.25);
-    }
-    .view-transition {
-      animation: viewEnter 0.2s cubic-bezier(0.16, 1, 0.3, 1);
-    }
-    @keyframes viewEnter {
-      from { opacity: 0; transform: translateY(5px); }
-      to { opacity: 1; transform: translateY(0); }
-    }
-    .win32-input {
-      background: #FFFFFF;
-      border: 1px solid #8A8A8A;
-      height: 22px;
-      padding: 0 6px;
-      font-size: 12px;
-      color: #000000;
-    }
-    .win32-btn {
-      background: #E5E5E5;
-      border: 1px solid #ADADAD;
-      height: 25px;
-      font-size: 12px;
-      color: #000000;
-    }
-    html {
-      scrollbar-width: thin;
-      scrollbar-color: #C7C6D4 transparent;
-    }
-    *::-webkit-scrollbar { width: 8px; height: 8px; }
-    *::-webkit-scrollbar-track { background: transparent; }
-    *::-webkit-scrollbar-thumb { background: #C7C6D4; border-radius: 8px; }
-    *::-webkit-scrollbar-thumb:hover { background: #767683; }
-    h1, h2, h3, .font-display {
-      font-family: 'Plus Jakarta Sans', 'PingFang SC', 'Microsoft YaHei', 'Noto Sans CJK SC', -apple-system, sans-serif;
-      letter-spacing: -0.025em;
-    }
-    .tabular-nums {
-      font-variant-numeric: tabular-nums;
-    }
-  </style>
+  <link rel="stylesheet" href="assets/app.css">
 </head>
 <body class="monet-canvas min-h-screen flex flex-col selection:bg-monet-primaryContainer selection:text-monet-onPrimaryContainer">
 
@@ -133,7 +61,7 @@
             <path d="M12 12l8 -4.5" /><path d="M12 12l0 9" /><path d="M12 12l-8 -4.5" />
             <path d="M16 5.25l-8 4.5" />
           </svg>
-          <span class="hidden lg:inline">发行包</span>
+          <span class="header-action-label">发行包</span>
         </button>
         <a href="https://github.com/EchoPing07/kemaolife" target="_blank" rel="noopener noreferrer" data-squircle="10" class="inline-flex items-center gap-1.5 text-xs font-medium px-1 sm:px-2.5 py-1.5 shrink-0 text-monet-onSurfaceVariant hover:text-monet-onSurface hover:bg-monet-high transition-colors" title="GitHub 项目仓库">
           <!-- Tabler: brand-github -->
@@ -141,9 +69,9 @@
             <path stroke="none" d="M0 0h24v24H0z" fill="none"/>
             <path d="M9 19c-4.3 1.4 -4.3 -2.5 -6 -3m12 5v-3.5c0 -1 .1 -1.4 -.5 -2c2.8 -.3 5.5 -1.4 5.5 -6a4.6 4.6 0 0 0 -1.3 -3.2a4.2 4.2 0 0 0 -.1 -3.2s-1.1 -.3 -3.5 1.3a12.3 12.3 0 0 0 -6.2 0c-2.4 -1.6 -3.5 -1.3 -3.5 -1.3a4.2 4.2 0 0 0 -.1 3.2a4.6 4.6 0 0 0 -1.3 3.2c0 4.6 2.7 5.7 5.5 6c-.6 .6 -.6 1.2 -.5 2v3.5" />
           </svg>
-          <span class="hidden sm:inline">项目仓库</span>
+          <span class="header-action-label">项目仓库</span>
         </a>
-        <a href="https://qm.qq.com/cgi-bin/qm/qr?k=SZIDA34vizNLSFVDQDj664hp5Sx8esJ0&jump_from=webapi&authKey=LuiwtF38kLmo0rR1cS5ASiWB+3h2ajI0Gbrvuc5zoqKYxzLgoxIv716NIjnLiLY1" target="_blank" rel="noopener noreferrer" data-squircle="10" class="inline-flex items-center gap-1.5 text-xs font-medium px-1 sm:px-2.5 py-1.5 shrink-0 text-monet-onSurfaceVariant hover:text-monet-onSurface hover:bg-monet-high transition-colors" title="加入 QQ 交流群：科贸生活 | KeMao Life">
+        <a href="https://qm.qq.com/cgi-bin/qm/qr?k=SZIDA34vizNLSFVDQDj664hp5Sx8esJ0&jump_from=webapi&authKey=LuiwtF38kLmo0rR1cS5ASiWB+3h2ajI0Gbrvuc5zoqKYxzLgoxIv716NIjnLiLY1" target="_blank" rel="noopener noreferrer" data-squircle="10" class="inline-flex items-center gap-1.5 text-xs font-medium px-1 sm:px-2.5 py-1.5 shrink-0 text-monet-onSurfaceVariant hover:text-monet-onSurface hover:bg-monet-high transition-colors" title="加入交流群：科贸生活 | KeMao Life">
           <!-- Tabler: brand-qq -->
           <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
             <path stroke="none" d="M0 0h24v24H0z" fill="none"/>
@@ -157,7 +85,7 @@
             <path d="M12.75 7a1 1 0 1 0 2 0a1 1 0 1 0 -2 0" />
             <path d="M9.25 7a1 1 0 1 0 2 0a1 1 0 1 0 -2 0" />
           </svg>
-          <span class="hidden sm:inline">QQ交流群</span>
+          <span class="header-action-label">交流群</span>
         </a>
       </div>
     </div>
@@ -188,7 +116,7 @@
         <!-- Unified Download Dock with Explicit Edition Type (Mobile / Desktop / CLI) -->
         <div data-squircle="28" class="monet-card p-5 sm:p-6 space-y-4 text-left">
           <!-- OS Selector Row -->
-          <div data-squircle="16" class="grid grid-cols-4 gap-1 p-1 bg-monet-bg">
+          <div data-squircle="16" class="os-switch grid grid-cols-4 gap-1 p-1 bg-monet-bg">
             <button type="button" data-os="android" data-squircle="12" class="os-pill flex items-center justify-center gap-1.5 py-2 text-xs font-medium transition-all">
               <!-- Tabler: brand-android -->
               <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
@@ -217,7 +145,7 @@
                 <path d="M8 9v1" /><path d="M16 9v1" /><path d="M8 15c1.333 1 2.667 1.5 4 1.5s2.667 -.5 4 -1.5" />
                 <path d="M13 4c-.667 2 -1.333 4.667 -2 8h2c0 3 .333 5.667 1 8" />
               </svg>
-              <span>macOS</span>
+              <span>MacOS</span>
             </button>
             <button type="button" data-os="linux" data-squircle="12" class="os-pill flex items-center justify-center gap-1.5 py-2 text-xs font-medium transition-all">
               <!-- Tabler (unmerged brand-linux / tux) -->
@@ -234,7 +162,7 @@
             <div class="flex items-center gap-2">
               <span class="text-xs text-monet-onSurfaceVariant">版本形态</span>
               <span id="editionTypeBadge" data-squircle="8" class="px-2 py-0.5 text-xs font-semibold bg-monet-primaryContainer text-monet-primary">
-                Mobile · 移动客户端
+                Mobile · 移动端
               </span>
             </div>
             <span id="packageFileName" class="text-[11px] font-mono text-monet-outline hidden sm:inline">
@@ -243,7 +171,7 @@
           </div>
 
           <!-- Primary CTA + Variant Select -->
-          <div class="flex flex-col sm:flex-row items-stretch sm:items-center gap-2.5">
+          <div class="flex download-cta-row gap-2.5">
             <a id="primaryDownloadLink" href="https://github.com/EchoPing07/kemaolife/releases/download/v0.5.5/kemaolife_0.5.5_android_arm64-v8a.apk" target="_blank" rel="noopener noreferrer" data-squircle="16" class="flex-1 inline-flex items-center justify-center gap-2 px-5 py-3.5 bg-monet-primary hover:bg-monet-primaryHover text-white font-medium text-sm transition-colors">
               <!-- Tabler: download -->
               <svg xmlns="http://www.w3.org/2000/svg" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -256,7 +184,7 @@
 
             <!-- Custom Monet Squircle Architecture Trigger -->
             <div class="relative" id="archDropdownWrap">
-              <button id="archDropdownBtn" type="button" data-squircle="16" class="w-full sm:w-auto inline-flex items-center justify-between gap-2 px-4 py-3.5 bg-monet-high/80 hover:bg-monet-high text-xs font-mono font-medium text-monet-onSurface transition-colors">
+              <button id="archDropdownBtn" type="button" data-squircle="16" class="inline-flex items-center justify-between gap-2 px-4 py-3.5 bg-monet-high/80 hover:bg-monet-high text-xs font-mono font-medium text-monet-onSurface transition-colors">
                 <span id="archDropdownLabel">arm64-v8a</span>
                 <!-- Tabler: chevron-down -->
                 <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="text-monet-onSurfaceVariant">
@@ -739,16 +667,16 @@
             <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
               <path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M8 9l3 3l-3 3" /><path d="M13 15l3 0" /><path d="M3 4m0 2a2 2 0 0 1 2 -2h14a2 2 0 0 1 2 2v12a2 2 0 0 1 -2 2h-14a2 2 0 0 1 -2 -2z" />
             </svg>
-            <span>CLI · Linux / macOS 命令行与 AI 扩展</span>
+            <span>CLI · Linux / MacOS 命令行与 AI 扩展</span>
           </div>
           <h2 class="text-2xl sm:text-3xl font-bold tracking-tight text-monet-onSurface">高效命令行，原生赋能 AI 助手。</h2>
         </div>
         <div class="flex flex-wrap items-center gap-2">
           <a href="https://github.com/EchoPing07/kemaolife/releases/download/v0.5.5/kemaolife_0.5.5_linux_amd64.tar.gz" target="_blank" rel="noopener noreferrer" data-squircle="14" class="px-4 py-2.5 bg-monet-primary hover:bg-monet-primaryHover text-white text-xs font-medium transition-colors">
-            Linux CLI (amd64)
+            Linux CLI 端
           </a>
           <a href="https://github.com/EchoPing07/kemaolife/releases/download/v0.5.5/kemaolife_0.5.5_darwin_arm64.tar.gz" target="_blank" rel="noopener noreferrer" data-squircle="14" class="px-4 py-2.5 bg-white text-monet-onSurface text-xs font-medium transition-colors">
-            macOS CLI (arm64)
+            MacOS CLI 端
           </a>
           <a href="https://github.com/EchoPing07/kemaolife/releases/download/v0.5.5/kemaolife-skill_0.5.5.zip" target="_blank" rel="noopener noreferrer" data-squircle="14" class="px-4 py-2.5 bg-monet-primaryContainer text-monet-primary text-xs font-medium transition-colors">
             AI Skill 包
@@ -835,451 +763,6 @@
     </div>
   </div>
 
-  <script>
-    const RELEASE_BASE = 'https://github.com/EchoPing07/kemaolife/releases/download/v0.5.5/';
-
-    const OS_CONFIG = {
-      android: {
-        name: 'Android',
-        navTarget: 'mobile',
-        navLabel: '探索 Mobile 端特性',
-        hint: '适用于 Android 7.0 及以上设备，支持无缝覆盖更新',
-        packages: [
-          {
-            edition: 'Mobile · 移动客户端',
-            arch: 'arm64-v8a', label: 'arm64-v8a（推荐）',
-            file: 'kemaolife_0.5.5_android_arm64-v8a.apk',
-            btnText: 'Mobile 移动端'
-          },
-          {
-            edition: 'Mobile · 移动客户端',
-            arch: 'armeabi-v7a', label: 'armeabi-v7a（32位）',
-            file: 'kemaolife_0.5.5_android_armeabi-v7a.apk',
-            btnText: 'Mobile 移动端 (32位)'
-          },
-          {
-            edition: 'Mobile · 移动客户端',
-            arch: 'x86_64', label: 'x86_64（模拟器）',
-            file: 'kemaolife_0.5.5_android_x86_64.apk',
-            btnText: 'Mobile 模拟器 (x86_64)'
-          },
-          {
-            edition: 'Mobile · 移动客户端',
-            arch: 'x86', label: 'x86（模拟器）',
-            file: 'kemaolife_0.5.5_android_x86.apk',
-            btnText: 'Mobile 模拟器 (x86)'
-          }
-        ]
-      },
-      windows: {
-        name: 'Windows',
-        navTarget: 'desktop',
-        navLabel: '探索 Desktop 端特性',
-        hint: '解压后运行 install.bat 即可完成部署并常驻系统托盘',
-        packages: [
-          {
-            edition: 'Desktop · 桌面托盘端',
-            arch: 'amd64', label: 'amd64（推荐）',
-            file: 'kemaolife-agent_0.5.5_windows_amd64.zip',
-            btnText: 'Desktop 桌面端'
-          },
-          {
-            edition: 'Desktop · 桌面托盘端',
-            arch: 'arm64', label: 'arm64（ARM）',
-            file: 'kemaolife-agent_0.5.5_windows_arm64.zip',
-            btnText: 'Desktop 桌面端 (ARM64)'
-          }
-        ]
-      },
-      macos: {
-        name: 'macOS',
-        navTarget: 'cli',
-        navLabel: '探索 CLI 端特性',
-        hint: '单文件原生构建，Apple Silicon 机型请选择 arm64 版本',
-        packages: [
-          {
-            edition: 'CLI · 命令行端',
-            arch: 'arm64', label: 'arm64（M系列芯片）',
-            file: 'kemaolife_0.5.5_darwin_arm64.tar.gz',
-            btnText: 'CLI 命令行 (macOS arm64)'
-          },
-          {
-            edition: 'CLI · 命令行端',
-            arch: 'amd64', label: 'amd64（Intel）',
-            file: 'kemaolife_0.5.5_darwin_amd64.tar.gz',
-            btnText: 'CLI 命令行 (macOS amd64)'
-          },
-          {
-            edition: 'CLI · AI Skill 扩展',
-            arch: 'Skill', label: 'Agent Skill 包',
-            file: 'kemaolife-skill_0.5.5.zip',
-            btnText: 'CLI 技能包 (.zip)'
-          }
-        ]
-      },
-      linux: {
-        name: 'Linux',
-        navTarget: 'cli',
-        navLabel: '探索 CLI 端特性',
-        hint: '零外部依赖静态二进制，支持终端直查与 AI Agent 接入',
-        packages: [
-          {
-            edition: 'CLI · 命令行端',
-            arch: 'amd64', label: 'amd64（推荐）',
-            file: 'kemaolife_0.5.5_linux_amd64.tar.gz',
-            btnText: 'CLI 命令行 (Linux amd64)'
-          },
-          {
-            edition: 'CLI · 命令行端',
-            arch: 'arm64', label: 'arm64',
-            file: 'kemaolife_0.5.5_linux_arm64.tar.gz',
-            btnText: 'CLI 命令行 (Linux arm64)'
-          },
-          {
-            edition: 'CLI · 命令行端',
-            arch: 'armv7', label: 'armv7',
-            file: 'kemaolife_0.5.5_linux_armv7.tar.gz',
-            btnText: 'CLI 命令行 (Linux armv7)'
-          },
-          {
-            edition: 'CLI · AI Skill 扩展',
-            arch: 'Skill', label: 'Agent Skill 包',
-            file: 'kemaolife-skill_0.5.5.zip',
-            btnText: 'CLI 技能包 (.zip)'
-          }
-        ]
-      }
-    };
-
-    const state = {
-      activeView: 'home',
-      selectedOS: 'android',
-      selectedPkgIndex: 0
-    };
-
-    function detectOSFromUA() {
-      const ua = navigator.userAgent.toLowerCase();
-      if (ua.includes('android')) return 'android';
-      if (ua.includes('win')) return 'windows';
-      if (ua.includes('mac')) return 'macos';
-      if (ua.includes('linux')) return 'linux';
-      return 'android';
-    }
-
-    function matchPkgIndexByArch(os, archHint) {
-      const pkgs = OS_CONFIG[os].packages;
-      if (!archHint) return 0;
-      const idx = pkgs.findIndex(p => p.arch && p.arch.toLowerCase() === archHint.toLowerCase());
-      return idx >= 0 ? idx : 0;
-    }
-
-    function detectArchHeuristic(os) {
-      const ua = navigator.userAgent.toLowerCase();
-      const plat = (navigator.platform || '').toLowerCase();
-      const combined = ua + ' ' + plat;
-
-      if (os === 'android') {
-        if (/x86_64|x64|amd64/.test(combined)) return 'x86_64';
-        if (/i686|i386|x86/.test(combined)) return 'x86';
-        if (/armv7/.test(combined)) return 'armeabi-v7a';
-        return 'arm64-v8a';
-      }
-      if (os === 'windows') {
-        if (/arm64|aarch64/.test(combined)) return 'arm64';
-        return 'amd64';
-      }
-      if (os === 'linux') {
-        if (/aarch64|arm64/.test(combined)) return 'arm64';
-        if (/armv7/.test(combined)) return 'armv7';
-        return 'amd64';
-      }
-      if (os === 'macos') {
-        try {
-          const canvas = document.createElement('canvas');
-          const gl = canvas.getContext('webgl') || canvas.getContext('experimental-webgl');
-          if (gl) {
-            const dbg = gl.getExtension('WEBGL_debug_renderer_info');
-            if (dbg) {
-              const renderer = (gl.getParameter(dbg.UNMASKED_RENDERER_WEBGL) || '').toLowerCase();
-              if (renderer.includes('intel') || renderer.includes('amd radeon')) return 'amd64';
-              if (renderer.includes('apple')) return 'arm64';
-            }
-          }
-        } catch (e) {}
-        return 'arm64';
-      }
-      return '';
-    }
-
-    async function autoDetectEnvironment() {
-      let os = detectOSFromUA();
-      let archHint = detectArchHeuristic(os);
-
-      if (navigator.userAgentData && navigator.userAgentData.getHighEntropyValues) {
-        try {
-          const info = await navigator.userAgentData.getHighEntropyValues(['architecture', 'bitness', 'platform']);
-          const plat = (info.platform || '').toLowerCase();
-          if (plat.includes('android')) os = 'android';
-          else if (plat.includes('win')) os = 'windows';
-          else if (plat.includes('mac')) os = 'macos';
-          else if (plat.includes('linux')) os = 'linux';
-
-          const rawArch = (info.architecture || '').toLowerCase();
-          const bits = info.bitness || '64';
-          if (rawArch === 'arm') {
-            if (os === 'android') archHint = bits === '32' ? 'armeabi-v7a' : 'arm64-v8a';
-            else if (os === 'linux') archHint = bits === '32' ? 'armv7' : 'arm64';
-            else archHint = 'arm64';
-          } else if (rawArch === 'x86') {
-            if (os === 'android') archHint = bits === '32' ? 'x86' : 'x86_64';
-            else archHint = 'amd64';
-          }
-        } catch (e) {}
-      }
-
-      return { os, pkgIndex: matchPkgIndexByArch(os, archHint), archHint };
-    }
-
-    /* Exact port of SmoothCornerShape.kt (n=4 squircle with 16 steps per quadrant) */
-    function buildSquirclePath(w, h, radius) {
-      const maxR = Math.min(w, h) / 2;
-      const r = Math.max(0, Math.min(radius, maxR));
-      if (r <= 0 || w <= 0 || h <= 0) {
-        return `M0,0 L${w},0 L${w},${h} L0,${h} Z`;
-      }
-      const pts = [];
-      const addCorner = (cx, cy, startDeg, endDeg, rad) => {
-        const steps = 16;
-        for (let step = 0; step <= steps; step++) {
-          const deg = startDeg + ((endDeg - startDeg) * step) / steps;
-          const radAngle = (deg * Math.PI) / 180;
-          const c = Math.cos(radAngle);
-          const s = Math.sin(radAngle);
-          const x = cx + rad * Math.sign(c) * Math.pow(Math.abs(c), 0.5);
-          const y = cy + rad * Math.sign(s) * Math.pow(Math.abs(s), 0.5);
-          pts.push(`${x.toFixed(2)},${y.toFixed(2)}`);
-        }
-      };
-      addCorner(r, r, 180, 270, r);
-      addCorner(w - r, r, 270, 360, r);
-      addCorner(w - r, h - r, 0, 90, r);
-      addCorner(r, h - r, 90, 180, r);
-      return 'M' + pts[0] + ' L' + pts.slice(1).join(' L') + ' Z';
-    }
-
-    function applyAllSquircles() {
-      document.querySelectorAll('[data-squircle]').forEach(el => {
-        const r = parseFloat(el.getAttribute('data-squircle')) || 16;
-        el.style.borderRadius = r + 'px';
-        const rect = el.getBoundingClientRect();
-        if (rect.width > 4 && rect.height > 4) {
-          const d = buildSquirclePath(rect.width, rect.height, r);
-          el.style.clipPath = `path('${d}')`;
-        }
-      });
-    }
-
-    function switchView(viewName, updateHash = true) {
-      state.activeView = viewName;
-      ['home', 'mobile', 'desktop', 'cli'].forEach(v => {
-        const el = document.getElementById('view-' + v);
-        if (el) el.classList.toggle('hidden', v !== viewName);
-      });
-      document.querySelectorAll('.nav-tab').forEach(btn => {
-        const isCurrent = btn.getAttribute('data-nav') === viewName;
-        btn.classList.toggle('nav-active', isCurrent);
-        btn.classList.toggle('text-monet-onSurfaceVariant', !isCurrent);
-      });
-      if (updateHash && location.hash !== '#' + viewName) {
-        history.pushState(null, '', '#' + viewName);
-      }
-      window.scrollTo({ top: 0, behavior: 'smooth' });
-      requestAnimationFrame(applyAllSquircles);
-    }
-
-    function renderHomeOS() {
-      const cfg = OS_CONFIG[state.selectedOS];
-      document.querySelectorAll('.os-pill').forEach(btn => {
-        const active = btn.getAttribute('data-os') === state.selectedOS;
-        btn.className = active
-          ? 'os-pill os-active flex items-center justify-center gap-1.5 py-2 text-xs font-medium transition-all'
-          : 'os-pill flex items-center justify-center gap-1.5 py-2 text-xs font-medium text-monet-onSurfaceVariant hover:text-monet-onSurface transition-all';
-      });
-
-      const pkg = cfg.packages[state.selectedPkgIndex] || cfg.packages[0];
-      const menu = document.getElementById('archDropdownMenu');
-      menu.innerHTML = cfg.packages.map((p, idx) => {
-        const isSel = idx === state.selectedPkgIndex;
-        return `
-          <button type="button" data-arch-idx="${idx}" data-squircle="12" class="arch-option w-full px-3 py-2 text-left text-xs flex items-center justify-between transition-colors ${isSel ? 'bg-monet-primaryContainer/70 text-monet-primary font-semibold' : 'text-monet-onSurface hover:bg-monet-bg'}">
-            <span>${p.label}</span>
-            ${isSel ? '<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12l5 5l10 -10"/></svg>' : ''}
-          </button>
-        `;
-      }).join('');
-
-      document.querySelectorAll('.arch-option').forEach(opt => {
-        opt.addEventListener('click', () => {
-          state.selectedPkgIndex = parseInt(opt.getAttribute('data-arch-idx'), 10) || 0;
-          menu.classList.add('hidden');
-          renderHomeOS();
-        });
-      });
-      document.getElementById('primaryDownloadLink').href = RELEASE_BASE + pkg.file;
-      document.getElementById('primaryDownloadLabel').textContent = pkg.btnText;
-      document.getElementById('editionTypeBadge').textContent = pkg.edition;
-      document.getElementById('packageFileName').textContent = pkg.file;
-      document.getElementById('archDropdownLabel').textContent = pkg.arch;
-      document.getElementById('osSubtleHint').textContent = cfg.hint;
-      document.getElementById('goPlatformDetailText').textContent = cfg.navLabel;
-
-      requestAnimationFrame(applyAllSquircles);
-    }
-
-    function renderAllPackagesModal() {
-      const groups = [
-        { title: 'Mobile · Android 移动客户端（4 个包）', items: OS_CONFIG.android.packages },
-        { title: 'Desktop · Windows 桌面托盘端（2 个包）', items: OS_CONFIG.windows.packages },
-        { title: 'CLI · macOS 命令行端（2 个包）', items: OS_CONFIG.macos.packages.slice(0, 2) },
-        { title: 'CLI · Linux 命令行端（3 个包）', items: OS_CONFIG.linux.packages.slice(0, 3) },
-        { title: 'CLI · AI 助手技能扩展（1 个包）', items: [{ label: '[CLI Skill] 供 AI 助手调用的技能扩展包', file: 'kemaolife-skill_0.5.5.zip' }] }
-      ];
-
-      const container = document.getElementById('allPackagesContainer');
-      container.innerHTML = groups.map(g => `
-        <div class="space-y-2">
-          <div class="font-semibold text-monet-onSurface">${g.title}</div>
-          <div class="grid grid-cols-1 sm:grid-cols-2 gap-2">
-            ${g.items.map(item => `
-              <a href="${RELEASE_BASE + item.file}" target="_blank" rel="noopener noreferrer" data-squircle="14" class="p-3 bg-monet-bg hover:bg-monet-primaryContainer/50 flex items-center justify-between transition-colors">
-                <div class="min-w-0">
-                  <div class="font-mono font-medium text-monet-onSurface break-all">${item.file}</div>
-                  <div class="text-[11px] text-monet-onSurfaceVariant">${item.label}</div>
-                </div>
-                <span class="text-monet-primary font-medium ml-2 shrink-0 whitespace-nowrap">下载</span>
-              </a>
-            `).join('')}
-          </div>
-        </div>
-      `).join('');
-    }
-
-    window.addEventListener('DOMContentLoaded', () => {
-      state.selectedOS = detectOSFromUA();
-      state.selectedPkgIndex = matchPkgIndexByArch(state.selectedOS, detectArchHeuristic(state.selectedOS));
-      renderHomeOS();
-
-      autoDetectEnvironment().then(({ os, pkgIndex }) => {
-        state.selectedOS = os;
-        state.selectedPkgIndex = pkgIndex;
-        renderHomeOS();
-      });
-      renderAllPackagesModal();
-      applyAllSquircles();
-
-      window.addEventListener('resize', () => {
-        requestAnimationFrame(applyAllSquircles);
-      });
-
-      document.querySelectorAll('.nav-tab').forEach(btn => {
-        btn.addEventListener('click', () => {
-          switchView(btn.getAttribute('data-nav'));
-        });
-      });
-
-      document.getElementById('brandHomeBtn').addEventListener('click', () => {
-        switchView('home');
-      });
-
-      document.querySelectorAll('.os-pill').forEach(btn => {
-        btn.addEventListener('click', () => {
-          state.selectedOS = btn.getAttribute('data-os');
-          state.selectedPkgIndex = 0;
-          renderHomeOS();
-        });
-      });
-
-      const archBtn = document.getElementById('archDropdownBtn');
-      const archMenu = document.getElementById('archDropdownMenu');
-      const positionArchMenu = () => {
-        const rect = archBtn.getBoundingClientRect();
-        const menuW = 240;
-        const left = Math.max(12, Math.min(window.innerWidth - menuW - 12, rect.right - menuW));
-        const spaceBelow = window.innerHeight - rect.bottom;
-        archMenu.style.left = left + 'px';
-        if (spaceBelow < 180 && rect.top > 180) {
-          archMenu.style.top = 'auto';
-          archMenu.style.bottom = (window.innerHeight - rect.top + 8) + 'px';
-        } else {
-          archMenu.style.bottom = 'auto';
-          archMenu.style.top = (rect.bottom + 8) + 'px';
-        }
-      };
-      archBtn.addEventListener('click', (e) => {
-        e.stopPropagation();
-        const willOpen = archMenu.classList.contains('hidden');
-        if (willOpen) {
-          positionArchMenu();
-          archMenu.classList.remove('hidden');
-          requestAnimationFrame(applyAllSquircles);
-        } else {
-          archMenu.classList.add('hidden');
-        }
-      });
-      document.addEventListener('click', (e) => {
-        if (!document.getElementById('archDropdownWrap').contains(e.target) && !archMenu.contains(e.target)) {
-          archMenu.classList.add('hidden');
-        }
-      });
-      window.addEventListener('scroll', () => {
-        if (!archMenu.classList.contains('hidden')) positionArchMenu();
-      }, { passive: true });
-
-      document.getElementById('goPlatformDetailBtn').addEventListener('click', () => {
-        const target = OS_CONFIG[state.selectedOS].navTarget;
-        switchView(target);
-      });
-
-      const packagesModal = document.getElementById('packagesModal');
-      const openPkgModal = () => {
-        packagesModal.classList.remove('hidden');
-        packagesModal.classList.add('flex');
-        requestAnimationFrame(applyAllSquircles);
-      };
-      document.getElementById('openAllPackagesBtnTop').addEventListener('click', openPkgModal);
-      document.querySelectorAll('[data-open-packages]').forEach(b => b.addEventListener('click', openPkgModal));
-
-      document.getElementById('closePackagesModalBtn').addEventListener('click', () => {
-        packagesModal.classList.add('hidden');
-        packagesModal.classList.remove('flex');
-      });
-      packagesModal.addEventListener('click', (e) => {
-        if (e.target === packagesModal) {
-          packagesModal.classList.add('hidden');
-          packagesModal.classList.remove('flex');
-        }
-      });
-
-      const closeOverlays = () => {
-        archMenu.classList.add('hidden');
-        packagesModal.classList.add('hidden');
-        packagesModal.classList.remove('flex');
-      };
-      document.addEventListener('keydown', (e) => {
-        if (e.key === 'Escape') closeOverlays();
-      });
-
-      window.addEventListener('hashchange', () => {
-        const v = location.hash.slice(1);
-        if (['home', 'mobile', 'desktop', 'cli'].includes(v) && v !== state.activeView) {
-          switchView(v, false);
-        }
-      });
-      const initialView = location.hash.slice(1);
-      if (['mobile', 'desktop', 'cli'].includes(initialView)) {
-        switchView(initialView, false);
-      }
-    });
-  </script>
+  <script src="assets/app.js"></script>
 </body>
 </html>
