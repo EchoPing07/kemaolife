@@ -48,6 +48,7 @@ func (a *desktopApp) mainState() ui.MainWindowState {
 	state.Report = status.Report
 	state.HasReport = status.HasReport
 	state.Campus = status.CampusStatus
+	state.CampusAutoSkipped = status.CampusAutoSkipped
 	if status.ElectricityError != "" {
 		state.ElectricityError = status.ElectricityError
 	} else if electricityErr != "" {

@@ -182,7 +182,10 @@ func run() (err error) {
 			Fingerprint: s.CampusFingerprint,
 		}
 	}, "")
-	campusDeps := app.CampusDeps{Clock: platform.RealClock{}, Net: portal, Ready: portal}
+	campusDeps := app.CampusDeps{
+		Clock: platform.RealClock{}, Net: portal, Ready: portal,
+		Egress: platform.LocalEgress{},
+	}
 
 	ctx, cancel := context.WithCancel(context.Background())
 	a.rootCtx = ctx

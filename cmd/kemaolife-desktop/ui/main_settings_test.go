@@ -35,7 +35,7 @@ func TestSettingsLayoutVerticalOrder(t *testing.T) {
 	for _, y := range []int32{
 		g.eduTop, g.eduRows[0], g.eduRows[1], g.eduRows[2],
 		g.campusTop, g.campusRows[0], g.campusRows[1], g.campusRows[2],
-		g.modeTop, g.modeRows[0], g.modeRows[1],
+		g.modeTop, g.modeRows[0], g.modeRows[1], g.modeRows[2],
 		g.runTop, g.runRows[0], g.runRows[3], g.quietY,
 		g.saveY, g.hintY,
 	} {

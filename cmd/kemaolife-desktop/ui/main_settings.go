@@ -26,6 +26,7 @@ const (
 	IDSetCampusFing  = 4012
 	IDSetAutoMode    = 4020
 	IDSetAutoStart   = 4021
+	IDSetWiredOnly   = 4022
 	IDSetPollSecs    = 4030
 	IDSetProbeSecs   = 4031
 	IDSetBalance     = 4032
@@ -105,7 +106,7 @@ type settingsLayout struct {
 	topOverride  int32
 	eduRows      [3]int32
 	campusRows   [3]int32
-	modeRows     [2]int32
+	modeRows     [3]int32
 	runRows      [5]int32
 	eduTop       int32
 	campusTop    int32
@@ -157,7 +158,7 @@ func settingsGeometryForWidth(left, right int32, scale func(int32) int32) settin
 	g.campusTop = group("campus")
 	rows(3, g.campusRows[:])
 	g.modeTop = group("mode")
-	rows(2, g.modeRows[:])
+	rows(3, g.modeRows[:])
 	g.runTop = group("run")
 	rows(4, g.runRows[:])
 	g.quietY = y
@@ -234,6 +235,7 @@ func (w *mainWindow) buildSettingsControls() error {
 
 	group(IDSetGroupThird, "运行模式")
 	checkbox(IDSetAutoMode, "未认证时自动登录（默认手动）")
+	checkbox(IDSetWiredOnly, "自动认证仅限有线网络（避免与宿舍路由器冲突）")
 	checkbox(IDSetAutoStart, "开机登录时自启动（只启动一次，不保活）")
 
 	group(IDSetGroupThird+1, "轮询与提醒")
@@ -332,7 +334,8 @@ func (w *mainWindow) layoutSettings() {
 
 	place(IDSetGroupThird, g.leftX, g.modeTop, g.colW, w.scale(26))
 	place(IDSetAutoMode, g.leftX, g.modeRows[0], g.colW, rowH)
-	place(IDSetAutoStart, g.leftX, g.modeRows[1], g.colW, rowH)
+	place(IDSetWiredOnly, g.leftX, g.modeRows[1], g.colW, rowH)
+	place(IDSetAutoStart, g.leftX, g.modeRows[2], g.colW, rowH)
 
 	place(IDSetGroupThird+1, g.leftX, g.runTop, g.colW, w.scale(26))
 	for i, id := range []int{IDSetPollSecs, IDSetProbeSecs, IDSetBalance, IDSetDays} {
@@ -387,6 +390,9 @@ func (w *mainWindow) fillSettingsForm(form desktop.SettingsForm) {
 	if h := w.ctl[IDSetAutoMode]; h != 0 {
 		SetChecked(h, form.AutoMode)
 	}
+	if h := w.ctl[IDSetWiredOnly]; h != 0 {
+		SetChecked(h, form.WiredOnly)
+	}
 	if h := w.ctl[IDSetAutoStart]; h != 0 {
 		SetChecked(h, form.AutoStart)
 	}
@@ -416,6 +422,7 @@ func (w *mainWindow) collectSettings() desktop.SettingsResult {
 		CampusPassword:    get(IDSetCampusPass),
 		CampusFingerprint: strings.TrimSpace(get(IDSetCampusFing)),
 		AutoMode:          checked(IDSetAutoMode),
+		WiredOnly:         checked(IDSetWiredOnly),
 		AutoStart:         checked(IDSetAutoStart),
 		PollSeconds:       strings.TrimSpace(get(IDSetPollSecs)),
 		CampusProbeSecs:   strings.TrimSpace(get(IDSetProbeSecs)),

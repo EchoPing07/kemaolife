@@ -15,6 +15,9 @@ type CampusDeps struct {
 	Clock core.Clock
 	Net   core.CampusNetwork
 	Ready core.NetworkReady
+	// Egress 可选：Windows「仅有线自动认证」用它判断主出口是否有线网卡。
+	// nil 表示不限制（Android / CLI / 未开启该设置的桌面端）。
+	Egress core.WiredEgress
 }
 
 // GetCampusNetworkStatus 判态（docs/contract.md §7.4）。

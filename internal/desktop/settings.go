@@ -41,6 +41,11 @@ type Settings struct {
 	// 模式：默认手动（docs/windows.md）。
 	AutoMode bool `json:"autoMode"`
 
+	// CampusWiredOnly 限制自动认证只在有线出口发起（docs/windows.md §5.1）。
+	// 宿舍路由器已认证时，从 Wi-Fi 出口登录个人账号会顶掉路由器账号。
+	// 默认 false 不限制；老配置无此字段，升级后行为不变。
+	CampusWiredOnly bool `json:"campusWiredOnly,omitempty"`
+
 	// AutoStart 与轮询 / 告警参数。
 	AutoStart        bool    `json:"autoStart"`
 	PollSeconds      int     `json:"pollSeconds"`
