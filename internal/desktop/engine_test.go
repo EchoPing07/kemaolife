@@ -3,11 +3,13 @@ package desktop_test
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -488,6 +490,26 @@ func TestElectricitySuccessKeepsCampusError(t *testing.T) {
 	}
 	if got := eng.Status(); got.CampusError != want || got.LastError != want || got.ElectricityError != "" {
 		t.Errorf("手动模式轮询成功不得抹掉校园网错误: %+v", got)
+	}
+}
+
+// 已取消的 ctx（进程退出 / 换账号）不得发出查询，也不得计进失败退避。
+func TestPollOnceCanceledContextSkipsQuery(t *testing.T) {
+	var hits atomic.Int32
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		hits.Add(1)
+		writeOuter(w, `{"result":"0"}`)
+	}))
+	t.Cleanup(srv.Close)
+	eng, _, _ := buildEngine(t, newFakeCampus(model.CampusOnline), defaultSettings(), srv)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	if err := eng.PollOnce(ctx); !errors.Is(err, context.Canceled) {
+		t.Fatalf("取消的轮询应直接返回 context.Canceled, got %v", err)
+	}
+	if hits.Load() != 0 {
+		t.Errorf("取消的轮询不得发出请求, got %d 次", hits.Load())
 	}
 }
 

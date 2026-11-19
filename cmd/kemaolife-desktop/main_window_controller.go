@@ -256,6 +256,7 @@ func (a *desktopApp) startElectricityQuery(month string) {
 	if !a.beginJob("electricity") {
 		return
 	}
+	generation := a.snapshotGenerations.current()
 	a.viewMu.Lock()
 	a.view.ElectricityLoading = true
 	a.view.ElectricityError = ""
@@ -267,11 +268,14 @@ func (a *desktopApp) startElectricityQuery(month string) {
 		defer cancel()
 		err := a.engine.QueryElectricity(ctx, month)
 		a.viewMu.Lock()
-		a.view.ElectricityLoading = false
-		if err != nil {
-			a.electricityErr = model.MessageOf(err)
-		} else {
-			a.electricityErr = ""
+		// 换账号会推进代次并重置视图：旧查询的收尾不得污染新视图（同 refreshAll）。
+		if generation == a.snapshotGenerations.current() {
+			a.view.ElectricityLoading = false
+			if err != nil {
+				a.electricityErr = model.MessageOf(err)
+			} else {
+				a.electricityErr = ""
+			}
 		}
 		a.viewMu.Unlock()
 	}()
@@ -283,6 +287,7 @@ func (a *desktopApp) startElectricityPoll() {
 	if !a.beginJob("electricity") {
 		return
 	}
+	generation := a.snapshotGenerations.current()
 	a.viewMu.Lock()
 	a.view.ElectricityLoading = true
 	a.view.ElectricityError = ""
@@ -294,11 +299,13 @@ func (a *desktopApp) startElectricityPoll() {
 		defer cancel()
 		err := a.engine.PollOnce(ctx)
 		a.viewMu.Lock()
-		a.view.ElectricityLoading = false
-		if err != nil {
-			a.electricityErr = model.MessageOf(err)
-		} else {
-			a.electricityErr = ""
+		if generation == a.snapshotGenerations.current() {
+			a.view.ElectricityLoading = false
+			if err != nil {
+				a.electricityErr = model.MessageOf(err)
+			} else {
+				a.electricityErr = ""
+			}
 		}
 		a.viewMu.Unlock()
 	}()
@@ -308,6 +315,7 @@ func (a *desktopApp) startCampusAction(action string) {
 	if !a.beginJob("campus") {
 		return
 	}
+	generation := a.snapshotGenerations.current()
 	a.viewMu.Lock()
 	a.view.CampusLoading = true
 	a.view.CampusError = ""
@@ -331,11 +339,13 @@ func (a *desktopApp) startCampusAction(action string) {
 			err = model.NewError(model.CodeInvalidArgument, "未知校园网动作")
 		}
 		a.viewMu.Lock()
-		a.view.CampusLoading = false
-		if err != nil {
-			a.campusErr = model.MessageOf(err)
-		} else {
-			a.campusErr = ""
+		if generation == a.snapshotGenerations.current() {
+			a.view.CampusLoading = false
+			if err != nil {
+				a.campusErr = model.MessageOf(err)
+			} else {
+				a.campusErr = ""
+			}
 		}
 		a.viewMu.Unlock()
 	}()

@@ -214,6 +214,11 @@ func (e *Engine) ProbeCampus(ctx context.Context) (model.CampusState, error) {
 func (e *Engine) PollOnce(ctx context.Context) error {
 	e.pollMu.Lock()
 	defer e.pollMu.Unlock()
+	// 等锁期间 ctx 可能已取消（进程退出 / 换账号）：不发请求，
+	// 也不把这次取消计进失败退避。
+	if err := ctx.Err(); err != nil {
+		return err
+	}
 	cfg := e.settings()
 	var preflightErr error
 
