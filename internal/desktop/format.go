@@ -24,6 +24,9 @@ const AppName = "科贸生活"
 func FormatStatus(s Status) string {
 	campus, power := TrayLine(s)
 	lines := []string{AppName, campus, power}
+	if s.CampusAutoSkipped {
+		lines = append(lines, "自动认证已跳过：当前出口非有线")
+	}
 	if l := errorLine(s); l != "" {
 		lines = append(lines, l)
 	}
@@ -39,6 +42,7 @@ func ToSettingsForm(s Settings) SettingsForm {
 		CampusUser:        s.CampusUser,
 		CampusFingerprint: s.CampusFingerprint,
 		AutoMode:          s.AutoMode,
+		WiredOnly:         s.CampusWiredOnly,
 		AutoStart:         s.AutoStart,
 		PollSeconds:       s.PollSeconds,
 		CampusProbeSecs:   s.CampusProbeSecs,
@@ -68,6 +72,7 @@ func ParseSettingsResult(res SettingsResult, base Settings) (Settings, error) {
 	}
 	next.CampusFingerprint = strings.TrimSpace(res.CampusFingerprint)
 	next.AutoMode = res.AutoMode
+	next.CampusWiredOnly = res.WiredOnly
 	next.AutoStart = res.AutoStart
 
 	poll, err := strconv.Atoi(strings.TrimSpace(res.PollSeconds))
@@ -143,6 +148,7 @@ type SettingsForm struct {
 	CampusPassword    string
 	CampusFingerprint string
 	AutoMode          bool
+	WiredOnly         bool
 	AutoStart         bool
 	PollSeconds       int
 	CampusProbeSecs   int
@@ -161,6 +167,7 @@ type SettingsResult struct {
 	CampusPassword    string
 	CampusFingerprint string
 	AutoMode          bool
+	WiredOnly         bool
 	AutoStart         bool
 	PollSeconds       string
 	CampusProbeSecs   string

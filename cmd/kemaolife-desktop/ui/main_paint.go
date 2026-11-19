@@ -762,6 +762,9 @@ func (w *mainWindow) paintCampus(c mainCanvas, left, right int32) {
 	} else if w.state.CampusError != "" {
 		c.useFont(12, 400).text(w.state.CampusError, mainRect(left+w.scale(24), w.scale(250),
 			right-w.scale(24), w.scale(296)), dtLeft|dtWordBreak|dtEndEllipsis, mainMuted)
+	} else if w.state.CampusAutoSkipped {
+		c.useFont(12, 400).label("自动认证已跳过：当前出口非有线", left+w.scale(24), w.scale(250),
+			right-left-w.scale(48), w.scale(22), mainMuted)
 	}
 	// 按钮行在卡片下方（layout 的 buttonY=322），提示再下一行，互不叠压。
 	c.useFont(12, 400).label("账号、认证与轮询选项请在设置中修改。", left+w.scale(2), w.scale(370),

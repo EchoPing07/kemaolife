@@ -39,7 +39,9 @@ type MainWindowState struct {
 	Campus        model.CampusStatus
 	CampusLoading bool
 	CampusError   string
-	AutoMode      bool
+	// CampusAutoSkipped 表示自动认证因「仅有线」设置被跳过（正常避让，非错误）。
+	CampusAutoSkipped bool
+	AutoMode          bool
 	// Version 是可选的展示文本，不参与任何业务状态判断。
 	Version string
 	// SettingsForm 是设置页当前生效的取值为基准；密码字段恒为空。
@@ -804,7 +806,7 @@ func (w *mainWindow) command(id int) {
 		}
 	case IDSetSave, IDSetRevert:
 		w.commandSettings(id)
-	case IDSetAutoMode, IDSetAutoStart, IDSetStudentID, IDSetEduPass, IDSetCustomer,
+	case IDSetAutoMode, IDSetWiredOnly, IDSetAutoStart, IDSetStudentID, IDSetEduPass, IDSetCustomer,
 		IDSetCampusUser, IDSetCampusPass, IDSetCampusFing, IDSetPollSecs, IDSetProbeSecs,
 		IDSetBalance, IDSetDays, IDSetQuietFrom, IDSetQuietTo, IDSetHint:
 		// 输入框 / 复选框自身不需要派生动作，吞掉通知避免 PlaySound。

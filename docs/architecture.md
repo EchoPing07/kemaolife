@@ -48,7 +48,7 @@
                                 │ 只依赖端口接口，不依赖实现
 ┌───────────────────────────────▼────────────────────────────────────────┐
 │ core/ports: KVStore / HTTPDoer / NoRedirectDoer / Clock / Notifier    │
-│             / NetworkReady / CampusNetwork                              │
+│             / NetworkReady / CampusNetwork / WiredEgress              │
 └───────────────────────────────┬────────────────────────────────────────┘
 ┌───────────────────────────────▼────────────────────────────────────────┐
 │ internal/platform · 适配器（build tags / 注入）                         │
@@ -167,6 +167,11 @@ type CampusNetwork interface {
     Logout(ctx context.Context) error
     Relogin(ctx context.Context) error // 先判态：在线则下线 → 复探；未认证跳过下线；随后登录 → 复探确认
 }
+
+// Windows「仅有线自动认证」：主出口是否有线网卡。无法确认时返回 false（保守跳过）。
+type WiredEgress interface {
+    IsWired() bool
+}
 ```
 
 `CampusNetwork` 与 `NetworkReady` 并列，不是别名：后者是「自动恢复」的组合用例入口。
@@ -180,6 +185,7 @@ type CampusNetwork interface {
 | `Notifier` | Windows 通知 / no-op | 告警判定纯函数化；Windows 实现是 `cmd/kemaolife-desktop/ui.Tray.Notify` |
 | `NetworkReady` | Portal / 其他认证方式 | `core` 只放纯函数；探测 / 登录的 HTTP I/O 与自签证书策略锁在平台层 |
 | `CampusNetwork` | 手动判态 / 登录 / 下线 / 重登 | Windows 与 Android 适配器实现同一组原语，`app` 用例不关心平台 |
+| `WiredEgress` | 网卡类型查询（Windows `GetAdaptersAddresses`） | 「仅有线自动认证」的判定可用内存 fake 单测；nil 注入表示不限制 |
 
 **强制 IPv4**：教务 CAS 域名解析出了 AAAA 记录，但 aic 服务器没有 IPv6 监听。默认双栈拨号会先试 IPv6，连不上只能等超时（约 10 秒）再回退 IPv4。所以这里要的是**禁用 IPv6**，而不是「优选」：
 

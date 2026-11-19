@@ -62,6 +62,15 @@ type NetworkReady interface {
 	EnsureCampusNetwork(ctx context.Context) error
 }
 
+// WiredEgress 报告当前主出口是否为有线网卡（Windows「仅有线自动认证」）。
+//
+// 宿舍路由器已用公共账号认证时，个人账号从 Wi-Fi 出口发起认证会把路由器
+// 顶下线，两端保活互相顶号。自动模式在发起认证前先问这个端口；
+// 判定必须保守：无法确认有线时返回 false，宁可不自动登录也不顶号。
+type WiredEgress interface {
+	IsWired() bool
+}
+
 // CampusNetwork 是手动判态 / 登录 / 下线 / 重登的原始操作，
 // Windows 手动模式与 Android 手动动作共用同一组原语（AGENTS §3.1）。
 //

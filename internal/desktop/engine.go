@@ -24,7 +24,10 @@ type Status struct {
 	LastError        string
 	ElectricityError string
 	CampusError      string
-	LastCheckedAt    time.Time
+	// CampusAutoSkipped 表示本轮自动认证因「仅有线」设置被跳过（主出口非有线）。
+	// 它是正常避让而不是故障：不进错误域、不计失败退避。
+	CampusAutoSkipped bool
+	LastCheckedAt     time.Time
 }
 
 // Engine 是常驻轮询的编排层：把 app 用例、告警纯函数、通知端口串起来。
@@ -222,9 +225,15 @@ func (e *Engine) PollOnce(ctx context.Context) error {
 	cfg := e.settings()
 	var preflightErr error
 
+	// 「仅有线自动认证」：主出口非有线时整体跳过前置（含登录），
+	// 避免个人账号从 Wi-Fi 出口顶掉宿舍路由器的账号（docs/windows.md §5.1）。
+	// 判态轮询是独立 GET 探测、不会顶号，不受此限制。
+	skipped := cfg.AutoMode && cfg.CampusWiredOnly && !e.wiredEgress()
+	e.updateStatus(func(s *Status) { s.CampusAutoSkipped = skipped })
+
 	// 自动模式的前置恢复；失败不阻断（也许只是没连校园网 WiFi），
 	// 但要让用户知道，所以刷新一次状态。
-	if cfg.AutoMode {
+	if cfg.AutoMode && !skipped {
 		if err := app.EnsureCampusNetwork(ctx, e.campus); err != nil {
 			preflightErr = err
 		}
@@ -288,6 +297,14 @@ func (e *Engine) PollOnce(ctx context.Context) error {
 		}
 	}
 	return nil
+}
+
+// wiredEgress 报告主出口是否有线；未注入端口时不限制（保持老行为）。
+func (e *Engine) wiredEgress() bool {
+	if e.campus.Egress == nil {
+		return true
+	}
+	return e.campus.Egress.IsWired()
 }
 
 // QueryElectricity 手动查询指定月份并更新完整报告。

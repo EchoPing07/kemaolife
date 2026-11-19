@@ -24,6 +24,7 @@ func TestMainStateWiresSettingsForm(t *testing.T) {
 	settings.EduPassword = "<教务密码>"
 	settings.CampusPassword = "<校园网密码>"
 	settings.PollSeconds = 900
+	settings.CampusWiredOnly = true
 
 	a := &desktopApp{settings: settings}
 	a.engine = desktop.NewEngine(app.Deps{
@@ -35,6 +36,9 @@ func TestMainStateWiresSettingsForm(t *testing.T) {
 	form := state.SettingsForm
 	if form.StudentID != settings.StudentID || form.PollSeconds != settings.PollSeconds {
 		t.Errorf("设置页未回显生效配置: %+v", form)
+	}
+	if !form.WiredOnly {
+		t.Error("设置页应回显「仅有线自动认证」开关")
 	}
 	if form.EduPassword != "" || form.CampusPassword != "" {
 		t.Errorf("设置表单不得回显明文密码: edu=%q campus=%q", form.EduPassword, form.CampusPassword)
