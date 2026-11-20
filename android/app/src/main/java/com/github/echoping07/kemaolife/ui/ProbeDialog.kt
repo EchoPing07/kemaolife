@@ -12,8 +12,6 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.rounded.CheckCircle
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -95,7 +93,7 @@ internal fun ProbeDialog(state: ProbeState, onClose: () -> Unit, onRetry: () -> 
 
                         result.ok -> {
                             Icon(
-                                imageVector = Icons.Rounded.CheckCircle,
+                                imageVector = TabIcons.CircleCheck,
                                 contentDescription = null,
                                 tint = MaterialTheme.colorScheme.primary,
                                 modifier = Modifier.size(18.dp),

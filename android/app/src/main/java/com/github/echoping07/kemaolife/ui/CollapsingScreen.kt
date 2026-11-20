@@ -19,8 +19,6 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.rounded.ArrowBack
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -146,10 +144,10 @@ internal fun CollapsingScreen(
                         contentAlignment = Alignment.Center,
                     ) {
                         Icon(
-                            imageVector = Icons.AutoMirrored.Rounded.ArrowBack,
+                            imageVector = TabIcons.ArrowLeft,
                             contentDescription = stringResource(R.string.action_back),
                             tint = MaterialTheme.colorScheme.onSurface,
-                            modifier = Modifier.size(19.dp),
+                            modifier = Modifier.size(20.dp),
                         )
                     }
                 }

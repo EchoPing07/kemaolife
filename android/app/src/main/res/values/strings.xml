@@ -87,6 +87,8 @@
 
     <!-- 设置页：总览 + 教务 / 电费 / 校园网三个二级页。 -->
     <string name="settings_accounts">账号与服务</string>
+    <string name="settings_group_configuration">配置</string>
+    <string name="settings_group_advanced">高级</string>
     <string name="settings_not_configured">尚未配置</string>
     <string name="settings_edu_configured">教务账号已配置</string>
     <string name="settings_electricity_inherited">继承教务学号</string>

@@ -126,8 +126,9 @@ internal object TabIcons {
     ))
 
     val Lock = icon("Lock", listOf(
-        "M5 11a2 2 0 0 1 2 -2h10a2 2 0 0 1 2 2v6a2 2 0 0 1 -2 2h-10a2 2 0 0 1 -2 -2z",
-        "M8 9v-4a4 4 0 0 1 8 0v4",
+        "M5 13a2 2 0 0 1 2 -2h10a2 2 0 0 1 2 2v6a2 2 0 0 1 -2 2h-10a2 2 0 0 1 -2 -2v-6",
+        "M11 16a1 1 0 1 0 2 0a1 1 0 0 0 -2 0",
+        "M8 11v-4a4 4 0 1 1 8 0v4",
     ))
 
     val School = icon("School", listOf(
@@ -136,10 +137,11 @@ internal object TabIcons {
     ))
 
     val Fingerprint = icon("Fingerprint", listOf(
-        "M18.9 7a8 8 0 0 0 -13.8 0",
-        "M4 11a12 12 0 0 1 16 0",
-        "M8 15a8 8 0 0 0 8 0",
-        "M12 11v6",
+        "M18.9 7a8 8 0 0 1 1.1 5v1a6 6 0 0 0 .8 3",
+        "M8 11a4 4 0 0 1 8 0v1a10 10 0 0 0 2 6",
+        "M12 11v2a14 14 0 0 0 2.5 8",
+        "M8 15a18 18 0 0 0 1.8 6",
+        "M4.9 19a22 22 0 0 1 -.9 -7v-1a8 8 0 0 1 12 -6.95",
     ))
 
     // 图标集只装了 material-icons-core，没有 Science / Bolt / ErrorOutline；
@@ -170,6 +172,14 @@ internal object TabIcons {
     ))
 
     val Check = icon("Check", listOf("M5 12l5 5l10 -10"))
+    val CircleCheck = icon("CircleCheck", listOf(
+        "M3 12a9 9 0 1 0 18 0a9 9 0 1 0 -18 0",
+        "M9 12l2 2l4 -4",
+    ))
+    val ChevronRight = icon("ChevronRight", listOf("M9 6l6 6l-6 6"))
+    val ArrowLeft = icon("ArrowLeft", listOf(
+        "M5 12l14 0", "M5 12l6 6", "M5 12l6 -6",
+    ))
     val ExclamationMark = icon("ExclamationMark", listOf("M12 19v.01", "M12 15v-10"))
     val PlugConnected = icon("PlugConnected", listOf(
         "M7 12l5 5l-1.5 1.5a3.536 3.536 0 1 1 -5 -5l1.5 -1.5",

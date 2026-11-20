@@ -14,6 +14,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -22,13 +23,11 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.CircleShape
 import com.github.echoping07.kemaolife.ui.theme.appShape
 import androidx.compose.foundation.text.KeyboardOptions
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.rounded.KeyboardArrowRight
-import androidx.compose.material.icons.rounded.CheckCircle
-import androidx.compose.material.icons.rounded.DateRange
+import androidx.compose.material3.Button
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -171,7 +170,7 @@ private fun SettingsOverview(
     Column(modifier = Modifier.fillMaxWidth()) {
         SettingsGroupLabel(stringResource(R.string.settings_accounts))
         SettingsDestination(
-            icon = Icons.Rounded.DateRange,
+            icon = TabIcons.Timetable,
             title = stringResource(R.string.section_edu),
             supporting = if (state.credentials.studentId.isBlank()) {
                 stringResource(R.string.settings_not_configured)
@@ -293,7 +292,7 @@ private fun SettingsGroupLabel(text: String) {
         text = text,
         style = MaterialTheme.typography.labelLarge,
         fontWeight = FontWeight.Bold,
-        color = MaterialTheme.colorScheme.onSurfaceVariant,
+        color = MaterialTheme.colorScheme.primary,
         // 页面已在 16dp 内容边距内，分组标题不再额外缩进，与大标题共用左边线。
         modifier = Modifier.padding(top = 22.dp, bottom = 8.dp),
     )
@@ -330,7 +329,7 @@ internal fun SettingsDestination(
                 )
             }
             Icon(
-                imageVector = Icons.AutoMirrored.Rounded.KeyboardArrowRight,
+                imageVector = TabIcons.ChevronRight,
                 contentDescription = null,
                 tint = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.size(21.dp),
@@ -348,7 +347,6 @@ private fun EducationSettings(state: AppState, viewModel: AppViewModel) {
         if (state.settingsSaved) password = ""
     }
     CredentialForm(
-        title = stringResource(R.string.section_edu),
         note = stringResource(R.string.edu_note),
         saved = state.settingsSaved,
         onSavedShown = viewModel::consumeSettingsSaved,
@@ -366,34 +364,40 @@ private fun EducationSettings(state: AppState, viewModel: AppViewModel) {
             interval = viewModel.state.value.timetableInterval.toString()
         },
     ) {
-        AppTextField(
-            value = studentId,
-            onValueChange = { studentId = it },
-            label = stringResource(R.string.field_student_id),
-            leadingIcon = TabIcons.User,
-            keyboardType = KeyboardType.Number,
-        )
-        Spacer(Modifier.height(14.dp))
-        AppTextField(
-            value = password,
-            onValueChange = { password = it },
-            label = stringResource(R.string.field_edu_password),
-            leadingIcon = TabIcons.Lock,
-            isPassword = true,
-            supporting = stringResource(R.string.password_kept_hint),
-            imeAction = ImeAction.Done,
-        )
-        Spacer(Modifier.height(18.dp))
-        IntervalField(
-            value = interval,
-            onValueChange = { interval = it },
-            label = stringResource(R.string.field_min_interval),
-            supporting = stringResource(
-                R.string.interval_hint_education,
-                AppPreferences.MIN_TIMETABLE_INTERVAL,
-            ),
-            minimum = AppPreferences.MIN_TIMETABLE_INTERVAL,
-        )
+        SettingsGroupLabel(stringResource(R.string.settings_group_configuration))
+        SettingsFormCard {
+            AppTextField(
+                value = studentId,
+                onValueChange = { studentId = it },
+                label = stringResource(R.string.field_student_id),
+                leadingIcon = TabIcons.User,
+                keyboardType = KeyboardType.Number,
+            )
+            Spacer(Modifier.height(14.dp))
+            AppTextField(
+                value = password,
+                onValueChange = { password = it },
+                label = stringResource(R.string.field_edu_password),
+                leadingIcon = TabIcons.Lock,
+                isPassword = true,
+                supporting = stringResource(R.string.password_kept_hint),
+                imeAction = ImeAction.Done,
+            )
+        }
+
+        SettingsGroupLabel(stringResource(R.string.settings_group_advanced))
+        SettingsFormCard {
+            IntervalField(
+                value = interval,
+                onValueChange = { interval = it },
+                label = stringResource(R.string.field_min_interval),
+                supporting = stringResource(
+                    R.string.interval_hint_education,
+                    AppPreferences.MIN_TIMETABLE_INTERVAL,
+                ),
+                minimum = AppPreferences.MIN_TIMETABLE_INTERVAL,
+            )
+        }
     }
 }
 
@@ -419,7 +423,6 @@ private fun ElectricitySettings(state: AppState, viewModel: AppViewModel) {
     }
 
     CredentialForm(
-        title = stringResource(R.string.section_power),
         note = stringResource(R.string.power_no_password_hint),
         saved = state.settingsSaved,
         onSavedShown = viewModel::consumeSettingsSaved,
@@ -440,49 +443,59 @@ private fun ElectricitySettings(state: AppState, viewModel: AppViewModel) {
             interval = viewModel.state.value.electricityInterval.toString()
         },
     ) {
-        SettingsSwitchRow(
-            title = stringResource(R.string.field_inherit_edu),
-            supporting = stringResource(R.string.field_inherit_edu_hint),
-            checked = inherit,
-            onCheckedChange = { checked ->
-                // 关闭继承时把教务学号带过来当起点：大多数人只是「电费想用同一个号」。
-                if (!checked && ownAccount.isBlank()) ownAccount = state.credentials.studentId
-                inherit = checked
-            },
-        )
-        Spacer(Modifier.height(6.dp))
-        AppTextField(
-            // 已保存的凭据里继承时 electricityStudentId 恒为空，所以这里显示教务学号；
-            // 未保存的编辑态用本地 ownAccount，不掺 state 里的旧值。
-            value = if (inherit) state.credentials.studentId else ownAccount,
-            onValueChange = { ownAccount = it },
-            label = stringResource(R.string.field_electricity_student_id),
-            leadingIcon = TabIcons.User,
-            keyboardType = KeyboardType.Number,
-            // 继承时不接受编辑：实际用的就是教务学号，允许改会造成
-            //「显示的学号」与「真正请求的学号」不一致。
-            enabled = !inherit,
-            supporting = if (inherit) stringResource(R.string.field_inherit_edu_value) else null,
-        )
-        Spacer(Modifier.height(14.dp))
-        AppTextField(
-            value = customerCode,
-            onValueChange = { customerCode = it },
-            label = stringResource(R.string.field_customer_code),
-            leadingIcon = TabIcons.School,
-            keyboardType = KeyboardType.Number,
-        )
-        Spacer(Modifier.height(18.dp))
-        IntervalField(
-            value = interval,
-            onValueChange = { interval = it },
-            label = stringResource(R.string.field_min_interval),
-            supporting = stringResource(
-                R.string.interval_hint_electricity,
-                AppPreferences.MIN_ELECTRICITY_INTERVAL,
-            ),
-            minimum = AppPreferences.MIN_ELECTRICITY_INTERVAL,
-        )
+        SettingsGroupLabel(stringResource(R.string.settings_group_configuration))
+        SettingsFormCard(position = GroupPosition.FIRST) {
+            SettingsSwitchRow(
+                title = stringResource(R.string.field_inherit_edu),
+                supporting = stringResource(R.string.field_inherit_edu_hint),
+                checked = inherit,
+                onCheckedChange = { checked ->
+                    // 关闭继承时把教务学号带过来当起点：大多数人只是「电费想用同一个号」。
+                    if (!checked && ownAccount.isBlank()) ownAccount = state.credentials.studentId
+                    inherit = checked
+                },
+            )
+        }
+        GroupGap()
+        SettingsFormCard(position = GroupPosition.LAST) {
+            AppTextField(
+                // 已保存的凭据里继承时 electricityStudentId 恒为空，所以这里显示教务学号；
+                // 未保存的编辑态用本地 ownAccount，不掺 state 里的旧值。
+                value = if (inherit) state.credentials.studentId else ownAccount,
+                onValueChange = { ownAccount = it },
+                label = stringResource(R.string.field_electricity_student_id),
+                leadingIcon = TabIcons.User,
+                keyboardType = KeyboardType.Number,
+                // 继承时不接受编辑：实际用的就是教务学号，允许改会造成
+                //「显示的学号」与「真正请求的学号」不一致。
+                enabled = !inherit,
+                supporting = if (inherit) stringResource(R.string.field_inherit_edu_value) else null,
+            )
+        }
+
+        SettingsGroupLabel(stringResource(R.string.settings_group_advanced))
+        SettingsFormCard(position = GroupPosition.FIRST) {
+            AppTextField(
+                value = customerCode,
+                onValueChange = { customerCode = it },
+                label = stringResource(R.string.field_customer_code),
+                leadingIcon = TabIcons.School,
+                keyboardType = KeyboardType.Number,
+            )
+        }
+        GroupGap()
+        SettingsFormCard(position = GroupPosition.LAST) {
+            IntervalField(
+                value = interval,
+                onValueChange = { interval = it },
+                label = stringResource(R.string.field_min_interval),
+                supporting = stringResource(
+                    R.string.interval_hint_electricity,
+                    AppPreferences.MIN_ELECTRICITY_INTERVAL,
+                ),
+                minimum = AppPreferences.MIN_ELECTRICITY_INTERVAL,
+            )
+        }
     }
 }
 
@@ -497,7 +510,6 @@ private fun CampusSettings(state: AppState, viewModel: AppViewModel) {
         if (state.settingsSaved) password = ""
     }
     CredentialForm(
-        title = stringResource(R.string.section_portal),
         note = stringResource(R.string.campus_independent_hint),
         saved = state.settingsSaved,
         onSavedShown = viewModel::consumeSettingsSaved,
@@ -510,44 +522,51 @@ private fun CampusSettings(state: AppState, viewModel: AppViewModel) {
             }
         },
     ) {
-        AppTextField(
-            value = user,
-            onValueChange = { user = it },
-            label = stringResource(R.string.field_campus_user),
-            leadingIcon = TabIcons.User,
-        )
-        Spacer(Modifier.height(14.dp))
-        AppTextField(
-            value = password,
-            onValueChange = { password = it },
-            label = stringResource(R.string.field_campus_password),
-            leadingIcon = TabIcons.Lock,
-            isPassword = true,
-            supporting = stringResource(R.string.password_kept_hint),
-        )
-        Spacer(Modifier.height(14.dp))
-        AppTextField(
-            value = fingerprint,
-            onValueChange = { fingerprint = it },
-            label = stringResource(R.string.field_campus_fingerprint),
-            leadingIcon = TabIcons.Fingerprint,
-            supporting = stringResource(R.string.field_optional),
-            imeAction = ImeAction.Done,
-        )
-        Spacer(Modifier.height(18.dp))
-        // 开关即改即生效，不必等「保存」：它不影响凭据，只影响何时去探测。
-        SettingsSwitchRow(
-            title = stringResource(R.string.field_campus_wifi_only),
-            supporting = stringResource(R.string.field_campus_wifi_only_hint),
-            checked = state.campusWifiOnly,
-            onCheckedChange = { viewModel.setCampusWifiOnly(it) },
-        )
+        SettingsGroupLabel(stringResource(R.string.settings_group_configuration))
+        SettingsFormCard {
+            AppTextField(
+                value = user,
+                onValueChange = { user = it },
+                label = stringResource(R.string.field_campus_user),
+                leadingIcon = TabIcons.User,
+            )
+            Spacer(Modifier.height(14.dp))
+            AppTextField(
+                value = password,
+                onValueChange = { password = it },
+                label = stringResource(R.string.field_campus_password),
+                leadingIcon = TabIcons.Lock,
+                isPassword = true,
+                supporting = stringResource(R.string.password_kept_hint),
+            )
+        }
+
+        SettingsGroupLabel(stringResource(R.string.settings_group_advanced))
+        SettingsFormCard(position = GroupPosition.FIRST) {
+            AppTextField(
+                value = fingerprint,
+                onValueChange = { fingerprint = it },
+                label = stringResource(R.string.field_campus_fingerprint),
+                leadingIcon = TabIcons.Fingerprint,
+                supporting = stringResource(R.string.field_optional),
+                imeAction = ImeAction.Done,
+            )
+        }
+        GroupGap()
+        SettingsFormCard(position = GroupPosition.LAST) {
+            // 开关即改即生效，不必等「保存」：它不影响凭据，只影响何时去探测。
+            SettingsSwitchRow(
+                title = stringResource(R.string.field_campus_wifi_only),
+                supporting = stringResource(R.string.field_campus_wifi_only_hint),
+                checked = state.campusWifiOnly,
+                onCheckedChange = { viewModel.setCampusWifiOnly(it) },
+            )
+        }
     }
 }
 
 @Composable
 private fun CredentialForm(
-    title: String,
     note: String,
     saved: Boolean,
     onSavedShown: () -> Unit,
@@ -563,19 +582,7 @@ private fun CredentialForm(
             modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
         )
 
-        Spacer(Modifier.height(12.dp))
-
-        GroupSurface(position = GroupPosition.ONLY, modifier = Modifier.fillMaxWidth()) {
-            Column(modifier = Modifier.padding(horizontal = 20.dp, vertical = 22.dp)) {
-                Text(
-                    text = title,
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.Bold,
-                    modifier = Modifier.padding(bottom = 16.dp),
-                )
-                content()
-            }
-        }
+        content()
 
         LaunchedEffect(saved) {
             if (saved) {
@@ -583,41 +590,43 @@ private fun CredentialForm(
                 onSavedShown()
             }
         }
-        if (saved) {
-            Row(
-                modifier = Modifier.padding(top = 16.dp, start = 8.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Icon(
-                    imageVector = Icons.Rounded.CheckCircle,
-                    contentDescription = null,
-                    tint = MaterialTheme.colorScheme.primary,
-                    modifier = Modifier.size(18.dp),
-                )
-                Spacer(Modifier.width(6.dp))
-                Text(
-                    text = stringResource(R.string.save_done),
-                    style = MaterialTheme.typography.labelLarge,
-                    color = MaterialTheme.colorScheme.primary,
-                    fontWeight = FontWeight.SemiBold,
-                )
-            }
-        }
-
-        androidx.compose.material3.Button(
+        // 主操作收在内容末尾右侧；胶囊轮廓和图标让它保持明确，但不再横贯整屏。
+        Button(
             onClick = onSave,
             shape = CircleShape,
+            contentPadding = PaddingValues(horizontal = 28.dp),
             modifier = Modifier
-                .fillMaxWidth()
-                .padding(vertical = 24.dp)
-                .height(52.dp),
+                .align(Alignment.End)
+                .padding(top = 20.dp, bottom = 8.dp)
+                .widthIn(min = 132.dp)
+                .height(56.dp),
         ) {
+            Icon(
+                imageVector = TabIcons.Check,
+                contentDescription = null,
+                modifier = Modifier.size(20.dp),
+            )
+            Spacer(Modifier.width(8.dp))
             Text(
-                text = stringResource(R.string.action_save),
+                text = stringResource(if (saved) R.string.save_done else R.string.action_save),
                 style = MaterialTheme.typography.titleSmall,
                 fontWeight = FontWeight.Bold,
             )
         }
+    }
+}
+
+/** 表单卡片只负责承载一组相关控件；组名留在卡片外，保持清晰的视觉层级。 */
+@Composable
+private fun SettingsFormCard(
+    position: GroupPosition = GroupPosition.ONLY,
+    content: @Composable ColumnScope.() -> Unit,
+) {
+    GroupSurface(position = position, modifier = Modifier.fillMaxWidth()) {
+        Column(
+            modifier = Modifier.padding(horizontal = 20.dp, vertical = 22.dp),
+            content = content,
+        )
     }
 }
 
