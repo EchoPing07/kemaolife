@@ -1,6 +1,6 @@
 # 构建与发布
 
-本文是版本号、产物清单、签名与 CI 的**唯一来源**。各端安装说明见 [cli.md](cli.md) / [windows.md](windows.md) / [android.md](android.md)，Android 本地构建的工具链与已知坑见 [android/README.md](../android/README.md)。
+本文是版本号、产物清单、签名、CI 与 Release 正文的**唯一来源**。各端安装说明见 [cli.md](cli.md) / [windows.md](windows.md) / [android.md](android.md)，Android 本地构建的工具链与已知坑见 [android/README.md](../android/README.md)。
 
 ## 1. 版本号
 
@@ -16,7 +16,7 @@
 1. 校验 tag 与 `internal/version.Version` 一致，且提交属于 `main`。
 2. 隐私自检（已知真实值逐个检索，排除模板自身）。
 3. 按下表构建五类产物，校验签名 / 子系统 / 脚本编码。
-4. 生成 `SHA256SUMS` 与 Release notes（固定模板 + 自动生成清单），发布到 [Releases](https://github.com/EchoPing07/kemaolife/releases)。
+4. 生成 `SHA256SUMS` 与 Release 正文（§6），发布到 [Releases](https://github.com/EchoPing07/kemaolife/releases)。
 
 ## 3. 产物清单
 
@@ -68,3 +68,13 @@ CLI 包内含 `kemaolife` / `LICENSE` / `INSTALL.txt`，Linux 与 macOS 同构�
 | [`release.yml`](../.github/workflows/release.yml) | `vX.Y.Z` tag | §2 发布流程 |
 
 `ci.yml` 是自检的权威清单；本地提交前自检命令见 [CONTRIBUTING.md §5](../CONTRIBUTING.md)。工具链版本（NDK / gomobile / JDK）以 `.github/actions/setup-android-gomobile/action.yml` 与 `android/README.md` 为准，两处保持一致。
+
+## 6. Release 正文
+
+正文只放「本版变更」与「下载」；安装教程、包内容清单、使用须知一律链接到各端文档，不在正文重复。渲染脚本是 [`render_release_notes.py`](../.github/scripts/render_release_notes.py)，结构固定：
+
+1. **更新内容**：按端分组 `### Mobile / Desktop / CLI / Other`，空组省略。默认从上一 tag 到本 tag 的 commit 标题自动生成（去掉 `类型(范围):` 前缀，尾随 PR 号转链接），范围映射：`android` → Mobile，`desktop` / `windows` → Desktop，`cli` / `skill` → CLI，其余 → Other。
+2. **下载**：CLI / Desktop / Mobile 三张「系统 × 架构」表，链接直达对应资产；agent skill 归 CLI 表。安全警示（macOS 未签名未实测、Windows 无代码签名、Android 覆盖安装勿卸载与签名指纹）压缩为表格下注脚，完整说明在各端文档。
+3. 末尾 `SHA256SUMS` 链接与 **Full Changelog** compare 链接；不使用 `--generate-notes`。
+
+需要用户口吻的变更说明或版本专属升级提示时，发版前在 `.github/release-notes/<tag>.md` 提交覆盖文件：内容整体替代自动生成的分组清单（`## 更新内容` 标题由脚本补），可含 `> [!IMPORTANT]` 升级提示；没有覆盖文件就用自动草稿。覆盖文件随 tag 入仓，受隐私自检约束。
