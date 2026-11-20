@@ -11,7 +11,6 @@ import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
-import androidx.compose.animation.scaleIn
 import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.togetherWith
@@ -32,6 +31,7 @@ import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -45,15 +45,14 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import androidx.compose.runtime.DisposableEffect
 import com.github.echoping07.kemaolife.ui.AppOpenGate
-import com.github.echoping07.kemaolife.ui.animationsEnabled
 import com.github.echoping07.kemaolife.ui.AppViewModel
 import com.github.echoping07.kemaolife.ui.MoreScreen
 import com.github.echoping07.kemaolife.ui.ProbeDialog
 import com.github.echoping07.kemaolife.ui.SettingsScreen
 import com.github.echoping07.kemaolife.ui.TabIcons
 import com.github.echoping07.kemaolife.ui.TimetableScreen
+import com.github.echoping07.kemaolife.ui.animationsEnabled
 import com.github.echoping07.kemaolife.ui.theme.KemaolifeTheme
 
 /** 单 Activity + 三 tab；设置页内部维护自己的返回栈。 */
@@ -107,15 +106,24 @@ private fun AppRoot(viewModel: AppViewModel) {
     val lifecycleOwner = LocalLifecycleOwner.current
     val gate = remember { AppOpenGate() }
     DisposableEffect(lifecycleOwner) {
-        val observer = LifecycleEventObserver { _, event ->
-            when (event) {
-                Lifecycle.Event.ON_STOP -> gate.onStop()
-                Lifecycle.Event.ON_RESUME -> if (gate.onResume()) {
-                    viewModel.onAppOpened(force = true)
+        val observer =
+            LifecycleEventObserver { _, event ->
+                when (event) {
+                    Lifecycle.Event.ON_STOP -> {
+                        gate.onStop()
+                    }
+
+                    Lifecycle.Event.ON_RESUME -> {
+                        if (gate.onResume()) {
+                            viewModel.onAppOpened(force = true)
+                        }
+                    }
+
+                    else -> {
+                        Unit
+                    }
                 }
-                else -> Unit
             }
-        }
         lifecycleOwner.lifecycle.addObserver(observer)
         onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
     }
@@ -142,9 +150,10 @@ private fun AppRoot(viewModel: AppViewModel) {
         bottomBar = {
             // 固定高而非 heightIn(min)：后者不改变 maxHeight，内部 defaultMinSize(80dp) 仍会把
             // 内容撑回 80dp。固定高把 Row / item 的 80dp 下限 coerce 到 64dp，即带标签 item 的最小高。
-            val bottomInset = NavigationBarDefaults.windowInsets
-                .asPaddingValues()
-                .calculateBottomPadding()
+            val bottomInset =
+                NavigationBarDefaults.windowInsets
+                    .asPaddingValues()
+                    .calculateBottomPadding()
             NavigationBar(
                 modifier = Modifier.height(NavBarContentHeight + bottomInset),
                 containerColor = MaterialTheme.colorScheme.surfaceContainer,
@@ -182,19 +191,25 @@ private fun AppRoot(viewModel: AppViewModel) {
         },
     ) { padding ->
         Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(padding),
+            modifier =
+                Modifier
+                    .fillMaxSize()
+                    .padding(padding),
         ) {
             AnimatedContent(
                 targetState = tab,
                 transitionSpec = {
                     val direction = if (targetState.ordinal > initialState.ordinal) 1 else -1
                     if (motionEnabled) {
-                        (fadeIn(tween(200, delayMillis = 30)) +
-                            slideInHorizontally(tween(300, easing = FastOutSlowInEasing)) { direction * it / 18 } +
-                            scaleIn(tween(300, easing = FastOutSlowInEasing), initialScale = 0.985f)) togetherWith
-                            (fadeOut(tween(120)) + slideOutHorizontally(tween(220)) { -direction * it / 28 })
+                        // 平级 tab 要立刻响应：新旧页面同时进退，不等待淡出，也不叠加缩放。
+                        (
+                            fadeIn(tween(160)) +
+                                slideInHorizontally(tween(200, easing = FastOutSlowInEasing)) { direction * it / 18 }
+                        ) togetherWith
+                            (
+                                fadeOut(tween(160)) +
+                                    slideOutHorizontally(tween(200, easing = FastOutSlowInEasing)) { -direction * it / 28 }
+                            )
                     } else {
                         androidx.compose.animation.EnterTransition.None togetherWith
                             androidx.compose.animation.ExitTransition.None
@@ -241,13 +256,14 @@ private fun RowScope.NavItem(
             }
         },
         label = { Text(label) },
-        colors = NavigationBarItemDefaults.colors(
-            selectedIconColor = MaterialTheme.colorScheme.onPrimaryContainer,
-            selectedTextColor = MaterialTheme.colorScheme.onSurface,
-            // 官方指示器形状与交互不变；主色容器比中性次容器更清楚地体现当前主题。
-            indicatorColor = MaterialTheme.colorScheme.primaryContainer,
-            unselectedIconColor = MaterialTheme.colorScheme.onSurfaceVariant,
-            unselectedTextColor = MaterialTheme.colorScheme.onSurfaceVariant,
-        ),
+        colors =
+            NavigationBarItemDefaults.colors(
+                selectedIconColor = MaterialTheme.colorScheme.onPrimaryContainer,
+                selectedTextColor = MaterialTheme.colorScheme.onSurface,
+                // 官方指示器形状与交互不变；主色容器比中性次容器更清楚地体现当前主题。
+                indicatorColor = MaterialTheme.colorScheme.primaryContainer,
+                unselectedIconColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                unselectedTextColor = MaterialTheme.colorScheme.onSurfaceVariant,
+            ),
     )
 }
