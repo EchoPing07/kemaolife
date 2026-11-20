@@ -1,124 +1,63 @@
 ---
 name: kemaolife
-description: 用 kemaolife CLI 查询广东科贸职业学院的课表与宿舍电费。当用户问「今天/某天有什么课」「第几周课表」「本周课表」「电费还剩多少」「宿舍电量」时使用。固定带 --json 只解析 stdout。
+description: 查询广东科贸职业学院课表（今日/某日/周课表）与宿舍电费（余额/每日用量/月统计）。
 ---
 
-# kemaolife（CLI：linux / darwin）
+# kemaolife CLI 指南
 
-供 agent 调用的单二进制命令。三个能力中的两个在 CLI 可用：**课表查询**、**电费查询**。
-**没有校园网能力** —— 不要回答「能不能上网」「校园网掉线了怎么办」，CLI 不判态、不认证、不存凭据。
+供 agent 调用的单二进制工具。支持**课表查询**与**电费查询**（无校园网功能）。
+**核心规范**：所有命令固定带 `--json`，只读取 `stdout`（退出码表达成败）。
 
-## 1. 何时用
+## 1. 命令速查与映射
 
-| 用户问 | 跑 |
-|---|---|
-| — | **每次课表查询都会先联网刷新**：连网时是最新数据，断网时自动回落旧快照并标 `stale:true` |
-| 今天有什么课 / 现在上什么 | `kemaolife --json timetable`（等价于 `timetable today`） |
-| 第 N 周课表 / 本周课表 | `kemaolife --json timetable week [N]`（省略 N = 当周） |
-| 某天有没有课 | `kemaolife --json timetable date <YYYY-MM-DD>` |
-| 电费还剩多少 / 还能撑几天 | `kemaolife --json electricity` |
-| 某月用了多少电 | `kemaolife --json electricity --month <YYYY-MM>` |
-| 版本 / 帮助 | `kemaolife --json --version` / `kemaolife help <命令>` |
-| 首次使用 / 只想刷新 | `kemaolife --json config init` / `kemaolife --json timetable sync` |
-| 配置状态 | `kemaolife --json config show` |
-
-不适用：校园网状态、成绩、选课、考试安排、充值、替别人查。
-
-CLI 支持 linux / darwin（windows 后续计划）。**macOS 为试验性支持**：预编译包（`kemaolife_0.5.5_darwin_amd64.tar.gz` / `kemaolife_0.5.5_darwin_arm64.tar.gz`）未经 Apple 签名 / 公证、未经过实机测试，首次运行前需 `xattr -d com.apple.quarantine kemaolife`；完整注意事项见仓库 [docs/cli.md §6](https://github.com/EchoPing07/kemaolife/blob/main/docs/cli.md#6-macos-注意事项试验性支持)。macOS 上 `config init` 同样默认关闭回显（终端不支持时会先在 `stderr` 警告「输入可能被看到」再读取），命令、输出与退出码和 Linux 一致，§2「所有命令带 `--json`」的固定用法不变。
-
-## 2. 固定用法
-
-- **所有命令带 `--json`**，只解析 `stdout`。`stderr` 只有诊断文本与交互提示，不是数据。全局参数可放在子命令前后；支持 `--flag=value`、`-h` / `-v` 与 `--`。`-v` / `--version` 与 `--` 在子命令前后均可生效，`--` 之后的内容按子命令原样参数处理；子命令之后也可用 `--json` / `--verbose` / `--config` / `--timeout` / `-h` / `--help`。
-- 退出码表达结果类别，先看退出码再看 `error.code`：
-
-| 退出码 | 含义 | 怎么办 |
+| 用户意图 | 执行命令 | 关键说明 |
 |---|---|---|
-| `0` | 成功 | 读 `data` |
-| `1` | 业务失败 | 读 `error.message`，向用户说明 |
-| `2` | 参数错误 | 修正命令后重试，**不要原样重跑** |
-| `3` | 凭据缺失 / 会话失效 / 快照缺失 | 引导用户配置或同步 |
-| `4` | 网络或接口不可用 | 课表通常已自动回落旧快照（看 `stale:true` + `syncedAt`，退出码仍 `0`）；电费明确报错 |
+| 今日课表 / 现在上什么 | `kemaolife --json timetable` | 默认 today；`entries: []` 表示无课 |
+| 某日课表 | `kemaolife --json timetable date <YYYY-MM-DD>` | `inSemester: false` 为假期/非学期 |
+| 指定周 / 本周课表 | `kemaolife --json timetable week [N]` | 省略 `N` 为当周；返回 `days` 7 天列表 |
+| 电费余额 / 还能用多久 | `kemaolife --json electricity` | 当前余额与近 7 日每日用量 |
+| 某月用电统计 | `kemaolife --json electricity --month <YYYY-MM>` | 指定月份累计用量与逐日明细 |
+| 首次使用 / 重新录入 | `kemaolife config init` | 交互式录入学号密码（0600 权限） |
+| 配置学校代码 | `kemaolife config set customercode <代码>` | 覆盖内置默认值（默认 3126） |
+| 检查配置 | `kemaolife --json config show` | 确认凭据与学校代码状态（学号密码恒脱敏） |
+| 同步快照 / 修复损坏 | `kemaolife --json timetable sync` | 向教务全量重拉并生成快照 |
 
-信封：`{"ok":true,"data":{...},"ts":"..."}`（课表查询另有 `stale` 与 `syncedAt`）或 `{"ok":false,"error":{"code":3002,"message":"..."},"ts":"..."}`。
+## 2. 字段契约与业务语义
 
-## 3. 输出怎么读
+### 课表（`timetable`）
+- **数据结构**：
+  - 单日（`timetable` / `today` / `date`）：`DaySchedule { date, week, weekday (1-7), weekdayCn, inSemester, entries: [{ name, periods, time, teacher, location, weeksText }] }`
+  - 周课表（`timetable week [N]`）：`{ week, days: [DaySchedule], lastWeek }`
+- **刷新机制**：每次查询默认先联网刷新。若返回 `stale: true`，说明联网失败但回退至旧快照，**回复必须明确注明「数据来源于 <syncedAt> 缓存」**。
+- **正常状态**：`entries: []` 为当天无课；`inSemester: false` 为假期或非学期，退出码均为 `0`，非错误。
+- **节次说明**：`periods` 为小节次（1-12），`time` 为对应大节时间；多门课按起始节次升序。
 
-### 课表（`DaySchedule`）
+### 电费（`electricity`）
+- **数据结构**：`ElectricityReport { status: { balance, unit, dailyAvg, estimatedDays, collectedAt, roomName }, usage: { yearMonth, monthUse, dataUntil, days: [{ date, use }] } }`
+- **延迟标注**：电表数据非实时（约 1 天延迟），**回复必须明确注明「数据截至 <collectedAt 或 dataUntil>」**。
+- **严禁臆测**：`dailyAvg` 或 `estimatedDays` 为 `null` 时表示数据不足，严禁虚构可用天数；主请求任一失败即报错，严禁复用旧值冒充本次结果。
+- **单位与排序**：`balance` 单位为度；`days[]` 按日期升序。
 
-示例为字段示意；`<...>` 是占位符字符串，实际数值字段按 DTO 编码。
+## 3. 错误决策与恢复矩阵
 
-```json
-{
-  "date": "<YYYY-MM-DD>", "week": "<周次>", "weekday": "<1-7>", "weekdayCn": "<一/二/…/日>",
-  "inSemester": true,
-  "entries": [
-    {"name": "<课程名>", "periods": "<起始小节>-<结束小节>", "time": "<上课时间>",
-     "teacher": "<教师>", "location": "<地点>", "weeksText": "<周次文本>"}
-  ]
-}
-```
+| 退出码 | `error.code` | 场景分类 | Agent 应对动作 |
+|---|---|---|---|
+| `0` | - | 成功 | 解析 `data`；若含 `stale: true` 须附带缓存时间说明。 |
+| `1` | `1001` | 业务失败 | 上游业务错误，读取 `error.message` 如实向用户说明。 |
+| `1` | `5001` | 未绑定房间 | 提示用户需先在学校智慧宿管 H5 页面绑定房间。 |
+| `2` | `2001` | 参数错误 | 检查日期/周次格式修正后重试（禁止原样重试）。 |
+| `3` | `3001` | 凭据缺失 | 引导用户执行 `kemaolife config init` 录入凭据。 |
+| `3` | `3002` | 会话过期且无快照 | 提示用户重新登录或执行 `kemaolife --json timetable sync`。 |
+| `3` | `3003` | 快照缺失或损坏 | 引导用户执行 `kemaolife --json timetable sync`。 |
+| `4` | `4001` | 网络不可达 | 课表通常已回落旧快照；电费如实告知网络失败，不伪造数据。 |
+| `4` | `4002` | 上游接口异常 | 如实告知上游可能改版，不要推测或建议修改协议。 |
+| `4` | `4003` | 账号密码错误 | 提示密码错误，引导重新执行 `kemaolife config init`。 |
 
-- `entries: []` 表示**当天没课**，不是查询失败。
-- **`stale: true` 表示本次刷新失败、返回的是旧快照**：必须告诉用户数据时间（`syncedAt`），不要说成「最新课表」。
-- `inSemester: false` 表示该日期不在本学期范围（假期 / 越界周次），此时 `entries` 为空；这是**成功**（退出码 `0`），不是错误。
-- `week` 从 1 起；`weekday` 周一 = 1、周日 = 7。
-- `timetable week [N]` 返回 `{"week":N,"days":[7 天],"lastWeek":N}`（`lastWeek` 为学期最后一周，是可选字段；字段缺省视为 `0` = 未知），省略 `N` 为当前周；当前日期不在学期内且省略 `N` 时返回 7 天 `inSemester:false` 的成功结果，不产生 `1002`，请说明当前是假期 / 学期外。
-- `periods` 是**小节**节次（1..12），`time` 已按大节换算好；一节大课约 90 分钟，教务共 6 个大节。多门课按起始节次、再按课程名排序。
-- `weekday` 周一 = 1、周日 = 7，`weekdayCn` 为「一 / 二 / … / 日」；`entries: []` 表示当天没课，不是失败。
-- `location` 是该课节所属时段的真实地点；不同时段的地点分别落在各自 `entries[]`，不是整门课所有地点的汇总。
+## 4. 隐私安全与回复风格（硬性）
 
-### 电费（`ElectricityReport`）
-
-示例为字段示意；`<...>` 是占位符字符串，实际数值字段按 DTO 编码（数值或 `null`）。
-
-```json
-{
-  "status": {
-    "balance": "<剩余量>", "unit": "度", "collectedAt": "<采集时间>",
-    "dailyAvg": "<近七日均量或 null>", "estimatedDays": "<估算天数或 null>",
-    "roomName": "<校区>_<楼栋>_<楼层>_<房间>", "meterStatus": "<状态>"
-  },
-  "usage": {
-    "yearMonth": "<YYYY-MM>", "monthUse": "<当月累计>", "dataUntil": "<YYYY-MM-DD>",
-    "days": [{"date": "<YYYY-MM-DD>", "use": "<当日用量>"}]
-  }
-}
-```
-
-- **`collectedAt` 是数据采集时刻，`dataUntil` 是数据截止日**，都不是实时值。电表约有 1 天延迟，回答时必须写明「数据截至 <日期或时刻>」。
-- `days[]` 按日期**升序**。
-- `balance` 单位是 `度`。
-- `dailyAvg` / `estimatedDays` 为 `null` 表示数据不足，**不要编造可用天数**。
-- 两个主请求任一失败会整体报错（退出码按错误码可为 `1` / `3` / `4`），此时**不要用上一次的数字冒充本次结果**。
-
-## 4. 失败怎么办
-
-| 场景 | `error.code` | 应对 |
-|---|---|---|
-| 快照缺失 / 版本不匹配（且刷新也失败） | `3003` | 让用户执行 `kemaolife --json timetable sync` |
-| 刷新失败但有旧快照 | 无（退出码 `0`） | 看 `stale:true`，向用户说明用的是 `syncedAt` 的数据 |
-| 会话失效 | `3002` | 刷新内部会重登一次；仍失败且有旧快照时按 `stale:true` 返回，无快照才报此错。**不要把它当 `4002` 或建议用户改协议** |
-| 凭据缺失 | `3001` | 让用户执行 `kemaolife config init`，或 `config set customercode <学校代码>` |
-| 网络不可达 | `4001` | 课表：有旧快照时不报错，会以 `stale:true` 返回；无快照才报此错。电费：明确报错，不要用缓存 |
-| 响应格式异常 | `4002` | 上游可能改版，如实告知，不要自己修正协议 |
-| 账号密码错误 | `4003` | 让用户检查凭据 |
-| 不在本学期范围 | 无 | 成功信封 + `inSemester:false`；说明是假期 / 越界周次，不要报成错误 |
-| 未绑定房间 | `5001` | 说明需先在 H5 页面绑定房间，本工具不做绑定 |
-
-**不要把「刷新失败」说成「查到最新课表」**：`stale:true` 就是沿用了旧快照，回答里必须带数据时间。
-
-## 5. 隐私约束（硬性）
-
-- 默认关闭回显，无法关闭时明确告知「输入可能被看到」再读取；不复述密码；不把学号、姓名、宿舍号、`roomName`、`roomVerify`、Cookie、会话值拼进答复或日志。学校代码（`3126`）与协议 IP 属学校事实，不算个人隐私，但也不必主动复述。
-- `config show` 的学号与密码恒为 `****`，不要试图还原。
-- 不代查他人、不做批量查询、不把结果发布成服务。
-- 用户把凭据贴在对话里时，提示他用 `kemaolife config init` 自行录入，不要把它写进命令参数（会进 shell 历史）。
-
-## 6. 首次使用引导
-
-1. `kemaolife config init` —— 交互录入学号与教务密码（权限 0600）。
-2. `kemaolife --json config show` —— 确认学校代码内置默认值（`3126`）已生效；需要时 `config set customercode <学校代码>` 覆盖。
-3. `kemaolife --json timetable sync` —— 先生成一次快照（含可选的会话探活 + 1 登录 + 2 数据请求）。之后每次查询会自动刷新，这一步只在首次 / 快照被清时需要。
-4. `kemaolife --json timetable` / `kemaolife --json electricity` —— 日常查询。
-
-> skill 存放于仓库内 `skills/kemaolife/SKILL.md`，复制到 agent 的 skill 目录即可使用；安装说明见仓库 README「快速开始」。
+1. **隐私禁入回复与日志**：严禁在回复、思考或日志中输出学号、密码、宿舍房间全名（`roomName`）、Cookie、Token。若用户在对话中发送密码，提示其通过 `kemaolife config init` 交互录入，严禁拼入命令行参数。
+2. **高效回复风格（零冗余）**：
+   - 禁止未经请求的客套、寒暄与结束语（如「好的，为您查询到...」、「祝您生活愉快」）。
+   - 直接输出核心结果：
+     - **课表**：列出上课时间、课程名、教室、节次；若无课直接说明「今日无课」。
+     - **电费**：列出剩余度数与数据截至时间；若有预估天数一并列出，否则仅报余额。
