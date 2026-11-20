@@ -10,7 +10,6 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.togetherWith
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
@@ -24,6 +23,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.shape.CircleShape
 import com.github.echoping07.kemaolife.ui.theme.appShape
 import androidx.compose.foundation.text.KeyboardOptions
@@ -43,10 +43,10 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
@@ -441,7 +441,7 @@ private fun ElectricitySettings(state: AppState, viewModel: AppViewModel) {
         },
     ) {
         SettingsGroupLabel(stringResource(R.string.settings_group_configuration))
-        SettingsFormCard(position = GroupPosition.FIRST) {
+        GroupSurface(position = GroupPosition.FIRST, modifier = Modifier.fillMaxWidth()) {
             SettingsSwitchRow(
                 title = stringResource(R.string.field_inherit_edu),
                 supporting = stringResource(R.string.field_inherit_edu_hint),
@@ -549,7 +549,7 @@ private fun CampusSettings(state: AppState, viewModel: AppViewModel) {
             )
         }
         GroupGap()
-        SettingsFormCard(position = GroupPosition.LAST) {
+        GroupSurface(position = GroupPosition.LAST, modifier = Modifier.fillMaxWidth()) {
             // 开关即改即生效，不必等「保存」：它不影响凭据，只影响何时去探测。
             SettingsSwitchRow(
                 title = stringResource(R.string.field_campus_wifi_only),
@@ -648,7 +648,13 @@ private fun IntervalField(
     )
 }
 
-/** 设置页开关行：标题 + 说明 + Switch，整行可点。 */
+/**
+ * 设置页开关行：标题 + 说明 + Switch，整行是一个开关语义（与外观页一致）。
+ *
+ * 调用方直接铺进 GroupSurface，不套 SettingsFormCard 的二次内边距：
+ * toggleable 在 padding 之前，水波纹铺满整张圆角卡片而不是卡内一块矩形；
+ * 内边距留在行内，文字离圆角足够远，不会被削字。
+ */
 @Composable
 private fun SettingsSwitchRow(
     title: String,
@@ -659,26 +665,27 @@ private fun SettingsSwitchRow(
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .clip(appShape(PageCorners.Field))
-            .clickable { onCheckedChange(!checked) }
-            .padding(vertical = 6.dp),
+            .toggleable(
+                value = checked,
+                role = Role.Switch,
+                onValueChange = onCheckedChange,
+            )
+            .padding(start = 20.dp, end = 16.dp, top = 15.dp, bottom = 15.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Column(modifier = Modifier.weight(1f)) {
+        Column(modifier = Modifier.weight(1f).padding(end = 12.dp)) {
             Text(
                 text = title,
-                style = MaterialTheme.typography.titleSmall,
-                fontWeight = FontWeight.SemiBold,
+                style = MaterialTheme.typography.titleMedium,
             )
             Text(
                 text = supporting,
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.padding(top = 2.dp),
+                modifier = Modifier.padding(top = 3.dp),
             )
         }
-        Spacer(Modifier.width(12.dp))
-        Switch(checked = checked, onCheckedChange = onCheckedChange)
+        Switch(checked = checked, onCheckedChange = null)
     }
 }
 

@@ -395,12 +395,15 @@ private fun CampusCard(state: AppState, viewModel: AppViewModel) {
         ).filter { it.second.isNotBlank() }
         if (details.isNotEmpty()) {
             Spacer(Modifier.height(12.dp))
+            // 水波纹要圆角又不能削字、不能缩进：12dp 小圆角配 10dp 垂直内边距，
+            // 圆弧在文字顶部高度处内收不足 0.2dp（两种曲率模式都安全），
+            // 水平保持 0，与上方状态行左对齐；整卡反馈不适用（卡内还有别的内容）。
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .clip(appShape(PageCorners.Field))
+                    .clip(appShape(PageCorners.GroupInner))
                     .clickable { showDetails = !showDetails }
-                    .padding(vertical = 4.dp),
+                    .padding(vertical = 10.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Text(
