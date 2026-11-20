@@ -182,12 +182,9 @@
     <string name="action_save">保存</string>
     <string name="save_done">已保存</string>
     <string name="password_kept_hint">留空表示不修改</string>
-    <string name="edu_note">用于登录教务系统拉取课表，密码加密保存在本机。</string>
-    <string name="power_no_password_hint">电费接口只需学号与学校代码，无独立密码；也不进任何日志。</string>
     <string name="interval_hint_education">自动同步的最小间隔，最少 %1$d 分钟；手动刷新不受限制。</string>
     <string name="interval_hint_electricity">自动查询的最小间隔，最少 %1$d 分钟；手动查询不受限制。</string>
     <string name="interval_clamped">低于下限，将按 %1$d %2$s 生效</string>
-    <string name="campus_independent_hint">校园网凭据独立保存，不复用教务密码。</string>
     <string name="credentials_keystore_hint">凭据经 Android Keystore 加密后保存在本机，不上传、不进日志。</string>
 
     <!-- 测试弹窗：*.probe 的结构化回报。 -->

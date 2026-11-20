@@ -38,7 +38,6 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
-import androidx.compose.ui.unit.sp
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
@@ -347,7 +346,6 @@ private fun EducationSettings(state: AppState, viewModel: AppViewModel) {
         if (state.settingsSaved) password = ""
     }
     CredentialForm(
-        note = stringResource(R.string.edu_note),
         saved = state.settingsSaved,
         onSavedShown = viewModel::consumeSettingsSaved,
         onSave = {
@@ -423,7 +421,6 @@ private fun ElectricitySettings(state: AppState, viewModel: AppViewModel) {
     }
 
     CredentialForm(
-        note = stringResource(R.string.power_no_password_hint),
         saved = state.settingsSaved,
         onSavedShown = viewModel::consumeSettingsSaved,
         onSave = {
@@ -510,7 +507,6 @@ private fun CampusSettings(state: AppState, viewModel: AppViewModel) {
         if (state.settingsSaved) password = ""
     }
     CredentialForm(
-        note = stringResource(R.string.campus_independent_hint),
         saved = state.settingsSaved,
         onSavedShown = viewModel::consumeSettingsSaved,
         onSave = {
@@ -567,21 +563,12 @@ private fun CampusSettings(state: AppState, viewModel: AppViewModel) {
 
 @Composable
 private fun CredentialForm(
-    note: String,
     saved: Boolean,
     onSavedShown: () -> Unit,
     onSave: () -> Unit,
     content: @Composable ColumnScope.() -> Unit,
 ) {
     Column(modifier = Modifier.fillMaxWidth()) {
-        Text(
-            text = note,
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            lineHeight = 18.sp,
-            modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
-        )
-
         content()
 
         LaunchedEffect(saved) {
