@@ -1,9 +1,10 @@
 package com.github.echoping07.kemaolife.ui.theme
 
-import androidx.compose.foundation.isSystemInDarkTheme
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.Immutable
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.luminance
 import kotlin.math.abs
 
 /**
@@ -40,9 +41,10 @@ private val DarkPalettes = listOf(
     CoursePalette(Color(0xFF542441), Color(0xFFFBD9EE)),
 )
 
-/** 按课程名取一个稳定配色。 */
+/** 按课程名取一个稳定配色，跟随应用当前色彩模式（而非仅系统深色）。 */
 @Composable
 internal fun coursePalette(name: String): CoursePalette {
-    val palettes = if (isSystemInDarkTheme()) DarkPalettes else LightPalettes
+    val dark = MaterialTheme.colorScheme.background.luminance() < 0.5f
+    val palettes = if (dark) DarkPalettes else LightPalettes
     return palettes[abs(name.hashCode()) % palettes.size]
 }

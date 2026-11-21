@@ -25,11 +25,11 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -39,6 +39,8 @@ import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.StrokeJoin
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -48,8 +50,8 @@ import androidx.compose.ui.unit.sp
 import com.github.echoping07.kemaolife.R
 import com.github.echoping07.kemaolife.data.CampusState
 import com.github.echoping07.kemaolife.data.Entry
-import com.github.echoping07.kemaolife.ui.theme.coursePalette
 import com.github.echoping07.kemaolife.ui.theme.appShape
+import com.github.echoping07.kemaolife.ui.theme.coursePalette
 import kotlin.math.cos
 import kotlin.math.min
 import kotlin.math.sin
@@ -70,16 +72,18 @@ internal fun SectionCard(
 ) {
     Card(
         modifier = modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surfaceContainerLow,
-        ),
+        colors =
+            CardDefaults.cardColors(
+                containerColor = MaterialTheme.colorScheme.surfaceContainerLow,
+            ),
         shape = appShape(PageCorners.Card),
     ) {
         Column(modifier = Modifier.padding(top = 10.dp, bottom = 14.dp)) {
             Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(start = 22.dp, end = 12.dp, top = 4.dp, bottom = 4.dp),
+                modifier =
+                    Modifier
+                        .fillMaxWidth()
+                        .padding(start = 22.dp, end = 12.dp, top = 4.dp, bottom = 4.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Text(
@@ -101,6 +105,7 @@ internal fun SectionCard(
  * 结合 Material 官方非对称缓动伸缩与流体环形正弦波浪，
  * 彻底告别传统死板细圈，展现富有弹性质感的现代科技感。
  */
+
 /** 系统关闭动画时不运行无限装饰动画；状态与静态加载提示仍保留。 */
 @Composable
 internal fun animationsEnabled(): Boolean {
@@ -138,10 +143,11 @@ internal fun ExpressiveLoadingIndicator(
     val baseRotation by transition.animateFloat(
         initialValue = 0f,
         targetValue = 360f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(durationMillis = 2200, easing = LinearEasing),
-            repeatMode = RepeatMode.Restart,
-        ),
+        animationSpec =
+            infiniteRepeatable(
+                animation = tween(durationMillis = 2200, easing = LinearEasing),
+                repeatMode = RepeatMode.Restart,
+            ),
         label = "baseRotation",
     )
 
@@ -149,10 +155,11 @@ internal fun ExpressiveLoadingIndicator(
     val headAngle by transition.animateFloat(
         initialValue = 0f,
         targetValue = 360f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(durationMillis = 1332, easing = FastOutSlowInEasing),
-            repeatMode = RepeatMode.Restart,
-        ),
+        animationSpec =
+            infiniteRepeatable(
+                animation = tween(durationMillis = 1332, easing = FastOutSlowInEasing),
+                repeatMode = RepeatMode.Restart,
+            ),
         label = "headAngle",
     )
 
@@ -160,15 +167,17 @@ internal fun ExpressiveLoadingIndicator(
     val tailAngle by transition.animateFloat(
         initialValue = 0f,
         targetValue = 360f,
-        animationSpec = infiniteRepeatable(
-            animation = keyframes {
-                durationMillis = 1332
-                0f at 0 using FastOutSlowInEasing
-                0f at 380 using FastOutSlowInEasing
-                360f at 1332
-            },
-            repeatMode = RepeatMode.Restart,
-        ),
+        animationSpec =
+            infiniteRepeatable(
+                animation =
+                    keyframes {
+                        durationMillis = 1332
+                        0f at 0 using FastOutSlowInEasing
+                        0f at 380 using FastOutSlowInEasing
+                        360f at 1332
+                    },
+                repeatMode = RepeatMode.Restart,
+            ),
         label = "tailAngle",
     )
 
@@ -176,10 +185,11 @@ internal fun ExpressiveLoadingIndicator(
     val wavePhase by transition.animateFloat(
         initialValue = 0f,
         targetValue = (2 * Math.PI).toFloat(),
-        animationSpec = infiniteRepeatable(
-            animation = tween(durationMillis = 900, easing = LinearEasing),
-            repeatMode = RepeatMode.Restart,
-        ),
+        animationSpec =
+            infiniteRepeatable(
+                animation = tween(durationMillis = 900, easing = LinearEasing),
+                repeatMode = RepeatMode.Restart,
+            ),
         label = "wavePhase",
     )
 
@@ -220,11 +230,12 @@ internal fun ExpressiveLoadingIndicator(
         drawPath(
             path = path,
             color = color,
-            style = Stroke(
-                width = strokePx,
-                cap = StrokeCap.Round,
-                join = StrokeJoin.Round,
-            ),
+            style =
+                Stroke(
+                    width = strokePx,
+                    cap = StrokeCap.Round,
+                    join = StrokeJoin.Round,
+                ),
         )
     }
 }
@@ -234,17 +245,19 @@ internal fun ExpressiveLoadingIndicator(
 internal fun EntryRow(entry: Entry) {
     val palette = coursePalette(entry.name)
     Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(vertical = 9.dp),
+        modifier =
+            Modifier
+                .fillMaxWidth()
+                .padding(vertical = 9.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Box(
-            modifier = Modifier
-                .width(4.dp)
-                .height(34.dp)
-                .clip(appShape(2.dp))
-                .background(palette.container),
+            modifier =
+                Modifier
+                    .width(4.dp)
+                    .height(34.dp)
+                    .clip(appShape(2.dp))
+                    .background(palette.container),
         )
         Spacer(Modifier.width(12.dp))
         Column(modifier = Modifier.weight(1f)) {
@@ -255,9 +268,10 @@ internal fun EntryRow(entry: Entry) {
                 maxLines = 1,
                 overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
             )
-            val second = listOf(entry.location, entry.teacher)
-                .filter { it.isNotBlank() }
-                .joinToString(" · ")
+            val second =
+                listOf(entry.location, entry.teacher)
+                    .filter { it.isNotBlank() }
+                    .joinToString(" · ")
             if (second.isNotBlank()) {
                 Text(
                     text = second,
@@ -290,9 +304,10 @@ internal fun EntryRow(entry: Entry) {
 @Composable
 internal fun LoadingBlock(modifier: Modifier = Modifier) {
     Row(
-        modifier = modifier
-            .fillMaxWidth()
-            .padding(vertical = 32.dp),
+        modifier =
+            modifier
+                .fillMaxWidth()
+                .padding(vertical = 32.dp),
         horizontalArrangement = Arrangement.Center,
         verticalAlignment = Alignment.CenterVertically,
     ) {
@@ -309,16 +324,27 @@ internal fun LoadingBlock(modifier: Modifier = Modifier) {
 internal fun EmptyHint(
     text: String,
     modifier: Modifier = Modifier,
+    icon: ImageVector? = null,
     shape: Shape = MaterialTheme.shapes.extraLarge,
 ) {
-    Box(
-        modifier = modifier
-            .fillMaxWidth()
-            .clip(shape)
-            .background(MaterialTheme.colorScheme.surfaceContainerLow)
-            .padding(horizontal = 24.dp, vertical = 32.dp),
-        contentAlignment = Alignment.Center,
+    Column(
+        modifier =
+            modifier
+                .fillMaxWidth()
+                .clip(shape)
+                .background(MaterialTheme.colorScheme.surfaceContainerLow)
+                .padding(horizontal = 20.dp, vertical = 32.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(10.dp),
     ) {
+        if (icon != null) {
+            Icon(
+                imageVector = icon,
+                contentDescription = null,
+                modifier = Modifier.size(36.dp),
+                tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
+            )
+        }
         Text(
             text = text,
             style = MaterialTheme.typography.bodyMedium,
@@ -330,35 +356,45 @@ internal fun EmptyHint(
 
 /** 状态圆点：校园网三态、在线 / 未认证 etc. */
 @Composable
-internal fun StatusDot(color: Color, modifier: Modifier = Modifier) {
+internal fun StatusDot(
+    color: Color,
+    modifier: Modifier = Modifier,
+) {
     Box(
-        modifier = modifier
-            .size(10.dp)
-            .clip(CircleShape)
-            .background(color),
+        modifier =
+            modifier
+                .size(10.dp)
+                .clip(CircleShape)
+                .background(color),
     )
 }
 
 /** 「数据截至 / 同步于」这类时间说明，统一弱化排版。 */
 @Composable
-internal fun MetaText(text: String, modifier: Modifier = Modifier, emphasize: Boolean = false) {
+internal fun MetaText(
+    text: String,
+    modifier: Modifier = Modifier,
+    emphasize: Boolean = false,
+) {
     Text(
         text = text,
         style = MaterialTheme.typography.labelMedium,
         fontSize = 11.sp,
-        color = if (emphasize) {
-            MaterialTheme.colorScheme.tertiary
-        } else {
-            MaterialTheme.colorScheme.onSurfaceVariant
-        },
+        color =
+            if (emphasize) {
+                MaterialTheme.colorScheme.tertiary
+            } else {
+                MaterialTheme.colorScheme.onSurfaceVariant
+            },
         modifier = modifier,
     )
 }
 
 /** 校园网三态 → 本地化文案。 */
 @Composable
-internal fun campusStateLabel(state: CampusState): String = when (state) {
-    CampusState.ONLINE -> stringResource(R.string.campusnet_online)
-    CampusState.UNAUTH -> stringResource(R.string.campusnet_unauth)
-    CampusState.OFFLINE -> stringResource(R.string.campusnet_offline)
-}
+internal fun campusStateLabel(state: CampusState): String =
+    when (state) {
+        CampusState.ONLINE -> stringResource(R.string.campusnet_online)
+        CampusState.UNAUTH -> stringResource(R.string.campusnet_unauth)
+        CampusState.OFFLINE -> stringResource(R.string.campusnet_offline)
+    }
