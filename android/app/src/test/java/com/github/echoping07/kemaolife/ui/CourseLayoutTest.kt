@@ -44,6 +44,20 @@ class CourseLayoutTest {
     }
 
     @Test
+    fun multiSectionCoursesUseEveryRow() {
+        val blocks = layoutCourseBlocks(
+            listOf(entry("短课", "1-2"), entry("上午大课", "1-4"), entry("下午大课", "5-8")),
+        )
+        // 4 小节必须占 4 行：块高只由 spanRows 决定，不按 1-2 的固定高度画。
+        assertEquals(2, blocks[0].spanRows)
+        assertEquals(0, blocks[1].startRow)
+        assertEquals(4, blocks[1].spanRows)
+        assertEquals(4, blocks[2].startRow)
+        assertEquals(4, blocks[2].spanRows)
+        assertEquals(8, blocks[2].startRow + blocks[2].spanRows)
+    }
+
+    @Test
     fun overlappingCoursesShareLanes() {
         val blocks = layoutCourseBlocks(
             listOf(entry("A课程", "1-4"), entry("B课程", "3-4"), entry("C课程", "5-6")),
@@ -53,6 +67,8 @@ class CourseLayoutTest {
         assertEquals(2, blocks[1].lanes)
         assertEquals(0, blocks[0].lane)
         assertEquals(1, blocks[1].lane)
+        assertEquals(4, blocks[0].spanRows)
+        assertEquals(2, blocks[1].spanRows)
         assertEquals(1, blocks[2].lanes)
         assertEquals(0, blocks[2].lane)
     }

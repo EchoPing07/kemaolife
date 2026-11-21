@@ -635,12 +635,13 @@ private fun DayColumn(
                 val palette = coursePalette(block.entry.name)
                 Box(
                     modifier = Modifier
+                        .fillMaxSize()
                         .padding(horizontal = 1.5.dp, vertical = 2.dp)
                         .clip(appShape(10.dp))
                         .background(palette.container)
                         .clickable(role = Role.Button) { day?.let { onCourseClick(it, block.entry) } }
                         .padding(horizontal = 4.dp, vertical = 4.dp),
-                ) { CourseCell(block.entry, palette.onContainer) }
+                ) { CourseCell(block.entry, palette.onContainer, block.spanRows) }
             }
         },
     ) { measurables, constraints ->
@@ -669,17 +670,26 @@ private fun DayColumn(
 }
 
 @Composable
-private fun CourseCell(entry: Entry, textColor: Color) {
-    Column(verticalArrangement = Arrangement.spacedBy(1.dp)) {
-        Text(
-            text = entry.time.substringBefore('~'),
-            style = MaterialTheme.typography.labelSmall,
-            fontSize = 9.sp,
-            lineHeight = 11.sp,
-            fontWeight = FontWeight.Medium,
-            color = textColor.copy(alpha = 0.82f),
-            maxLines = 1,
-        )
+private fun CourseCell(entry: Entry, textColor: Color, spanRows: Int) {
+    // 单小节只保留课名与一行次要信息；两小节起展示完整的时间 / 地点 / 教师。
+    // 文本行数按课长分配，但块高始终由 DayColumn 的 spanRows 决定，不随内容收缩。
+    val compact = spanRows < 2
+    val extended = spanRows >= 4
+    Column(
+        modifier = Modifier.fillMaxSize(),
+        verticalArrangement = Arrangement.spacedBy(1.dp),
+    ) {
+        if (!compact) {
+            Text(
+                text = entry.time.substringBefore('~'),
+                style = MaterialTheme.typography.labelSmall,
+                fontSize = 9.sp,
+                lineHeight = 11.sp,
+                fontWeight = FontWeight.Medium,
+                color = textColor.copy(alpha = 0.82f),
+                maxLines = 1,
+            )
+        }
         Text(
             text = entry.name,
             style = MaterialTheme.typography.labelMedium,
@@ -687,21 +697,43 @@ private fun CourseCell(entry: Entry, textColor: Color) {
             lineHeight = 12.sp,
             fontWeight = FontWeight.SemiBold,
             color = textColor,
-            maxLines = 4,
+            maxLines = when {
+                compact -> 1
+                extended -> 4
+                else -> 2
+            },
             overflow = TextOverflow.Ellipsis,
         )
-        if (entry.location.isNotBlank()) {
-            Text(
-                text = entry.location,
-                style = MaterialTheme.typography.labelSmall,
-                fontSize = 9.sp,
-                lineHeight = 11.sp,
-                color = textColor.copy(alpha = 0.82f),
-                maxLines = 2,
-                overflow = TextOverflow.Ellipsis,
-            )
+        if (compact) {
+            // 单小节空间只够一行：地点与教师合并，两者都空时不占位。
+            val secondary = listOf(entry.location, entry.teacher)
+                .filter { it.isNotBlank() }
+                .joinToString(" · ")
+            if (secondary.isNotBlank()) {
+                CourseMetaText(secondary, textColor, maxLines = 1)
+            }
+        } else {
+            if (entry.location.isNotBlank()) {
+                CourseMetaText(entry.location, textColor, maxLines = if (extended) 2 else 1)
+            }
+            if (entry.teacher.isNotBlank()) {
+                CourseMetaText(entry.teacher, textColor, maxLines = if (extended) 2 else 1)
+            }
         }
     }
+}
+
+@Composable
+private fun CourseMetaText(text: String, textColor: Color, maxLines: Int) {
+    Text(
+        text = text,
+        style = MaterialTheme.typography.labelSmall,
+        fontSize = 9.sp,
+        lineHeight = 11.sp,
+        color = textColor.copy(alpha = 0.82f),
+        maxLines = maxLines,
+        overflow = TextOverflow.Ellipsis,
+    )
 }
 
 @Composable

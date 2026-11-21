@@ -26,7 +26,7 @@ class TimetableCacheTest {
                 entries = listOf(
                     Entry(
                         name = "高等数学",
-                        periods = "1-2",
+                        periods = "1-4",
                         time = "08:00~09:40",
                         teacher = "<教师>",
                         location = "<校区>_<楼栋>_<楼层>_<房间>",
@@ -39,12 +39,18 @@ class TimetableCacheTest {
 
     @Test
     fun `缓存往返保留周次日次与数据时间`() {
-        val cached = TimetableCache.decode(TimetableCache.encode(week, "2026-11-08T09:00:00+08:00"))
+        val cached = requireNotNull(
+            TimetableCache.decode(TimetableCache.encode(week, "2026-11-08T09:00:00+08:00")),
+        )
+        val entry = cached.schedule.days.single().entries.single()
 
-        assertEquals(7, cached?.schedule?.week)
-        assertEquals("2026-11-09", cached?.schedule?.days?.single()?.date)
-        assertEquals("高等数学", cached?.schedule?.days?.single()?.entries?.single()?.name)
-        assertEquals("2026-11-08T09:00:00+08:00", cached?.syncedAt)
+        assertEquals(7, cached.schedule.week)
+        assertEquals("2026-11-09", cached.schedule.days.single().date)
+        assertEquals("高等数学", entry.name)
+        // 冷启动镜像必须保留完整节次与教师，否则周视图会退回 1-2 且丢教师。
+        assertEquals("1-4", entry.periods)
+        assertEquals("<教师>", entry.teacher)
+        assertEquals("2026-11-08T09:00:00+08:00", cached.syncedAt)
         assertTrue(TimetableCache.encode(week, "2026-11-08T09:00:00+08:00").contains("\"version\":${TimetableCache.VERSION}"))
     }
 
