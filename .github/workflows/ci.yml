@@ -9,10 +9,10 @@ jobs:
   check:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-go@v5
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: actions/setup-go@d35c59abb061a4a6fb18e82ac0862c26744d6ab5 # v5.5.0
         with:
-          go-version: '1.24'
+          go-version-file: go.mod
           cache: true
       - name: Format
         run: test -z "$(gofmt -l .)"
@@ -22,15 +22,18 @@ jobs:
         run: go test ./...
       - name: No browser engine
         run: |
-          if grep -rniE 'webview|cef|wails|pwa|electron|tauri' --include='*.go' --include='*.kt' .; then
+          if grep -rniE 'webview|cef|wails|pwa|electron|tauri' \
+              --include='*.go' --include='*.kt' .; then
             echo 'FAIL: browser engine reference found'; exit 1
           fi
       - name: Layering
         run: |
-          if grep -rn 'runtime.GOOS' internal/core internal/app internal/desktop; then
+          if grep -rn 'runtime.GOOS' \
+              internal/core internal/app internal/desktop; then
             echo 'FAIL: platform check in core/app/desktop'; exit 1
           fi
-          if go list -deps ./internal/core/... | grep -E 'x/sys/windows|gioui|fyne|android'; then
+          if go list -deps ./internal/core/... \
+              | grep -E 'x/sys/windows|gioui|fyne|android'; then
             echo 'FAIL: core depends on platform/UI packages'; exit 1
           fi
       - name: Cross build
@@ -39,20 +42,27 @@ jobs:
           # CLI 支持 linux / darwin；darwin 两架构的预编译包由 release.yml 产出并进 SHA256SUMS。
           GOOS=darwin GOARCH=amd64 go build ./internal/... ./cmd/kemaolife/...
           GOOS=darwin GOARCH=arm64 go build ./internal/... ./cmd/kemaolife/...
-          GOOS=darwin GOARCH=amd64 go vet ./cmd/kemaolife/... ./internal/platform/...
-          GOOS=darwin GOARCH=arm64 go vet ./cmd/kemaolife/... ./internal/platform/...
+          GOOS=darwin GOARCH=amd64 go vet \
+            ./cmd/kemaolife/... ./internal/platform/...
+          GOOS=darwin GOARCH=arm64 go vet \
+            ./cmd/kemaolife/... ./internal/platform/...
           GOOS=windows GOARCH=amd64 go build ./internal/...
           GOOS=windows GOARCH=arm64 go build ./internal/...
           # 托盘端必须按 GUI 子系统构建（docs/release.md）：console 子系统会挂控制台窗口，
           # 不符合 docs/windows.md 的 GUI 子系统形态。这里用与文档一致的参数做交叉编译。
-          GOOS=windows GOARCH=amd64 go build -ldflags "-H=windowsgui" -o /tmp/kemaolife-desktop.exe ./cmd/kemaolife-desktop/
-          GOOS=windows GOARCH=arm64 go build -ldflags "-H=windowsgui" -o /tmp/kemaolife-desktop-arm64.exe ./cmd/kemaolife-desktop/
+          GOOS=windows GOARCH=amd64 go build -tags=mygo_nowebview \
+            -ldflags "-H=windowsgui" \
+            -o /tmp/kemaolife-desktop.exe ./cmd/kemaolife-desktop/
+          GOOS=windows GOARCH=arm64 go build -tags=mygo_nowebview \
+            -ldflags "-H=windowsgui" \
+            -o /tmp/kemaolife-desktop-arm64.exe ./cmd/kemaolife-desktop/
 
           # 发布产物必须是 GUI 子系统：从 PE 头读 Subsystem（值 3 = console）。
           python3 - <<'PY'
           import struct
 
-          for path in ("/tmp/kemaolife-desktop.exe", "/tmp/kemaolife-desktop-arm64.exe"):
+          for path in ("/tmp/kemaolife-desktop.exe",
+                       "/tmp/kemaolife-desktop-arm64.exe"):
               with open(path, "rb") as f:
                   head = f.read(0x400)
               assert head[:2] == b"MZ", path
@@ -62,7 +72,8 @@ jobs:
               magic = struct.unpack_from("<H", head, opt)[0]
               assert magic in (0x10B, 0x20B), (path, hex(magic))
               subsystem = struct.unpack_from("<H", head, opt + 0x44)[0]
-              assert subsystem == 2, (path, f"subsystem={subsystem}, want GUI(2)")
+              assert subsystem == 2, (
+                  path, f"subsystem={subsystem}, want GUI(2)")
               print(f"{path}: subsystem GUI(2) OK")
           PY
 
@@ -82,13 +93,16 @@ jobs:
               return 1
             fi
           }
-          for f in packaging/windows/install.ps1 packaging/windows/uninstall.ps1; do
-            if [[ -z "$(head -c 3 "$f" | od -An -tx1 | tr -d ' \n' | grep -x 'efbbbf')" ]]; then
+          for f in packaging/windows/install.ps1 \
+                    packaging/windows/uninstall.ps1; do
+            bom=$(head -c 3 "$f" | od -An -tx1 | tr -d ' \n')
+            if [[ "$bom" != "efbbbf" ]]; then
               echo "FAIL: $f 缺少 UTF-8 BOM"; exit 1
             fi
             crlf_ok "$f"
           done
-          for f in packaging/windows/install.bat packaging/windows/uninstall.bat; do
+          for f in packaging/windows/install.bat \
+                    packaging/windows/uninstall.bat; do
             crlf_ok "$f"
           done
           echo 'Windows packaging scripts OK'
@@ -96,8 +110,9 @@ jobs:
       - name: Android cross build
         run: |
           # 每次 PR 都跑的轻量检查：Go 代码能交叉编译到 android/arm64。
-          # 完整 AAR / APK（NDK + Gradle + gomobile）由 ci-android.yml 在 Android 路径变更时构建。
-          GOOS=android GOARCH=arm64 go build ./internal/... ./cmd/kemaolife-mobile/
+          # 完整 AAR / APK 由 ci-android.yml 在 Android 路径变更时构建。
+          GOOS=android GOARCH=arm64 go build \
+            ./internal/... ./cmd/kemaolife-mobile/
 
       # 个人隐私（学号 / 房间号 / Cookie / 会话值 / 凭据 / 指纹）不得入仓。
       # 学校代码 3126、学校公开 Portal / 探测 IP、BRAS 名称属学校事实，不在此检查范围。

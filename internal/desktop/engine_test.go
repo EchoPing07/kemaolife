@@ -447,6 +447,26 @@ func TestPollOnceConcurrentNotifiesOnce(t *testing.T) {
 	}
 }
 
+// 已取消的历史查询在排队等待轮询锁后仍不得发出请求。
+func TestQueryElectricityCanceledContextSkipsQuery(t *testing.T) {
+	var hits atomic.Int32
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		hits.Add(1)
+		writeOuter(w, `{"result":"0"}`)
+	}))
+	t.Cleanup(srv.Close)
+	eng, _, _ := buildEngine(t, newFakeCampus(model.CampusOnline), defaultSettings(), srv)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	if err := eng.QueryElectricity(ctx, "2026-10"); !errors.Is(err, context.Canceled) {
+		t.Fatalf("取消的历史查询应返回 context.Canceled, got %v", err)
+	}
+	if hits.Load() != 0 {
+		t.Errorf("取消的历史查询不得发出请求, got %d 次", hits.Load())
+	}
+}
+
 // 凭据类月份查询错误必须保留「设置…」修复指引，不能被标准码文案吃掉。
 func TestQueryElectricityCredentialErrorKeepsSettingsHint(t *testing.T) {
 	srv := electricityServer(t, 50, 1)

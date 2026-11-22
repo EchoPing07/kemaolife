@@ -60,7 +60,7 @@
 
 依赖方向恒向下：`core` 不 import `app`，`app` 不 import `cmd`，`core` 绝不 import `platform` 实现。
 
-`internal/desktop` 是 Windows 端常驻编排（轮询 / 告警 / 窗口状态机），只依赖 `core` + ports + `app`，无平台调用，可跨平台单测。`Engine.Deps()` 向 `cmd` 暴露课表用例所需的端口副本；`Engine.QueryElectricity` 提供指定月份的手动查询，不触发告警、不修改轮询退避。主窗口、托盘与通知属呈现层，归 `cmd/kemaolife-desktop/ui`，不进 `internal/platform`。
+`internal/desktop` 是 Windows 端常驻编排（轮询 / 告警 / 窗口状态机），只依赖 `core` + ports + `app`，无平台调用，可跨平台单测。`Engine.Deps()` 向 `cmd` 暴露课表用例所需的端口副本；`Engine.QueryElectricity` 提供指定月份的手动查询，不触发告警、不修改轮询退避。主窗口、托盘与通知属呈现层，归 `cmd/kemaolife-desktop/ui`，不进 `internal/platform`。主窗口使用 MyGo 原生 UI，托盘与通知继续复用 Win32 适配代码，二者由同一个桌面消息循环驱动。
 
 ## 3. 目录结构
 
@@ -113,7 +113,7 @@ kemaolife/                         # GitHub: EchoPing07/kemaolife
 │   ├── kemaolife/                 # CLI（linux / darwin）：单二进制 + 子命令
 │   ├── kemaolife-desktop/         # Windows：五页主窗口 + 托盘 + 自启 + ticker（GUI 子系统无控制台）
 │   │   ├── console_windows.go     # FreeConsole 兜底
-│   │   └── ui/                    # 纯 Win32（syscall 直调 user32/gdi32/shell32），主窗口、托盘、菜单与通知
+│   │   └── ui/                    # MyGo 主窗口 + Win32 托盘、菜单与通知；UI 只消费 DTO
 │   └── kemaolife-mobile/          # Android：gomobile bind 薄门面（§6）
 ├── android/                       # Kotlin + Compose，仅渲染与门面调用（构建见 android/README.md）
 ├── skills/kemaolife/SKILL.md      # agent skill
@@ -268,7 +268,7 @@ CLI 不调用校园网用例。校园网用例用独立的 `app.CampusDeps`（`C
 
 ## 7. Windows 原生层
 
-Windows 是一个原生主窗口 + 托盘程序，不是浏览器套壳：用标准库 `syscall` 直调 user32 / gdi32 / shell32 与 advapi32 / crypt32 实现五页主窗口、托盘、菜单、通知、自启注册表项与 DPAPI，单二进制、免 .NET / WebView2 / 第三方依赖。通知由托盘 `NIF_INFO` 承载，进程启动时设置 `Kemaolife.Desktop` AUMID 用于归类；不承诺 WinRT Toast 或操作中心归档。
+Windows 是一个原生主窗口 + 托盘程序，不是浏览器套壳：主窗口使用 MyGo 原生 UI（Direct3D 11 + DirectWrite），托盘、菜单与通知保留标准库 `syscall` 的 Win32 实现，自启注册表项与 DPAPI 继续使用 advapi32 / crypt32。发布构建通过 `mygo_nowebview` 移除网页加载路径，单二进制、免 .NET。通知由托盘 `NIF_INFO` 承载，进程启动时设置 `Kemaolife.Desktop` AUMID 用于归类；不承诺 WinRT Toast 或操作中心归档。
 
 主窗口固定为今天 / 课表 / 电费 / 校园网 / 设置五页。今天与完整周课表均通过 `CacheOnly` 读取快照，切周不联网；启动先读快照再后台 `SyncTimetable`，手动刷新走同一独立用例。Windows 新增保存教务密码，和校园网凭据一样使用用户级 DPAPI。
 

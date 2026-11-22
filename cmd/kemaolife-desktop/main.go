@@ -123,10 +123,6 @@ func run() (err error) {
 	if err := ui.RegisterClass(ui.TrayClass, ui.TrayProc, icon); err != nil {
 		return err
 	}
-	if err := ui.RegisterClass(ui.MainCls, ui.MainProc, icon); err != nil {
-		return err
-	}
-
 	// 托盘窗口是隐藏窗：不显示界面，只接收托盘图标回调与自定义消息。
 	trayWnd, err := ui.CreateWindow(ui.TrayClass, desktop.AppName, 0, 0, 0, 0)
 	if err != nil {
@@ -214,14 +210,6 @@ func run() (err error) {
 	defer a.tray.Remove()
 
 	background := backgroundStartup()
-	if !background {
-		// 主窗口在首个网络动作前创建，后台同步时显示局部加载态。
-		a.openMain()
-		if strings.TrimSpace(a.currentSettings().StudentID) == "" {
-			ui.OpenMainPage(ui.MainPageSettings)
-			a.openSettings()
-		}
-	}
 
 	// 首轮立即查一次：开机自启后用户马上能看到数据，不必等一个轮询周期。
 	go a.engine.Run(ctx, a.stop, func(error) {
@@ -236,8 +224,15 @@ func run() (err error) {
 		go a.startUpdateCheck(false)
 	}
 
-	ui.Run()
-	return nil
+	return ui.Run(func() {
+		if !background {
+			// 主窗口在首个网络动作前创建，后台同步时显示局部加载态。
+			a.openMain()
+			if strings.TrimSpace(a.currentSettings().StudentID) == "" {
+				a.openSettings()
+			}
+		}
+	})
 }
 
 // backgroundStartup 判断是否以 --background 自启（只认第一个参数）。
@@ -298,25 +293,31 @@ func (a *desktopApp) applySettings(res desktop.SettingsResult) error {
 	return nil
 }
 
-// openSettings 切到主窗口「设置」页（托盘菜单项与校园网页按钮都走这里）。
+// openSettings 在同一个 ready 回调里创建窗口并切到「设置」页，
+// 避免首次启动时页面切换先于窗口创建而丢失。
 func (a *desktopApp) openSettings() {
-	a.openMain()
-	ui.OpenMainPage(ui.MainPageSettings)
+	ui.WhenReady(func() {
+		a.openMainReady()
+		ui.OpenMainPage(ui.MainPageSettings)
+	})
 }
 
-// saveSettingsFromPage 在主窗口设置页保存，返回提示文本；
+// saveSettingsFromPage 在主窗口设置页保存，返回提示、生效表单与是否已落盘。
 // 钳制与保存失败都留在页内，只有完全成功才提示「已保存」。
-func (a *desktopApp) saveSettingsFromPage(res desktop.SettingsResult) (hint string) {
+func (a *desktopApp) saveSettingsFromPage(res desktop.SettingsResult) (hint string, form desktop.SettingsForm, saved bool) {
+	previous := a.currentSettings()
 	defer func() {
+		form = desktop.ToSettingsForm(a.currentSettings())
+		saved = saved || a.currentSettings() != previous
 		a.refreshMainWindow()
 	}()
 	if err := a.applySettings(res); err != nil {
 		if errors.Is(err, desktop.ErrSettingsClamped) {
-			return desktop.ClampedSettingsHint(a.currentSettings())
+			return desktop.ClampedSettingsHint(a.currentSettings()), form, true
 		}
-		return err.Error()
+		return err.Error(), form, false
 	}
-	return "已保存"
+	return "已保存", form, true
 }
 
 // buildMenu 按当前状态与模式生成托盘右键菜单。

@@ -8,6 +8,8 @@ import (
 	"sync"
 	"syscall"
 	"unsafe"
+
+	"github.com/egoist/mygo"
 )
 
 // WndProc 是窗口过程签名。
@@ -236,24 +238,25 @@ func PostTrigger(hwnd uintptr, msg uint32) {
 	procPostMessage.Call(hwnd, uintptr(msg), 0, 0)
 }
 
-// Run 进入消息循环，阻塞当前 OS 线程直到 PostQuitMessage。
-//
-// 注意：必须在主 goroutine 上调用并 LockOSThread —— Win32 消息队列属于线程，
-// 换线程 GetMessage 就收不到自己的窗口消息。
-func Run() int {
-	var msg MSG
-	for {
-		r, _, _ := procGetMessage.Call(uintptr(unsafe.Pointer(&msg)), 0, 0, 0)
-		if int32(r) <= 0 {
-			return int(r)
-		}
-		procTranslateMsg.Call(uintptr(unsafe.Pointer(&msg)))
-		procDispatchMsg.Call(uintptr(unsafe.Pointer(&msg)))
+// WhenReady 把窗口操作调度到框架完成初始化之后。
+func WhenReady(fn func()) { mygo.App.WhenReady(fn) }
+
+// Run 在主线程进入桌面消息循环，旧托盘窗口仍由同一循环分发消息。
+func Run(ready func()) error {
+	mygo.App.SetName("科贸生活")
+	if ready != nil {
+		mygo.App.WhenReady(ready)
 	}
+	return mygo.App.Run()
 }
 
-// Quit 结束消息循环。
-func Quit() { procPostQuitMessage.Call(0) }
+// Quit 允许主窗口真正关闭，并结束整个应用。
+func Quit() {
+	mainMu.Lock()
+	mainQuitting = true
+	mainMu.Unlock()
+	mygo.App.Quit()
+}
 
 // MessageBox 弹一个原生消息框（用于启动失败这类无法走托盘提示的场景）。
 func MessageBox(title, text string, flags uint32) {

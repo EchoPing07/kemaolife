@@ -14,8 +14,11 @@ import (
 	"github.com/EchoPing07/kemaolife/internal/desktop"
 )
 
-// openMain 只在 UI 线程创建或唤起窗口；所有业务回调只启动后台任务。
-func (a *desktopApp) openMain() {
+// openMain 可来自启动早期的托盘消息，统一等待框架就绪后再操作窗口。
+func (a *desktopApp) openMain() { ui.WhenReady(a.openMainReady) }
+
+// openMainReady 只在 UI 线程创建或唤起窗口；所有业务回调只启动后台任务。
+func (a *desktopApp) openMainReady() {
 	state := a.mainState()
 	icon, _ := ui.AppIcon()
 	if err := ui.OpenMainWindow(a.wnd, icon, state, ui.MainWindowHandler{

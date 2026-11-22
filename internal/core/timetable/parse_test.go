@@ -262,10 +262,11 @@ func TestNormalizePeriodsCompactsRuns(t *testing.T) {
 
 func TestExpandPeriods(t *testing.T) {
 	cases := map[string][]int{
-		"1,2": {1, 2},
-		"5-8": {5, 6, 7, 8},
-		"3-4": {3, 4},
-		"9":   {9},
+		"1,2":       {1, 2},
+		"5-8":       {5, 6, 7, 8},
+		"3-4":       {3, 4},
+		"1-2,5,7-9": {1, 2, 5, 7, 8, 9},
+		"9":         {9},
 	}
 	for in, want := range cases {
 		if got := ExpandPeriods(in); !equalInts(got, want) {
