@@ -23,6 +23,9 @@ import (
 //go:embed assets/icon.ico
 var iconICO []byte
 
+//go:embed assets/icon.png
+var iconPNG []byte
+
 var (
 	iconOnce, trayOnce sync.Once
 	iconHandle         uintptr

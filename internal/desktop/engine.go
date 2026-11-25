@@ -312,6 +312,12 @@ func (e *Engine) wiredEgress() bool {
 // 它与默认轮询分离：不做校园网前置认证，不判定或发送余额告警，也不修改
 // 连续失败计数，因此历史月份查询不会改变 PollOnce 的告警与退避节奏。
 func (e *Engine) QueryElectricity(ctx context.Context, yearMonth string) error {
+	// 与默认轮询串行，避免两份报告按网络返回先后互相覆盖。
+	e.pollMu.Lock()
+	defer e.pollMu.Unlock()
+	if err := ctx.Err(); err != nil {
+		return err
+	}
 	cfg := e.settings()
 	report, err := app.CheckElectricity(ctx, e.deps,
 		cfg.ElectricityConfig(e.deps.DefaultCustomerCode), yearMonth)

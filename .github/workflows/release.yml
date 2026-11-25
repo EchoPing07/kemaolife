@@ -23,17 +23,18 @@ jobs:
   release:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
         with:
           # tag push 时按 tag 检出；手动补跑时按输入的 tag 检出。
           ref: ${{ github.event.inputs.tag || github.ref }}
           fetch-depth: 0
           fetch-tags: true
 
-      - uses: actions/setup-go@v5
+      - uses: actions/setup-go@d35c59abb061a4a6fb18e82ac0862c26744d6ab5 # v5.5.0
         with:
           go-version-file: go.mod
-          cache: true
+          # 发布工作流不恢复 PR 缓存，避免不可信构建产物进入 Release。
+          cache: false
 
       # tag 是唯一发布入口，且必须与源码常量一致（docs/release.md §1）。
       - name: Resolve tag, version and commit
@@ -49,13 +50,15 @@ jobs:
             exit 1
           fi
           VERSION="${TAG#v}"
-          SRC_VERSION="$(sed -nE 's/^const Version[[:space:]]*=[[:space:]]*"([^"]+)".*/\1/p' internal/version/version.go)"
+          SRC_VERSION="$(sed -nE \
+            's/^const Version[[:space:]]*=[[:space:]]*"([^"]+)".*/\1/p' \
+            internal/version/version.go)"
           if [[ -z "$SRC_VERSION" ]]; then
             echo "::error::无法从 internal/version/version.go 提取 Version"
             exit 1
           fi
           if [[ "$SRC_VERSION" != "$VERSION" ]]; then
-            echo "::error::tag $TAG 与 internal/version.Version $SRC_VERSION 不一致（docs/release.md §1）"
+            echo "::error::tag $TAG 与源码版本 $SRC_VERSION 不一致"
             exit 1
           fi
 
@@ -67,7 +70,8 @@ jobs:
             exit 1
           fi
 
-          # Android versionCode 由 tag 派生：major*10000 + minor*100 + patch（v0.5.5 → 505）。
+          # Android versionCode 由 tag 派生：
+          # major*10000 + minor*100 + patch（v0.5.5 → 505）。
           # 必须跨版本严格递增，否则 Android 拒绝覆盖安装。
           IFS='.' read -r MAJOR MINOR PATCH <<< "$VERSION"
           VERSION_CODE=$(( 10#$MAJOR * 10000 + 10#$MINOR * 100 + 10#$PATCH ))
@@ -104,7 +108,8 @@ jobs:
             [[ -z "$value" ]] && continue
             if grep -rniF -e "$value" . \
                 --exclude-dir=.git \
-                --exclude=ci.yml --exclude=release.yml --exclude=AGENTS.md --exclude=CONTRIBUTING.md; then
+                --exclude=ci.yml --exclude=release.yml \
+                --exclude=AGENTS.md --exclude=CONTRIBUTING.md; then
               echo 'FAIL: personal data found'; exit 1
             fi
           done
@@ -126,7 +131,8 @@ jobs:
         run: |
           set -euo pipefail
           PY="$(command -v python3 2>/dev/null || true)"
-          if [[ -z "$PY" ]] || ! "$PY" -c 'import sys; sys.exit(0)' > /dev/null 2>&1; then
+          if [[ -z "$PY" ]] ||
+            ! "$PY" -c 'import sys; sys.exit(0)' > /dev/null 2>&1; then
             PY="$(command -v python)"
           fi
           rm -rf dist
@@ -164,9 +170,10 @@ jobs:
             shasum -a 256 kemaolife_<版本>_darwin_<架构>.tar.gz
             tar -xzf kemaolife_<版本>_darwin_<架构>.tar.gz
             xattr -d com.apple.quarantine kemaolife
-            mkdir -p ~/.local/bin && install -m 0755 kemaolife ~/.local/bin/kemaolife
+            mkdir -p ~/.local/bin
+            install -m 0755 kemaolife ~/.local/bin/kemaolife
           xattr 仅用于清除浏览器下载的隔离属性；若系统未提示 Gatekeeper 拦截可跳过，
-          不要对来历不明的二进制执行此操作。也可按需用 Go 1.24+ 源码自行构建：
+          不要对来历不明的二进制执行此操作。也可按 go.mod 要求的 Go 版本自行构建：
           go build -o kemaolife ./cmd/kemaolife。
           macOS 二进制由 Linux CI 交叉编译，未经 Apple Developer ID 签名、未经 Apple 公证；
           arm64 包带 Go 链接器自动生成的 ad-hoc 代码签名（Apple Silicon 要求），不等于 Apple 签名。
@@ -224,7 +231,8 @@ jobs:
             cp LICENSE "$stage/LICENSE"
             cp dist/INSTALL.txt "$stage/INSTALL.txt"
 
-            env CGO_ENABLED=0 GOOS=darwin "GOARCH=${goarch}" go build -trimpath \
+            env CGO_ENABLED=0 GOOS=darwin "GOARCH=${goarch}" \
+              go build -trimpath \
               -ldflags "-s -w -X main.commit=${COMMIT}" \
               -o "$stage/kemaolife" ./cmd/kemaolife
             chmod 0755 "$stage/kemaolife"
@@ -242,7 +250,8 @@ jobs:
             goarch="$2"
             stage="dist/win-stage/${arch}"
             mkdir -p "$stage"
-            env CGO_ENABLED=0 GOOS=windows "GOARCH=${goarch}" go build -trimpath \
+            env CGO_ENABLED=0 GOOS=windows "GOARCH=${goarch}" \
+              go build -trimpath -tags=mygo_nowebview \
               -ldflags "-s -w -H=windowsgui -X main.commit=${COMMIT}" \
               -o "$stage/kemaolife-desktop.exe" ./cmd/kemaolife-desktop
             cp LICENSE "$stage/LICENSE"
@@ -258,8 +267,9 @@ jobs:
                 echo "::error::$f 缺少 CRLF 行尾（检查 .gitattributes）"; exit 1
               fi
             done
-            if ! head -c 3 "$stage/install.ps1" | od -An -tx1 | grep -q 'ef bb bf'; then
-              echo "::error::install.ps1 缺少 UTF-8 BOM（PowerShell 5.1 会按 ANSI 解码中文）"; exit 1
+            if ! head -c 3 "$stage/install.ps1" | od -An -tx1 \
+              | grep -q 'ef bb bf'; then
+              echo "::error::install.ps1 缺少 UTF-8 BOM"; exit 1
             fi
           }
 
@@ -296,7 +306,8 @@ jobs:
 
           (
             cd android
-            bash ./gradlew --no-daemon :app:assembleRelease "-PversionCode=${VERSION_CODE}"
+            bash ./gradlew --no-daemon :app:assembleRelease \
+              "-PversionCode=${VERSION_CODE}"
           )
 
           APK_DIR="android/app/build/outputs/apk/release"
@@ -317,7 +328,8 @@ jobs:
             # 某些 build-tools 版本把 --print-certs 结果写到 stderr，统一并流后再取值；
             # tr -d '\r' 避免 Windows 构建工具输出 CRLF 时留下尾随回车。
             fp="$("$APKSIGNER" verify --print-certs "$apk" 2>&1 | tr -d '\r' \
-              | sed -nE 's/^Signer #1 certificate SHA-256 digest: *(.+)$/\1/p' | head -1)"
+              | sed -nE 's/^Signer #1 certificate SHA-256 digest: *//p' \
+              | head -1)"
             if [[ -z "$fp" ]]; then
               echo "::error::无法读取 $apk 的签名证书指纹"
               exit 1
@@ -385,7 +397,8 @@ jobs:
         run: |
           set -euo pipefail
           PY="$(command -v python3 2>/dev/null || true)"
-          if [[ -z "$PY" ]] || ! "$PY" -c 'import sys; sys.exit(0)' > /dev/null 2>&1; then
+          if [[ -z "$PY" ]] ||
+            ! "$PY" -c 'import sys; sys.exit(0)' > /dev/null 2>&1; then
             PY="$(command -v python)"
           fi
           (cd dist && sha256sum -c SHA256SUMS)
@@ -399,7 +412,8 @@ jobs:
             test -s "$apk"
             "$APKSIGNER" verify --min-sdk-version 24 "$apk" > /dev/null
             fp="$("$APKSIGNER" verify --print-certs "$apk" 2>&1 | tr -d '\r' \
-              | sed -nE 's/^Signer #1 certificate SHA-256 digest: *(.+)$/\1/p' | head -1)"
+              | sed -nE 's/^Signer #1 certificate SHA-256 digest: *//p' \
+              | head -1)"
             if [[ -z "$fp" || "$fp" != "$ANDROID_CERT_SHA256" ]]; then
               echo "::error::$apk 签名证书指纹与发版记录不一致"
               exit 1
@@ -418,15 +432,18 @@ jobs:
               with open(path, "rb") as f:
                   head = f.read(20)
               assert head[:4] == b"\x7fELF", (path, "not ELF")
-              assert head[4] == ei_class and head[5] == 1, (path, "class/endian")
+              assert head[4] == ei_class and head[5] == 1, (
+                  path, "class/endian")
               machine = struct.unpack_from("<H", head, 18)[0]
               assert machine == e_machine, (path, machine)
               print(f"{arch}: ELF class={head[4]} machine={machine} OK")
 
           for arch in expected:
-              with __import__("tarfile").open(f"dist/kemaolife_{version}_linux_{arch}.tar.gz") as t:
+              archive = f"dist/kemaolife_{version}_linux_{arch}.tar.gz"
+              with __import__("tarfile").open(archive) as t:
                   names = sorted(m.name for m in t.getmembers())
-              assert names == ["INSTALL.txt", "LICENSE", "kemaolife"], (arch, names)
+              assert names == ["INSTALL.txt", "LICENSE", "kemaolife"], (
+                  arch, names)
 
           # macOS 包读 Mach-O 头判 CPU 类型与代码签名。纯 Go 二进制不依赖系统动态库；
           # arm64 必须带 Go 链接器自动生成的 LC_CODE_SIGNATURE（ad-hoc），否则 Apple Silicon
@@ -440,7 +457,8 @@ jobs:
               path = f"dist/darwin-stage/{arch}/kemaolife"
               with open(path, "rb") as f:
                   head = f.read(32)
-              assert struct.unpack_from("<I", head, 0)[0] == 0xFEEDFACF, (path, "not Mach-O 64-bit")
+              magic = struct.unpack_from("<I", head, 0)[0]
+              assert magic == 0xFEEDFACF, (path, "not Mach-O 64-bit")
               found = struct.unpack_from("<I", head, 4)[0]
               assert found == cpu_type, (path, hex(found))
               ncmds, sizeofcmds = struct.unpack_from("<II", head, 16)
@@ -453,17 +471,21 @@ jobs:
                   off += size
               has_signature = 0x1D in cmds  # LC_CODE_SIGNATURE
               assert has_signature == want_signature, (path, cmds)
-              print(f"darwin {arch}: Mach-O cpu={hex(found)} ad-hoc-signature={has_signature} OK")
+              print(f"darwin {arch}: Mach-O cpu={hex(found)} "
+                    f"ad-hoc-signature={has_signature} OK")
 
               with __import__("tarfile").open(
                       f"dist/kemaolife_{version}_darwin_{arch}.tar.gz") as t:
                   names = sorted(m.name for m in t.getmembers())
-              assert names == ["INSTALL.txt", "LICENSE", "kemaolife"], (arch, names)
+              assert names == ["INSTALL.txt", "LICENSE", "kemaolife"], (
+                  arch, names)
 
           # Windows 包读 PE 头判架构，避免依赖 file 的输出文案。
           win_expected = {"amd64": 0x8664, "arm64": 0xAA64}
-          win_entries = sorted(["INSTALL.txt", "LICENSE", "install.bat", "install.ps1",
-                                "kemaolife-desktop.exe", "uninstall.bat", "uninstall.ps1"])
+          win_entries = sorted([
+              "INSTALL.txt", "LICENSE", "install.bat", "install.ps1",
+              "kemaolife-desktop.exe", "uninstall.bat", "uninstall.ps1",
+          ])
           for arch, machine in win_expected.items():
               path = f"dist/win-stage/{arch}/kemaolife-desktop.exe"
               with open(path, "rb") as f:
@@ -480,25 +502,30 @@ jobs:
               magic = struct.unpack_from("<H", head, opt)[0]
               assert magic in (0x10b, 0x20b), (path, hex(magic))
               subsystem = struct.unpack_from("<H", head, opt + 0x44)[0]
-              assert subsystem == 2, (path, f"subsystem={subsystem}, want GUI(2)")
-              print(f"windows {arch}: PE machine={hex(found)} subsystem={subsystem} OK")
+              assert subsystem == 2, (
+                  path, f"subsystem={subsystem}, want GUI(2)")
+              print(f"windows {arch}: PE machine={hex(found)} "
+                    f"subsystem={subsystem} OK")
 
-              with __import__("zipfile").ZipFile(
-                      f"dist/kemaolife-desktop_{version}_windows_{arch}.zip") as z:
+              archive = f"dist/kemaolife-desktop_{version}_windows_{arch}.zip"
+              with __import__("zipfile").ZipFile(archive) as z:
                   names = sorted(z.namelist())
                   assert names == win_entries, (arch, names)
                   # .bat 必须是 CRLF，否则 cmd.exe 解析会吃掉行尾。
                   for bat in ("install.bat", "uninstall.bat"):
                       data = z.read(bat)
-                      assert data.count(b"\n") == data.count(b"\r\n"), (bat, "bare LF")
+                      assert data.count(b"\n") == data.count(b"\r\n"), (
+                          bat, "bare LF")
                   # .ps1 必须带 UTF-8 BOM：PowerShell 5.1 读无 BOM 的 UTF-8 会按
                   # 系统 ANSI 解码，中文变乱码并触发语法错误。
                   for ps in ("install.ps1", "uninstall.ps1"):
                       data = z.read(ps)
                       assert data.startswith(b"\xef\xbb\xbf"), (ps, "no BOM")
-                      assert data.count(b"\n") == data.count(b"\r\n"), (ps, "bare LF")
+                      assert data.count(b"\n") == data.count(b"\r\n"), (
+                          ps, "bare LF")
 
-          with __import__("zipfile").ZipFile(f"dist/kemaolife-skill_{version}.zip") as z:
+          skill_archive = f"dist/kemaolife-skill_{version}.zip"
+          with __import__("zipfile").ZipFile(skill_archive) as z:
               names = sorted(z.namelist())
           assert names == ["kemaolife/README.txt", "kemaolife/SKILL.md"], names
 
@@ -511,8 +538,9 @@ jobs:
               assert any(n == "classes.dex" for n in names), (path, "no dex")
               assert any(n.startswith(f"lib/{abi}/") and n.endswith(".so")
                          for n in names), (path, "missing ABI lib")
-              assert not any(n.startswith("lib/") and not n.startswith(f"lib/{abi}/")
-                             for n in names), (path, "foreign ABI lib")
+              assert not any(
+                  n.startswith("lib/") and not n.startswith(f"lib/{abi}/")
+                  for n in names), (path, "foreign ABI lib")
               print(f"android {abi}: ABI split OK")
           print("archive contents OK")
           PY
@@ -539,11 +567,14 @@ jobs:
         run: |
           set -euo pipefail
           PY="$(command -v python3 2>/dev/null || true)"
-          if [[ -z "$PY" ]] || ! "$PY" -c 'import sys; sys.exit(0)' > /dev/null 2>&1; then
+          if [[ -z "$PY" ]] ||
+            ! "$PY" -c 'import sys; sys.exit(0)' > /dev/null 2>&1; then
             PY="$(command -v python)"
           fi
-          # 正文结构与覆盖文件机制见 docs/release.md §6；ANDROID_CERT_SHA256 已由签名步骤写入 GITHUB_ENV。
-          PREV_TAG="$(git describe --tags --abbrev=0 "${TAG}^" 2>/dev/null || true)"
+          # 正文结构与覆盖文件机制见 docs/release.md §6；
+          # ANDROID_CERT_SHA256 已由签名步骤写入 GITHUB_ENV。
+          PREV_TAG="$(git describe --tags --abbrev=0 \
+            "${TAG}^" 2>/dev/null || true)"
           export PREV_TAG
           "$PY" .github/scripts/render_release_notes.py
 
@@ -580,7 +611,7 @@ jobs:
             echo "Release $TAG 已存在，只补传同名资产"
             gh release upload "$TAG" "${ASSETS[@]}" --clobber
           else
-            # 正文由 render_release_notes.py 渲染（docs/release.md §6），已含 Full Changelog 链接，
+            # 正文由 render_release_notes.py 渲染，已含 Full Changelog 链接，
             # 不用 --generate-notes 追加重复的自动清单。
             gh release create "$TAG" \
               --verify-tag \

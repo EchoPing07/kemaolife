@@ -365,30 +365,39 @@ func slotIndex(periods string) int {
 func SlotIndexToSection(periods string) int { return slotIndex(periods) }
 
 // ExpandPeriods 把节次文本展开成具体节号，用于按大节逐节判断跨节。
+// 每个逗号片段独立展开，因此混合区间也不会丢失中间节号。
 //
-// `5-8` → [5 6 7 8]；`1,2` → [1 2]。
+// `5-8` → [5 6 7 8]；`1,2` → [1 2]；`1-2,5,7-9` → [1 2 5 7 8 9]。
 func ExpandPeriods(periods string) []int {
-	parts := strings.FieldsFunc(periods, func(r rune) bool { return r == ',' || r == '-' })
-	out := make([]int, 0, len(parts))
-	for _, p := range parts {
-		p = strings.TrimSpace(p)
-		if p == "" {
-			continue
+	var out []int
+	parse := func(raw string) (int, bool) {
+		n, err := strconv.Atoi(strings.TrimSpace(raw))
+		return n, err == nil && n >= 1 && n <= 60
+	}
+	for _, part := range strings.Split(periods, ",") {
+		bounds := strings.Split(part, "-")
+		if len(bounds) == 2 {
+			from, fromOK := parse(bounds[0])
+			to, toOK := parse(bounds[1])
+			if fromOK && toOK {
+				if to < from {
+					from, to = to, from
+				}
+				for n := from; n <= to; n++ {
+					out = append(out, n)
+				}
+				continue
+			}
 		}
-		n, err := strconv.Atoi(p)
-		if err != nil || n < 1 || n > 60 {
-			continue
+		// 非区间片段保持原有的宽松解析：有效节号保留，非法项忽略。
+		for _, raw := range bounds {
+			if n, ok := parse(raw); ok {
+				out = append(out, n)
+			}
 		}
-		out = append(out, n)
 	}
 	if len(out) == 0 {
 		return nil
-	}
-	// `5-8` 这种被 FieldsFunc 拆成两端，需要补齐中间节号。
-	if strings.Contains(periods, "-") && len(out) == 2 {
-		for n := out[0] + 1; n < out[1]; n++ {
-			out = append(out, n)
-		}
 	}
 	sort.Ints(out)
 	return out

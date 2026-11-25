@@ -5,478 +5,199 @@ package ui
 import (
 	"strconv"
 	"strings"
-	"sync"
 
 	"github.com/EchoPing07/kemaolife/internal/desktop"
+	myui "github.com/egoist/mygo/ui"
 )
 
-// 设置页直接长在主窗口里，不再有独立设置窗口。
-// 控件只做「收集字符串 + 显示提示」，校验与落盘仍由 desktop.ParseSettingsResult /
-// SettingsStore 负责（AGENTS §3：UI 不重写业务规则）。
-
-const (
-	// IDSetPanel 是表单滚动容器：表单控件都是它的子窗口，
-	// 滚动时被容器客户区裁剪，不会溢进标题区；保存 / 还原 / 提示不在此列。
-	IDSetPanel       = 4000
-	IDSetStudentID   = 4001
-	IDSetEduPass     = 4002
-	IDSetCustomer    = 4003
-	IDSetCampusUser  = 4010
-	IDSetCampusPass  = 4011
-	IDSetCampusFing  = 4012
-	IDSetAutoMode    = 4020
-	IDSetAutoStart   = 4021
-	IDSetWiredOnly   = 4022
-	IDSetAutoUpdate  = 4023
-	IDSetPollSecs    = 4030
-	IDSetProbeSecs   = 4031
-	IDSetBalance     = 4032
-	IDSetDays        = 4033
-	IDSetQuietFrom   = 4034
-	IDSetQuietTo     = 4035
-	IDSetQuietSep    = 4036
-	IDSetCheckUpdate = 4040
-	IDSetUpdateHint  = 4041
-	IDSetSave        = 4101
-	IDSetRevert      = 4102
-	IDSetHint        = 4201
-	IDSetGroupFirst  = 4301
-	IDSetGroupSecond = 4302
-	IDSetGroupThird  = 4303
-	IDSetLabelFirst  = 4311
-)
-
-const settingsPanelClass = "KemaolifeSettingsPanel"
-
-const wmCtlColorEdit = 0x0133
-
-// settingsPanelProc 只做转发与底色：面板是裁剪容器，不含任何业务。
-// 子控件的 WM_COMMAND / WM_CTLCOLOR* 必须转给主窗口，否则按钮点击与
-// 背景同色处理都会失效；滚轮同样转给主窗口统一处理。
-func settingsPanelProc(hwnd uintptr, msg uint32, wParam, lParam uintptr) uintptr {
-	switch msg {
-	case WM_COMMAND, WM_CTLCOLORSTATIC, WM_CTLCOLORBTN, wmCtlColorEdit, wmMouseWheel:
-		if parent, _, _ := procGetParent.Call(hwnd); parent != 0 {
-			r, _, _ := procSendMessage.Call(parent, uintptr(msg), wParam, lParam)
-			return r
-		}
-	case WM_ERASEBKGND:
-		if brush := controlBackground(); brush != 0 {
-			FillRect(wParam, hwnd, brush)
-			return 1
-		}
+func (w *mainWindow) setSettingsForm(form desktop.SettingsForm) {
+	w.settingsBase = form
+	w.settings = desktop.SettingsResult{
+		StudentID:         form.StudentID,
+		CustomerCode:      form.CustomerCode,
+		CampusUser:        form.CampusUser,
+		CampusFingerprint: form.CampusFingerprint,
+		AutoMode:          form.AutoMode,
+		WiredOnly:         form.WiredOnly,
+		AutoStart:         form.AutoStart,
+		AutoUpdateCheck:   form.AutoUpdateCheck,
+		PollSeconds:       strconv.Itoa(form.PollSeconds),
+		CampusProbeSecs:   strconv.Itoa(form.CampusProbeSecs),
+		BalanceThreshold:  form.BalanceThreshold,
+		DaysThreshold:     strconv.Itoa(form.DaysThreshold),
+		QuietFrom:         strconv.Itoa(form.QuietFrom),
+		QuietTo:           strconv.Itoa(form.QuietTo),
 	}
-	r, _, _ := procDefWindowProc.Call(hwnd, uintptr(msg), wParam, lParam)
-	return r
+	// 密码始终为空：留空表示保留已保存凭据。
+	w.settings.EduPassword = ""
+	w.settings.CampusPassword = ""
+	w.settingsDirty = false
+	w.settingsHint = ""
 }
 
-// settingsScrollMetrics 是设置页滚动范围的纯函数版，便于单测。
-// viewportTop/Bottom 是表单可视区，contentBottom 是表单内容底部。
-func settingsScrollMetrics(viewportTop, viewportBottom, contentBottom int32) (viewport, maxScroll int32) {
-	viewport = viewportBottom - viewportTop
-	if viewport < 1 {
-		viewport = 1
-	}
-	if contentBottom <= viewportTop+viewport {
-		return viewport, 0
-	}
-	return viewport, contentBottom - viewportTop - viewport
-}
+func (w *mainWindow) paintSettings(c *myui.Context) {
+	t := c.Theme()
+	p := mainPalette(c)
+	myui.Column(c).Fill().Children(func() {
+		myui.Column(c).Padding(24, 28, 14, 28).Children(func() {
+			pageHeader(c, "设置", "账号、认证、轮询与提醒；保存后立即生效", nil)
+		})
 
-var (
-	ctlBrushOnce sync.Once
-	ctlBrush     uintptr
-)
+		// Win11 设置单列限宽分组卡片条布局，避免宽屏下表单拉得过散。
+		myui.Scroll(c.Key("settings-scroll")).Grow(1).Padding(2, 28, 22, 28).Children(func() {
+			myui.Column(c).MaxWidth(820).Gap(20).Children(func() {
+				settingsGroup(c, "教务与电费", func() {
+					w.settingsInputRow(c, "student-id", "学号", "用于电费与课表查询", &w.settings.StudentID, "请输入学号", false, 240)
+					w.settingsInputRow(c, "edu-password", "教务密码", "仅用于课表同步，留空保持已保存密码不变", &w.settings.EduPassword, "留空保持不变", true, 240)
+					w.settingsInputRow(c, "customer-code", "学校代码", "留空使用内置默认 3126", &w.settings.CustomerCode, "默认 3126", false, 240)
+				})
 
-// controlBackground 是与主窗口自绘背景一致的刷子。
-// 原生 STATIC / BUTTON 默认按 COLOR_BTNFACE 擦背景，不换成同色刷子
-// 会在浅灰页面上留下明显的灰块。
-func controlBackground() uintptr {
-	ctlBrushOnce.Do(func() {
-		ctlBrush, _, _ = procCreateSolidBr.Call(mainBackground)
+				settingsGroup(c, "校园网认证", func() {
+					w.settingsInputRow(c, "campus-user", "校园网账号", "独立凭据，不复用教务密码", &w.settings.CampusUser, "请输入校园网账号", false, 240)
+					w.settingsInputRow(c, "campus-password", "校园网密码", "留空保持已保存密码不变", &w.settings.CampusPassword, "留空保持不变", true, 240)
+					w.settingsInputRow(c, "campus-fingerprint", "指纹参数", "可选参数，无特殊需要可留空", &w.settings.CampusFingerprint, "可留空", false, 240)
+				})
+
+				settingsGroup(c, "运行与启动", func() {
+					w.settingsSwitchRow(c, "auto-mode", "未认证时自动登录", "默认手动；开启后每轮电费轮询前自动尝试校园网认证", &w.settings.AutoMode)
+					w.settingsSwitchRow(c, "wired-only", "自动认证仅限有线网络", "主出口为 Wi-Fi 时跳过自动前置，避免与宿舍路由器互顶", &w.settings.WiredOnly)
+					w.settingsSwitchRow(c, "auto-start", "开机登录时自启动一次", "仅驻留系统托盘，不保活、不注册守护服务", &w.settings.AutoStart)
+					w.settingsSwitchRow(c, "auto-update", "启动时自动检查更新", "仅查询公开 Releases 版本号，不自动下载或安装", &w.settings.AutoUpdateCheck)
+				})
+
+				settingsGroup(c, "轮询与提醒", func() {
+					w.settingsInputRow(c, "poll-seconds", "电费轮询间隔（秒）", "默认 14400 秒（4 小时），低于 600 秒会在保存时钳制", &w.settings.PollSeconds, "14400", false, 140)
+					w.settingsInputRow(c, "probe-seconds", "校园网探测间隔（秒）", "默认 120 秒，低于 30 秒会在保存时钳制", &w.settings.CampusProbeSecs, "120", false, 140)
+					w.settingsInputRow(c, "balance-threshold", "余额提醒阈值（度）", "剩余电费低于等于此值时触发系统通知，默认 10 度", &w.settings.BalanceThreshold, "10", false, 140)
+					w.settingsInputRow(c, "days-threshold", "可用天数阈值（天）", "预计可用天数低于等于此值时触发提醒，默认 3 天", &w.settings.DaysThreshold, "3", false, 140)
+					settingsRowCard(c, "静默时段（时）", "静默时段内不发送通知，也不置位告警标记", func() {
+						myui.Row(c).AlignItems(myui.Center).Gap(8).Children(func() {
+							w.settingsInputControl(c, "quiet-from", &w.settings.QuietFrom, "23", false).Width(64)
+							myui.Text(c, "至").FontSize(12).TextColor(t.TextMuted)
+							w.settingsInputControl(c, "quiet-to", &w.settings.QuietTo, "7", false).Width(64)
+						})
+					})
+				})
+
+				settingsGroup(c, "版本更新", func() {
+					subtitle := "仅检查 GitHub Releases，不自动下载或安装"
+					if w.state.Version != "" {
+						subtitle = "当前版本 " + w.state.Version + " · " + subtitle
+					}
+					settingsRowCard(c, "检查新版本", subtitle, func() {
+						label := "检查更新"
+						if w.state.UpdateChecking {
+							label = "检查中…"
+						}
+						if myui.Button(c.Key("check-update"), label).Disabled(w.state.UpdateChecking).Clicked() &&
+							w.handler.OnCheckUpdate != nil {
+							w.handler.OnCheckUpdate()
+						}
+					})
+					if w.state.UpdateHint != "" {
+						mainInfoBar(c, mainIcons.info, w.state.UpdateHint, t.Text, p.card, p.cardBorder)
+					}
+				})
+			})
+		})
+
+		// 固定底部操作栏：始终可见，不随表单滚动。
+		myui.Row(c).Padding(14, 28).Gap(10).AlignItems(myui.Center).Background(p.layer).
+			BorderWidth(1, 0, 0, 0).BorderColor(p.hairline).Children(func() {
+			if myui.PrimaryButton(c.Key("settings-save"), "保存").Clicked() {
+				w.saveSettings()
+			}
+			if myui.Button(c.Key("settings-revert"), "还原").Clicked() {
+				w.setSettingsForm(w.state.SettingsForm)
+			}
+			if w.settingsDirty {
+				mainBadge(c, "有未保存更改", t.Accent, p.accentSoft, true)
+			}
+			hint := w.settingsHint
+			if hint == "" {
+				hint = w.state.SettingsHint
+			}
+			if hint != "" {
+				myui.Text(c, hint).FontSize(12).TextColor(t.TextMuted).Selectable().Grow(1).Padding(0, 4)
+			}
+		})
 	})
-	return ctlBrush
 }
 
-// settingsLayout 是设置页的物理像素坐标。
-//
-// 采用**固定单列 + 纵向滚动**：两列在窄窗口或高 DPI 下必然有一列被裁掉，
-// 且需要同时保证「列宽 / 标签 / 输入框 / 间距」四者一致，实测极易出错。
-// 单列没有横向分配问题，任何窗口宽度都完整可见，内容超长时用滚轮滚动。
-type settingsLayout struct {
-	leftX, colW  int32
-	labelW, rowH int32
-	topOverride  int32
-	eduRows      [3]int32
-	campusRows   [3]int32
-	modeRows     [4]int32
-	runRows      [5]int32
-	eduTop       int32
-	campusTop    int32
-	modeTop      int32
-	runTop       int32
-	quietY       int32
-	updateTop    int32
-	updateRow    int32
-	saveY        int32
-	hintY        int32
-	contentH     int32
+func settingsGroup(c *myui.Context, title string, items func()) {
+	myui.Column(c).Gap(6).Children(func() {
+		myui.Text(c, title).FontSize(13).Bold().Padding(0, 0, 4, 2)
+		myui.Column(c).Gap(4).Children(items)
+	})
 }
 
-func (w *mainWindow) settingsGeometry() settingsLayout {
-	left, _, right, bottom := w.contentRect()
-	g := settingsGeometryForWidth(left, right, w.scale)
-	// 保存 / 提示固定在页面底部：表单可能需要滚动，但动作按钮必须始终可点。
-	g.saveY = bottom - w.scale(76)
-	g.hintY = g.saveY + w.scale(40)
-	g.contentH = g.hintY + w.scale(20)
-	return g
+func settingsRowCard(c *myui.Context, title, desc string, control func()) {
+	p := mainPalette(c)
+	t := c.Theme()
+	myui.Row(c).Padding(13, 18).Gap(16).Radius(6).Background(p.card).Border(1, p.cardBorder).
+		AlignItems(myui.Center).Children(func() {
+		myui.Column(c).Grow(1).Gap(2).Children(func() {
+			myui.Text(c, title).FontSize(14).TextColor(t.Text)
+			if desc != "" {
+				myui.Text(c, desc).FontSize(12).TextColor(t.TextMuted)
+			}
+		})
+		if control != nil {
+			control()
+		}
+	})
 }
 
-// settingsGeometryForWidth 是纯函数版布局计算，便于单测断言不越界。
-func settingsGeometryForWidth(left, right int32, scale func(int32) int32) settingsLayout {
-	var g settingsLayout
-	g.leftX = left
-	// 右侧让出滚动条槽：面板是不透明裁剪容器，盖住滚动条会让设置页滚不动。
-	g.colW = right - left - scale(23)
-	g.labelW = scale(118)
-	g.rowH = scale(28)
-
-	rowStep := scale(38)
-	y := scale(112)
-
-	group := func(name string) int32 {
-		at := y
-		y += scale(30)
-		return at
-	}
-	rows := func(n int, out []int32) {
-		for i := 0; i < n; i++ {
-			out[i] = y
-			y += rowStep
-		}
-		y += scale(14)
-	}
-
-	g.eduTop = group("edu")
-	rows(3, g.eduRows[:])
-	g.campusTop = group("campus")
-	rows(3, g.campusRows[:])
-	g.modeTop = group("mode")
-	rows(4, g.modeRows[:])
-	g.runTop = group("run")
-	rows(4, g.runRows[:])
-	g.quietY = y
-	y += rowStep
-	g.updateTop = group("update")
-	g.updateRow = y
-	y += rowStep
-
-	// 这里的 saveY 只是「表单内容结束高度」，真实位置由 settingsGeometry
-	// 按窗口底部重新计算（滚动时按钮不能跟着滚走）。
-	g.saveY = y + scale(10)
-	g.hintY = g.saveY + scale(44)
-	g.contentH = g.hintY + scale(40)
-	return g
+func (w *mainWindow) settingsInputRow(c *myui.Context, key, title, desc string, value *string, placeholder string, password bool, width float32) {
+	settingsRowCard(c, title, desc, func() {
+		w.settingsInputControl(c, key, value, placeholder, password).Width(width)
+	})
 }
 
-func (w *mainWindow) buildSettingsControls() error {
-	ctl := w.ctl
-
-	if err := RegisterClass(settingsPanelClass, settingsPanelProc, 0); err != nil {
-		return err
+func (w *mainWindow) settingsInputControl(c *myui.Context, key string, value *string, placeholder string, password bool) myui.Element {
+	input := myui.TextInput(c.Key(key), value).Placeholder(placeholder)
+	if password {
+		input = input.Password()
 	}
-	panel := CreateChild(settingsPanelClass, "", wsClipChildren, w.hwnd, IDSetPanel)
-	ctl[IDSetPanel] = panel
-
-	label := func(id int, text string) uintptr {
-		h := CreateChild(classNameStatic, text, SS_LEFT, panel, id)
-		ctl[id] = h
-		if f := mainFont(w.hwnd, 14, 400); f != 0 {
-			procSendMessage.Call(h, WM_SETFONT, f, 1)
-		}
-		return h
+	if input.Changed() {
+		w.settingsDirty = true
+		w.settingsHint = ""
 	}
-	group := func(id int, text string) {
-		h := CreateChild(classNameStatic, text, SS_LEFT, panel, id)
-		ctl[id] = h
-		if f := mainFont(w.hwnd, 16, 700); f != 0 {
-			procSendMessage.Call(h, WM_SETFONT, f, 1)
-		}
-	}
-	field := func(id int, password bool) uintptr {
-		st := uint32(ES_AUTOHSCROLL | WS_BORDER | WS_TABSTOP)
-		if password {
-			st |= ES_PASSWORD
-		}
-		e := CreateChild(classNameEdit, "", st, panel, id)
-		ctl[id] = e
-		if f := mainFont(w.hwnd, 14, 400); f != 0 {
-			procSendMessage.Call(e, WM_SETFONT, f, 1)
-		}
-		return e
-	}
-	checkbox := func(id int, text string) {
-		c := CreateChild(classNameButton, text, BS_AUTOCHECKBOX|WS_TABSTOP, panel, id)
-		ctl[id] = c
-		if f := mainFont(w.hwnd, 14, 400); f != 0 {
-			procSendMessage.Call(c, WM_SETFONT, f, 1)
-		}
-		subclassChildWheel(c)
-	}
-
-	group(IDSetGroupFirst, "教务与电费")
-	label(IDSetLabelFirst, "学号")
-	field(IDSetStudentID, false)
-	label(IDSetLabelFirst+1, "教务密码")
-	field(IDSetEduPass, true)
-	label(IDSetLabelFirst+2, "学校代码")
-	field(IDSetCustomer, false)
-
-	group(IDSetGroupSecond, "校园网认证（独立凭据）")
-	label(IDSetLabelFirst+3, "账号")
-	field(IDSetCampusUser, false)
-	label(IDSetLabelFirst+4, "密码")
-	field(IDSetCampusPass, true)
-	label(IDSetLabelFirst+5, "指纹参数")
-	field(IDSetCampusFing, false)
-
-	group(IDSetGroupThird, "运行模式")
-	checkbox(IDSetAutoMode, "未认证时自动登录（默认手动）")
-	checkbox(IDSetWiredOnly, "自动认证仅限有线网络（避免与宿舍路由器冲突）")
-	checkbox(IDSetAutoStart, "开机登录时自启动（只启动一次，不保活）")
-	checkbox(IDSetAutoUpdate, "启动时自动检查更新（默认关闭，发现新版本时提醒）")
-
-	group(IDSetGroupThird+1, "轮询与提醒")
-	label(IDSetLabelFirst+6, "电费间隔（秒）")
-	field(IDSetPollSecs, false)
-	label(IDSetLabelFirst+7, "探测间隔（秒）")
-	field(IDSetProbeSecs, false)
-	label(IDSetLabelFirst+8, "余额阈值（度）")
-	field(IDSetBalance, false)
-	label(IDSetLabelFirst+9, "可用天数（天）")
-	field(IDSetDays, false)
-	label(IDSetLabelFirst+10, "静默时段（时）")
-	field(IDSetQuietFrom, false)
-	sep := CreateChild(classNameStatic, "至", SS_LEFT, panel, IDSetQuietSep)
-	ctl[IDSetQuietSep] = sep
-	if f := mainFont(w.hwnd, 14, 400); f != 0 {
-		procSendMessage.Call(sep, WM_SETFONT, f, 1)
-	}
-	field(IDSetQuietTo, false)
-
-	group(IDSetGroupThird+2, "版本更新")
-	check := CreateChild(classNameButton, "检查更新", BS_PUSHBUTTON|WS_TABSTOP, panel, IDSetCheckUpdate)
-	ctl[IDSetCheckUpdate] = check
-	registerMainButton(check, btnGhost)
-	updateHint := CreateChild(classNameStatic, "", SS_LEFT, panel, IDSetUpdateHint)
-	ctl[IDSetUpdateHint] = updateHint
-	if f := mainFont(w.hwnd, 14, 400); f != 0 {
-		procSendMessage.Call(updateHint, WM_SETFONT, f, 1)
-	}
-
-	registerCueEdit(ctl[IDSetStudentID], "用于电费与课表查询")
-	registerCueEdit(ctl[IDSetEduPass], "留空保持不变")
-	registerCueEdit(ctl[IDSetCustomer], "留空使用内置默认 3126")
-	registerCueEdit(ctl[IDSetCampusUser], "校园网账号，独立于教务")
-	registerCueEdit(ctl[IDSetCampusPass], "留空保持不变")
-	registerCueEdit(ctl[IDSetCampusFing], "可留空")
-	registerCueEdit(ctl[IDSetPollSecs], "默认 14400，最低 600")
-	registerCueEdit(ctl[IDSetProbeSecs], "默认 120，最低 30")
-	registerCueEdit(ctl[IDSetBalance], "默认 10")
-	registerCueEdit(ctl[IDSetDays], "默认 3")
-	registerCueEdit(ctl[IDSetQuietFrom], "23")
-	registerCueEdit(ctl[IDSetQuietTo], "7")
-
-	// 保存 / 还原 / 提示固定在页面底部，不放进滚动面板。
-	hint := CreateChild(classNameStatic, "", SS_LEFT, w.hwnd, IDSetHint)
-	ctl[IDSetHint] = hint
-	if f := mainFont(w.hwnd, 13, 400); f != 0 {
-		procSendMessage.Call(hint, WM_SETFONT, f, 1)
-	}
-
-	save := CreateChild(classNameButton, "保存", BS_PUSHBUTTON|WS_TABSTOP, w.hwnd, IDSetSave)
-	ctl[IDSetSave] = save
-	registerMainButton(save, btnPrimary)
-	revert := CreateChild(classNameButton, "还原", BS_PUSHBUTTON|WS_TABSTOP, w.hwnd, IDSetRevert)
-	ctl[IDSetRevert] = revert
-	registerMainButton(revert, btnGhost)
-	return nil
+	return input
 }
 
-// layoutSettings 在页面可见时重新摆放控件；窗口缩放后也走这里。
-// 表单控件摆在滚动面板内（坐标相对面板左上角），滚动只移动面板内容；
-// 保存 / 还原 / 提示是主窗口直接子控件，固定在底部不随滚动。
-func (w *mainWindow) layoutSettings() {
-	if w == nil || len(w.ctl) == 0 {
+func (w *mainWindow) settingsSwitchRow(c *myui.Context, key, title, desc string, value *bool) {
+	t := c.Theme()
+	settingsRowCard(c, title, desc, func() {
+		myui.Row(c).AlignItems(myui.Center).Gap(10).Children(func() {
+			myui.Text(c, mainBoolText(*value, "开", "关")).FontSize(12).TextColor(t.TextMuted)
+			if myui.Switch(c.Key(key), value).Label(title).Changed() {
+				w.settingsDirty = true
+				w.settingsHint = ""
+			}
+		})
+	})
+}
+
+func (w *mainWindow) saveSettings() {
+	if w.handler.OnSaveSettings == nil {
 		return
 	}
-	g := w.settingsGeometry()
-	rowH := g.rowH
-	fieldW := g.colW - g.labelW
-	offset := w.settingsScroll
-	top, bottom := w.settingsViewport()
-	if bottom < top {
-		bottom = top
-	}
-	Move(w.ctl[IDSetPanel], g.leftX, top, g.colW, bottom-top)
-
-	place := func(id int, x, y, width, height int32) {
-		if h := w.ctl[id]; h != 0 {
-			Move(h, x-g.leftX, y-top-offset, width, height)
-		}
-	}
-	// 标签与输入框之间留 8px 缝隙，避免边框压在文字上。
-	labelAt := func(id int, y int32) {
-		place(id, g.leftX, y+w.scale(3), g.labelW-w.scale(8), rowH)
-	}
-	fieldAt := func(id int, y int32) {
-		// 右侧留 8px：输入框边框紧贴内容区右边缘会显得被裁。
-		place(id, g.leftX+g.labelW, y, fieldW-w.scale(8), rowH)
-	}
-
-	place(IDSetGroupFirst, g.leftX, g.eduTop, g.colW, w.scale(26))
-	labelAt(IDSetLabelFirst, g.eduRows[0])
-	fieldAt(IDSetStudentID, g.eduRows[0])
-	labelAt(IDSetLabelFirst+1, g.eduRows[1])
-	fieldAt(IDSetEduPass, g.eduRows[1])
-	labelAt(IDSetLabelFirst+2, g.eduRows[2])
-	fieldAt(IDSetCustomer, g.eduRows[2])
-
-	place(IDSetGroupSecond, g.leftX, g.campusTop, g.colW, w.scale(26))
-	labelAt(IDSetLabelFirst+3, g.campusRows[0])
-	fieldAt(IDSetCampusUser, g.campusRows[0])
-	labelAt(IDSetLabelFirst+4, g.campusRows[1])
-	fieldAt(IDSetCampusPass, g.campusRows[1])
-	labelAt(IDSetLabelFirst+5, g.campusRows[2])
-	fieldAt(IDSetCampusFing, g.campusRows[2])
-
-	place(IDSetGroupThird, g.leftX, g.modeTop, g.colW, w.scale(26))
-	place(IDSetAutoMode, g.leftX, g.modeRows[0], g.colW, rowH)
-	place(IDSetWiredOnly, g.leftX, g.modeRows[1], g.colW, rowH)
-	place(IDSetAutoStart, g.leftX, g.modeRows[2], g.colW, rowH)
-	place(IDSetAutoUpdate, g.leftX, g.modeRows[3], g.colW, rowH)
-
-	place(IDSetGroupThird+1, g.leftX, g.runTop, g.colW, w.scale(26))
-	for i, id := range []int{IDSetPollSecs, IDSetProbeSecs, IDSetBalance, IDSetDays} {
-		labelAt(IDSetLabelFirst+6+i, g.runRows[i])
-		fieldAt(id, g.runRows[i])
-	}
-	// 静默时段：两个小输入框并排放在同一行，中间「至」分隔。
-	labelAt(IDSetLabelFirst+10, g.quietY)
-	place(IDSetQuietFrom, g.leftX+g.labelW, g.quietY, w.scale(58), rowH)
-	place(IDSetQuietSep, g.leftX+g.labelW+w.scale(66), g.quietY+w.scale(3), w.scale(36), rowH)
-	place(IDSetQuietTo, g.leftX+g.labelW+w.scale(110), g.quietY, w.scale(58), rowH)
-
-	place(IDSetGroupThird+2, g.leftX, g.updateTop, g.colW, w.scale(26))
-	place(IDSetCheckUpdate, g.leftX, g.updateRow, w.scale(104), rowH)
-	place(IDSetUpdateHint, g.leftX+w.scale(116), g.updateRow+w.scale(3), g.colW-w.scale(116), rowH)
-
-	w.move(IDSetSave, g.leftX, g.saveY, w.scale(104), w.scale(32))
-	w.move(IDSetRevert, g.leftX+w.scale(116), g.saveY, w.scale(88), w.scale(32))
-	w.move(IDSetHint, g.leftX, g.hintY, g.colW, w.scale(40))
-
-	w.showSettingsPage(true)
-}
-
-func (w *mainWindow) right() int32 {
-	_, _, right, _ := w.contentRect()
-	return right
-}
-
-func (w *mainWindow) showSettingsPage(visible bool) {
-	for id := range w.ctl {
-		if id >= IDSetPanel {
-			w.show(id, visible)
-		}
-	}
-}
-
-// fillSettingsForm 写入表单；两个密码框一律留空，表示「不修改」。
-func (w *mainWindow) fillSettingsForm(form desktop.SettingsForm) {
-	set := func(id int, v string) {
-		if h := w.ctl[id]; h != 0 {
-			SetText(h, v)
-		}
-	}
-	set(IDSetStudentID, form.StudentID)
-	set(IDSetEduPass, "")
-	set(IDSetCustomer, form.CustomerCode)
-	set(IDSetCampusUser, form.CampusUser)
-	set(IDSetCampusPass, "")
-	set(IDSetCampusFing, form.CampusFingerprint)
-	set(IDSetPollSecs, strconv.Itoa(form.PollSeconds))
-	set(IDSetProbeSecs, strconv.Itoa(form.CampusProbeSecs))
-	set(IDSetBalance, form.BalanceThreshold)
-	set(IDSetDays, strconv.Itoa(form.DaysThreshold))
-	set(IDSetQuietFrom, strconv.Itoa(form.QuietFrom))
-	set(IDSetQuietTo, strconv.Itoa(form.QuietTo))
-	if h := w.ctl[IDSetAutoMode]; h != 0 {
-		SetChecked(h, form.AutoMode)
-	}
-	if h := w.ctl[IDSetWiredOnly]; h != 0 {
-		SetChecked(h, form.WiredOnly)
-	}
-	if h := w.ctl[IDSetAutoStart]; h != 0 {
-		SetChecked(h, form.AutoStart)
-	}
-	if h := w.ctl[IDSetAutoUpdate]; h != 0 {
-		SetChecked(h, form.AutoUpdateCheck)
-	}
-	if h := w.ctl[IDSetHint]; h != 0 {
-		SetText(h, "")
-	}
-}
-
-func (w *mainWindow) collectSettings() desktop.SettingsResult {
-	get := func(id int) string {
-		if h := w.ctl[id]; h != 0 {
-			return Text(h)
-		}
-		return ""
-	}
-	checked := func(id int) bool {
-		if h := w.ctl[id]; h != 0 {
-			return Checked(h)
-		}
-		return false
-	}
-	res := desktop.SettingsResult{
-		StudentID:         strings.TrimSpace(get(IDSetStudentID)),
-		EduPassword:       get(IDSetEduPass),
-		CustomerCode:      strings.TrimSpace(get(IDSetCustomer)),
-		CampusUser:        strings.TrimSpace(get(IDSetCampusUser)),
-		CampusPassword:    get(IDSetCampusPass),
-		CampusFingerprint: strings.TrimSpace(get(IDSetCampusFing)),
-		AutoMode:          checked(IDSetAutoMode),
-		WiredOnly:         checked(IDSetWiredOnly),
-		AutoStart:         checked(IDSetAutoStart),
-		AutoUpdateCheck:   checked(IDSetAutoUpdate),
-		PollSeconds:       strings.TrimSpace(get(IDSetPollSecs)),
-		CampusProbeSecs:   strings.TrimSpace(get(IDSetProbeSecs)),
-		BalanceThreshold:  strings.TrimSpace(get(IDSetBalance)),
-		DaysThreshold:     strings.TrimSpace(get(IDSetDays)),
-		QuietFrom:         strings.TrimSpace(get(IDSetQuietFrom)),
-		QuietTo:           strings.TrimSpace(get(IDSetQuietTo)),
-	}
-	return res
-}
-
-// commandSettings 处理设置页按钮；其余控件（输入框、复选框）不需要派生动作。
-func (w *mainWindow) commandSettings(id int) {
-	switch id {
-	case IDSetSave:
-		if w.handler.OnSaveSettings == nil {
-			return
-		}
-		if h := w.ctl[IDSetHint]; h != 0 {
-			SetText(h, w.handler.OnSaveSettings(w.collectSettings()))
-		}
-	case IDSetRevert:
-		w.fillSettingsForm(w.state.SettingsForm)
-	case IDSetCheckUpdate:
-		if w.handler.OnCheckUpdate != nil {
-			w.handler.OnCheckUpdate()
-		}
+	result := w.settings
+	result.StudentID = strings.TrimSpace(result.StudentID)
+	result.CustomerCode = strings.TrimSpace(result.CustomerCode)
+	result.CampusUser = strings.TrimSpace(result.CampusUser)
+	result.CampusFingerprint = strings.TrimSpace(result.CampusFingerprint)
+	result.PollSeconds = strings.TrimSpace(result.PollSeconds)
+	result.CampusProbeSecs = strings.TrimSpace(result.CampusProbeSecs)
+	result.BalanceThreshold = strings.TrimSpace(result.BalanceThreshold)
+	result.DaysThreshold = strings.TrimSpace(result.DaysThreshold)
+	result.QuietFrom = strings.TrimSpace(result.QuietFrom)
+	result.QuietTo = strings.TrimSpace(result.QuietTo)
+	hint, form, saved := w.handler.OnSaveSettings(result)
+	w.settingsHint = hint
+	if saved {
+		w.setSettingsForm(form)
+		w.settingsHint = hint
 	}
 }

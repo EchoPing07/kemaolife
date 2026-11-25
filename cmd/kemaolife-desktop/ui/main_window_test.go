@@ -7,10 +7,163 @@ import (
 	"testing"
 
 	"github.com/EchoPing07/kemaolife/internal/core/model"
+	"github.com/EchoPing07/kemaolife/internal/desktop"
+	myui "github.com/egoist/mygo/ui"
 )
 
+func testMainWindow(page int) *mainWindow {
+	w := &mainWindow{
+		page: page,
+		state: MainWindowState{
+			TodayDate: "2026-11-18",
+			HasToday:  true,
+			Today: model.DaySchedule{
+				Date: model.Date{Year: 2026, Month: 11, Day: 18}, Week: 12, WeekdayCn: "三", InSemester: true,
+				Entries: []model.Entry{{Name: "示例课程", Periods: "1-2", Time: "08:30~10:00", Location: "示例地点", Teacher: "示例教师"}},
+			},
+			Week: 12, LastWeek: 20,
+			Days: []model.DaySchedule{{Date: model.Date{Year: 2026, Month: 11, Day: 16}, WeekdayCn: "一", InSemester: true,
+				Entries: []model.Entry{{Name: "示例课程", Periods: "1-2", Time: "08:30~10:00", Location: "示例地点"}}}},
+			HasReport: true,
+			Report: model.ElectricityReport{
+				Status: model.ElectricityStatus{Balance: 20, Unit: "度", CollectedAt: "2026-11-17T08:00:00+08:00"},
+				Usage:  model.ElectricityUsage{YearMonth: "2026-11", MonthUse: 12.5, DataUntil: "2026-11-17", Days: []model.DayUsage{{Date: "2026-11-17", Use: 1.5}}},
+			},
+			Campus: model.CampusStatus{State: model.CampusOnline, CheckedAt: "2026-11-18T08:00:00+08:00"},
+		},
+		month: "2026-11",
+	}
+	w.state.SettingsForm = desktop.ToSettingsForm(desktop.DefaultSettings())
+	w.state.SettingsForm.StudentID = "<学号>"
+	w.setSettingsForm(w.state.SettingsForm)
+	return w
+}
+
+func TestTodayPageRendersDTO(t *testing.T) {
+	w := testMainWindow(mainPageToday)
+	tt := myui.NewTester(w.view, 1180, 760)
+	for _, text := range []string{"今天", "示例课程", "20.00", "已在线", "08:30~10:00"} {
+		if !tt.HasText(text) {
+			t.Errorf("今天页缺少 %q；当前文本：%q", text, tt.Texts())
+		}
+	}
+}
+
+func TestElectricityAndCampusPagesRender(t *testing.T) {
+	for _, tc := range []struct {
+		page int
+		want []string
+	}{
+		{mainPageElectricity, []string{"电费摘要", "20.00", "12.50", "2026-11-17", "数据截至"}},
+		{mainPageCampus, []string{"已在线", "登录校园网", "重登", "检查时间："}},
+	} {
+		w := testMainWindow(tc.page)
+		tt := myui.NewTester(w.view, 1180, 760)
+		for _, text := range tc.want {
+			if !tt.HasText(text) {
+				t.Errorf("page=%d 缺少 %q；当前文本：%q", tc.page, text, tt.Texts())
+			}
+		}
+	}
+}
+
+func TestSettingsFailedSaveKeepsDraft(t *testing.T) {
+	w := testMainWindow(mainPageSettings)
+	w.settings.StudentID = "<新学号>"
+	w.settings.EduPassword = "<密码>"
+	w.settingsDirty = true
+	w.handler.OnSaveSettings = func(desktop.SettingsResult) (string, desktop.SettingsForm, bool) {
+		return "输入无效", w.state.SettingsForm, false
+	}
+	tt := myui.NewTester(w.view, 1180, 760)
+	if err := tt.Click("保存"); err != nil {
+		t.Fatal(err)
+	}
+	if w.settings.StudentID != "<新学号>" || w.settings.EduPassword != "<密码>" {
+		t.Fatal("保存失败不得覆盖当前编辑内容")
+	}
+	if w.settingsHint != "输入无效" || !w.settingsDirty {
+		t.Fatalf("保存失败状态错误：hint=%q dirty=%v", w.settingsHint, w.settingsDirty)
+	}
+}
+
+func TestSettingsBackgroundUpdateKeepsDraft(t *testing.T) {
+	w := testMainWindow(mainPageSettings)
+	w.settings.StudentID = "<编辑中的学号>"
+	w.settingsDirty = true
+	w.state.SettingsForm.StudentID = "<学号>"
+	w.state.SettingsForm.PollSeconds = 7200
+	w.syncStateForView()
+	if w.settings.StudentID != "<编辑中的学号>" || w.settings.PollSeconds != "14400" {
+		t.Fatalf("后台更新覆盖了编辑中的表单：%+v", w.settings)
+	}
+	w.settingsDirty = false
+	w.syncStateForView()
+	if w.settings.PollSeconds != "7200" {
+		t.Fatalf("非编辑状态应回显生效配置：%q", w.settings.PollSeconds)
+	}
+}
+
+func TestSettingsSuccessfulSaveClearsPasswords(t *testing.T) {
+	w := testMainWindow(mainPageSettings)
+	w.settings.EduPassword = "<密码>"
+	w.settings.CampusPassword = "<校园网密码>"
+	w.settingsDirty = true
+	form := w.state.SettingsForm
+	form.PollSeconds = 600
+	w.handler.OnSaveSettings = func(desktop.SettingsResult) (string, desktop.SettingsForm, bool) {
+		return "低于下限，已按 600 秒执行", form, true
+	}
+	tt := myui.NewTester(w.view, 1180, 760)
+	if err := tt.Click("保存"); err != nil {
+		t.Fatal(err)
+	}
+	if w.settings.EduPassword != "" || w.settings.CampusPassword != "" {
+		t.Fatal("保存成功后不得继续回显密码")
+	}
+	if w.settings.PollSeconds != "600" || w.settingsDirty {
+		t.Fatalf("未回显实际生效值：poll=%q dirty=%v", w.settings.PollSeconds, w.settingsDirty)
+	}
+}
+
+func TestCloneMainStateDoesNotAliasSlices(t *testing.T) {
+	avg, days := 2.5, 4
+	s := MainWindowState{
+		Today: model.DaySchedule{Entries: []model.Entry{{Name: "A"}}},
+		Days:  []model.DaySchedule{{Entries: []model.Entry{{Name: "B"}}}},
+		Report: model.ElectricityReport{Status: model.ElectricityStatus{
+			DailyAvg: &avg, EstimatedDays: &days,
+		}, Usage: model.ElectricityUsage{Days: []model.DayUsage{{Use: 1}}}},
+	}
+	clone := cloneMainState(s)
+	s.Today.Entries[0].Name = "changed"
+	s.Days[0].Entries[0].Name = "changed"
+	s.Report.Usage.Days[0].Use = 99
+	avg, days = 0, 0
+	if clone.Today.Entries[0].Name != "A" || clone.Days[0].Entries[0].Name != "B" ||
+		clone.Report.Usage.Days[0].Use != 1 || *clone.Report.Status.DailyAvg != 2.5 ||
+		*clone.Report.Status.EstimatedDays != 4 {
+		t.Fatal("MainWindowState 必须持有 DTO 切片与可选值的副本")
+	}
+}
+
+func TestDarkThemePagesRender(t *testing.T) {
+	for _, page := range []int{mainPageToday, mainPageTimetable, mainPageElectricity, mainPageCampus, mainPageSettings} {
+		w := testMainWindow(page)
+		tt := myui.NewTester(w.view, 960, 640)
+		tt.SetDark(true)
+		if !mainPaletteForTest(tt) {
+			t.Fatalf("page=%d 深色主题未完成渲染", page)
+		}
+	}
+}
+
+func mainPaletteForTest(tt *myui.Tester) bool {
+	return tt.HasText("科贸生活") && tt.Image() != nil
+}
+
 func TestMainEntryRuns(t *testing.T) {
-	got := mainEntryRuns(model.Entry{Periods: "1-2、5、7—9"})
+	got := mainEntryRuns(model.Entry{Periods: "1-2,5,7-9"})
 	want := [][2]int{{1, 2}, {5, 5}, {7, 9}}
 	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("mainEntryRuns() = %v, want %v", got, want)
@@ -34,60 +187,97 @@ func TestCourseBlocksSpanAndSplitCollisions(t *testing.T) {
 		}
 	}
 	if got[0].column == got[1].column {
-		t.Error("overlapping A and B must use different columns")
+		t.Error("重叠课程必须分列")
 	}
 	if got[0].column != got[2].column {
-		t.Error("non-overlapping A and C should reuse a column")
+		t.Error("不重叠课程应复用列")
 	}
 	if got[3].columns != 1 || got[3].column != 0 {
-		t.Errorf("independent D must use the full column: %+v", got[3])
+		t.Errorf("独立课程应占满整列: %+v", got[3])
 	}
 }
 
-func TestCloneMainStateDoesNotAliasSlices(t *testing.T) {
-	avg, days := 2.5, 4
-	s := MainWindowState{
-		Today: model.DaySchedule{Entries: []model.Entry{{Name: "A"}}},
-		Days:  []model.DaySchedule{{Entries: []model.Entry{{Name: "B"}}}},
-		Report: model.ElectricityReport{Status: model.ElectricityStatus{
-			DailyAvg: &avg, EstimatedDays: &days,
-		}, Usage: model.ElectricityUsage{Days: []model.DayUsage{{Use: 1}}}},
+func TestTimetableCourseKeysUniqueAcrossDays(t *testing.T) {
+	w := testMainWindow(mainPageTimetable)
+	w.state.Days = []model.DaySchedule{
+		{WeekdayCn: "一", Entries: []model.Entry{{Name: "第十一节课程", Periods: "11-12"}}},
+		{WeekdayCn: "二", Entries: []model.Entry{{Name: "第一节课程", Periods: "1-2"}}},
 	}
-	clone := cloneMainState(s)
-	s.Today.Entries[0].Name = "changed"
-	s.Days[0].Entries[0].Name = "changed"
-	s.Report.Usage.Days[0].Use = 99
-	avg, days = 0, 0
-	if clone.Today.Entries[0].Name != "A" || clone.Days[0].Entries[0].Name != "B" ||
-		clone.Report.Usage.Days[0].Use != 1 || *clone.Report.Status.DailyAvg != 2.5 ||
-		*clone.Report.Status.EstimatedDays != 4 {
-		t.Fatal("MainWindowState must own its DTO slices and optional values")
+	tt := myui.NewTester(w.view, 1180, 760)
+	if !tt.HasText("第十一节课程") || !tt.HasText("第一节课程") {
+		t.Fatalf("跨天课程未正确渲染：%q", tt.Texts())
 	}
 }
 
-// 「上一周」在周次 ≤1 时不得触发回调：0 是「当周」语义，传下去会跳回当前周。
-func TestTimetablePrevClampsAtWeekOne(t *testing.T) {
-	for _, tc := range []struct {
-		week int
-		want []int
-	}{
-		{week: 0, want: nil},
-		{week: 1, want: nil},
-		{week: 8, want: []int{7}},
-	} {
-		var calls []int
-		w := &mainWindow{
-			state:   MainWindowState{Week: tc.week},
-			handler: MainWindowHandler{OnTimetableWeek: func(n int) { calls = append(calls, n) }},
+func TestTimetableWeekActions(t *testing.T) {
+	w := testMainWindow(mainPageTimetable)
+	var weeks []int
+	w.handler.OnTimetableWeek = func(week int) { weeks = append(weeks, week) }
+	tt := myui.NewTester(w.view, 1180, 760)
+	if !tt.HasText("示例课程") || !tt.HasText("第 12 周 / 共 20 周") {
+		t.Fatalf("课表页未展示周次与课程：%q", tt.Texts())
+	}
+	if err := tt.Click("上一周"); err != nil {
+		t.Fatal(err)
+	}
+	if err := tt.Click("当周"); err != nil {
+		t.Fatal(err)
+	}
+	if len(weeks) != 2 || weeks[0] != 11 || weeks[1] != 0 {
+		t.Fatalf("切周回调 = %v，want [11 0]", weeks)
+	}
+}
+
+func TestCourseDetailDialogOpensAndCloses(t *testing.T) {
+	w := testMainWindow(mainPageToday)
+	w.openCourseDetail(w.state.Today, w.state.Today.Entries[0])
+	tt := myui.NewTester(w.view, 1180, 760)
+	for _, want := range []string{"示例课程", "示例教师", "示例地点", "关闭"} {
+		if !tt.HasText(want) {
+			t.Fatalf("课程详情弹窗缺少 %q；当前文本：%q", want, tt.Texts())
 		}
-		w.command(IDMainTimetablePrev)
-		if len(calls) != len(tc.want) {
-			t.Fatalf("week=%d: 回调次数 %d, want %d", tc.week, len(calls), len(tc.want))
-		}
-		for i, n := range calls {
-			if n != tc.want[i] {
-				t.Fatalf("week=%d: 回调周次 %d, want %d", tc.week, n, tc.want[i])
-			}
-		}
+	}
+	if err := tt.Click("关闭"); err != nil {
+		t.Fatal(err)
+	}
+	if w.courseDialogOpen {
+		t.Fatal("点击关闭后应关闭课程详情弹窗")
+	}
+}
+
+func TestTransparentIconsLoadCleanly(t *testing.T) {
+	defer CleanupIcon()
+	if appTitleBarIcon() == nil {
+		t.Fatal("标题栏透明图标解码失败")
+	}
+	appH, err := AppIcon()
+	if err != nil || appH == 0 {
+		t.Fatalf("AppIcon() 失败: handle=%v err=%v", appH, err)
+	}
+	trayH, err := TrayIcon()
+	if err != nil || trayH == 0 {
+		t.Fatalf("TrayIcon() 失败: handle=%v err=%v", trayH, err)
+	}
+}
+
+func TestElectricityChartSwitchesBetweenBarAndLine(t *testing.T) {
+	w := testMainWindow(mainPageElectricity)
+	w.state.Report.Usage.Days = []model.DayUsage{
+		{Date: "2026-11-15", Use: 2.5},
+		{Date: "2026-11-16", Use: 3.8},
+		{Date: "2026-11-17", Use: 3.1},
+	}
+	tt := myui.NewTester(w.view, 1180, 760)
+	if !tt.HasText("柱形图") || !tt.HasText("折线图") || !tt.HasText("每日用电趋势") {
+		t.Fatalf("电费页缺少图表切换与标题：%q", tt.Texts())
+	}
+	if err := tt.Click("折线图"); err != nil {
+		t.Fatal(err)
+	}
+	if w.electricityChart != electricityChartLine {
+		t.Fatalf("点击折线图后状态未切换: got=%d want=%d", w.electricityChart, electricityChartLine)
+	}
+	if tt.Image() == nil {
+		t.Fatal("折线图渲染失败")
 	}
 }

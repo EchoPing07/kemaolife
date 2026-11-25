@@ -25,17 +25,36 @@ type TrayHandler struct {
 }
 
 var (
-	trayMu      sync.Mutex
-	trayHandler TrayHandler
-	trayHwnd    uintptr
+	trayMu          sync.Mutex
+	trayHandler     TrayHandler
+	trayHwnd        uintptr
+	trayShowPending bool
 )
 
 // BindTray 绑定托盘窗口与命令回调。
 func BindTray(hwnd uintptr, h TrayHandler) {
 	trayMu.Lock()
-	defer trayMu.Unlock()
 	trayHwnd = hwnd
 	trayHandler = h
+	pending := trayShowPending
+	trayShowPending = false
+	trayMu.Unlock()
+	if pending && h.OnTrayClick != nil {
+		h.OnTrayClick()
+	}
+}
+
+// activateMain 在处理器尚未就绪时保留一次唤起请求，避免启动早期丢消息。
+func activateMain() {
+	trayMu.Lock()
+	cb := trayHandler.OnTrayClick
+	if cb == nil {
+		trayShowPending = true
+		trayMu.Unlock()
+		return
+	}
+	trayMu.Unlock()
+	cb()
 }
 
 // handleTrayMessage 是托盘窗口的消息处理核心。
@@ -61,14 +80,8 @@ func handleTrayMessage(hwnd uintptr, msg uint32, wParam, lParam uintptr) (uintpt
 		return 0, true
 
 	case WM_SHOW_MAIN:
-		// 重复启动（不带 --background）经托盘窗口唤起主窗口：
-		// 窗口创建必须发生在拥有消息循环的 UI 线程。
-		trayMu.Lock()
-		cb := trayHandler.OnTrayClick
-		trayMu.Unlock()
-		if cb != nil {
-			cb()
-		}
+		// 重复启动（不带 --background）经托盘窗口唤起主窗口。
+		activateMain()
 		return 0, true
 
 	case WM_QUERYENDSESSION:
@@ -98,12 +111,7 @@ func handleTrayMessage(hwnd uintptr, msg uint32, wParam, lParam uintptr) (uintpt
 		case WM_LBUTTONUP, WM_LBUTTONDBLCLK:
 			// 实测托盘左键下发的是 WM_LBUTTONDBLCLK（0x203），部分环境是
 			// WM_LBUTTONUP（0x202），两个都要认，否则「双击图标没反应」。
-			trayMu.Lock()
-			cb := trayHandler.OnTrayClick
-			trayMu.Unlock()
-			if cb != nil {
-				cb()
-			}
+			activateMain()
 			return 0, true
 		}
 		return 0, true
