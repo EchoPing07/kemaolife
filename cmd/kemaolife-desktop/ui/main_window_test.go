@@ -227,3 +227,57 @@ func TestTimetableWeekActions(t *testing.T) {
 		t.Fatalf("切周回调 = %v，want [11 0]", weeks)
 	}
 }
+
+func TestCourseDetailDialogOpensAndCloses(t *testing.T) {
+	w := testMainWindow(mainPageToday)
+	w.openCourseDetail(w.state.Today, w.state.Today.Entries[0])
+	tt := myui.NewTester(w.view, 1180, 760)
+	for _, want := range []string{"示例课程", "示例教师", "示例地点", "关闭"} {
+		if !tt.HasText(want) {
+			t.Fatalf("课程详情弹窗缺少 %q；当前文本：%q", want, tt.Texts())
+		}
+	}
+	if err := tt.Click("关闭"); err != nil {
+		t.Fatal(err)
+	}
+	if w.courseDialogOpen {
+		t.Fatal("点击关闭后应关闭课程详情弹窗")
+	}
+}
+
+func TestTransparentIconsLoadCleanly(t *testing.T) {
+	defer CleanupIcon()
+	if appTitleBarIcon() == nil {
+		t.Fatal("标题栏透明图标解码失败")
+	}
+	appH, err := AppIcon()
+	if err != nil || appH == 0 {
+		t.Fatalf("AppIcon() 失败: handle=%v err=%v", appH, err)
+	}
+	trayH, err := TrayIcon()
+	if err != nil || trayH == 0 {
+		t.Fatalf("TrayIcon() 失败: handle=%v err=%v", trayH, err)
+	}
+}
+
+func TestElectricityChartSwitchesBetweenBarAndLine(t *testing.T) {
+	w := testMainWindow(mainPageElectricity)
+	w.state.Report.Usage.Days = []model.DayUsage{
+		{Date: "2026-11-15", Use: 2.5},
+		{Date: "2026-11-16", Use: 3.8},
+		{Date: "2026-11-17", Use: 3.1},
+	}
+	tt := myui.NewTester(w.view, 1180, 760)
+	if !tt.HasText("柱形图") || !tt.HasText("折线图") || !tt.HasText("每日用电趋势") {
+		t.Fatalf("电费页缺少图表切换与标题：%q", tt.Texts())
+	}
+	if err := tt.Click("折线图"); err != nil {
+		t.Fatal(err)
+	}
+	if w.electricityChart != electricityChartLine {
+		t.Fatalf("点击折线图后状态未切换: got=%d want=%d", w.electricityChart, electricityChartLine)
+	}
+	if tt.Image() == nil {
+		t.Fatal("折线图渲染失败")
+	}
+}

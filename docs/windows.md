@@ -46,7 +46,7 @@
 
 ### 3.3 电费
 
-展示完整 `ElectricityReport`：余额、单位、可用天数等概况，以及 `yearMonth`、`monthUse`、`dataUntil` 和按日期升序的 `days[]` 完整表格。页内必须标注「数据截至 `<collectedAt>`」，`dataUntil` 以「用量统计至 `<dataUntil>`」单独标注；这不是托盘状态的展示口径。
+展示完整 `ElectricityReport`：余额、单位、可用天数等概况，以及 `yearMonth`、`monthUse`、`dataUntil` 和按日期升序的 `days[]` 每日用量柱形图 / 折线图与明细表格。页内必须标注「数据截至 `<collectedAt>`」，`dataUntil` 以「用量统计至 `<dataUntil>`」单独标注；这不是托盘状态的展示口径。
 
 提供「立即查询电费」按钮、月份输入 / 选择与「查询」：「立即查询电费」走 `PollOnce`，保留 §5 / §6 的轮询与告警语义；手动月份查询调用 `Engine.QueryElectricity(ctx, yearMonth)`，按指定月份重新获取完整报告。查询成功更新报告、检查时间并清除旧错误；失败只显示脱敏错误，保留旧报告，不返回半份数据。**历史月份手动查询不触发余额告警，也不改变轮询失败退避**；历史查询与默认轮询串行执行，避免并发返回时互相覆盖报告。
 

@@ -77,21 +77,36 @@ type mainWindow struct {
 	handler MainWindowHandler
 	page    int
 
-	month           string
-	monthDirty      bool
-	settings        desktop.SettingsResult
-	settingsBase    desktop.SettingsForm
-	settingsDirty   bool
-	settingsHint    string
-	timetableScroll myui.ScrollState
-	electricityRows myui.ListState
+	month            string
+	monthDirty       bool
+	settings         desktop.SettingsResult
+	settingsBase     desktop.SettingsForm
+	settingsDirty    bool
+	settingsHint     string
+	timetableScroll  myui.ScrollState
+	electricityChart int
+	electricityHover int
+	courseDialogOpen bool
+	courseDialogDay  model.DaySchedule
+	courseDialogItem model.Entry
 }
 
 var (
-	mainMu       sync.RWMutex
-	mainWnd      *mainWindow
-	mainQuitting bool
+	mainMu           sync.RWMutex
+	mainWnd          *mainWindow
+	mainQuitting     bool
+	titleBarIconOnce sync.Once
+	titleBarIconImg  myui.ImageSource
 )
+
+func appTitleBarIcon() myui.ImageSource {
+	titleBarIconOnce.Do(func() {
+		if img, err := myui.DecodeImage(iconPNG); err == nil {
+			titleBarIconImg = img
+		}
+	})
+	return titleBarIconImg
+}
 
 // OpenMainWindow 创建或唤起唯一主窗口。owner 与 icon 仍由旧托盘装配传入。
 func OpenMainWindow(owner, icon uintptr, state MainWindowState, h MainWindowHandler) (err error) {
@@ -130,8 +145,9 @@ func OpenMainWindow(owner, icon uintptr, state MainWindowState, h MainWindowHand
 		MinHeight:       640,
 		UseContentSize:  true,
 		TitleBarStyle:   mygo.TitleBarHidden,
-		TitleBarHeight:  40,
-		BackgroundColor: "#f4f6f8",
+		TitleBarHeight:  44,
+		Vibrancy:        mygo.VibrancyMica,
+		BackgroundColor: "light-dark(#f3f3f3, #202020)",
 		Content:         myui.View(w.view),
 	})
 	w.native = native
@@ -158,7 +174,10 @@ func OpenMainPage(page int) {
 	if w == nil || w.native == nil {
 		return
 	}
-	w.native.Update(func() { w.page = page })
+	w.native.Update(func() {
+		w.page = page
+		w.courseDialogOpen = false
+	})
 	w.native.Show()
 	w.native.Focus()
 }
@@ -223,20 +242,53 @@ func cloneMainState(s MainWindowState) MainWindowState {
 	return out
 }
 
+func (w *mainWindow) openCourseDetail(day model.DaySchedule, entry model.Entry) {
+	w.courseDialogDay = day
+	w.courseDialogItem = entry
+	w.courseDialogOpen = true
+}
+
 func (w *mainWindow) view(c *myui.Context) {
 	applyMainTheme(c)
 	p := mainPalette(c)
 	bar := c.TitleBar()
-	titleHeight := maxFloat(bar.Height, 40)
-	myui.Column(c).Fill().Children(func() {
-		myui.Row(c).Height(titleHeight).Padding(0, bar.Right+16, 0, 16).
-			Background(p.sidebar).DragWindow().Children(func() {
-			myui.Icon(c, mainIcons.app).FontSize(18).TextColor(tAccent(c))
-			myui.Text(c, "科贸生活").FontSize(13).Bold().Padding(8, 0, 0, 0)
+	titleHeight := maxFloat(bar.Height, 44)
+	if c.Vibrancy() {
+		c.Root().Background(myui.Transparent)
+	}
+
+	root := myui.Column(c).Fill()
+	if !c.Vibrancy() {
+		root.Background(p.shell)
+	}
+	root.Children(func() {
+		// Win11 透明标题栏区域：展示透明背景应用图标与标题，右侧为系统窗口控制按钮留白。
+		myui.Row(c).Height(titleHeight).Padding(0, bar.Right+16, 0, 16).AlignItems(myui.Center).
+			DragWindow().Children(func() {
+			titleColor := c.Theme().Text
+			if !c.WindowActive() {
+				titleColor = c.Theme().TextMuted
+			}
+			if img := appTitleBarIcon(); img != nil {
+				el := myui.Image(c, img).Size(20, 20)
+				if !c.WindowActive() {
+					el.Opacity(0.65)
+				}
+			} else {
+				iconColor := tAccent(c)
+				if !c.WindowActive() {
+					iconColor = c.Theme().TextMuted
+				}
+				myui.Icon(c, mainIcons.app).FontSize(17).TextColor(iconColor)
+			}
+			myui.Text(c, "科贸生活").FontSize(12).Bold().TextColor(titleColor).Padding(0, 0, 0, 8)
 		})
+
 		myui.Row(c).Grow(1).AlignItems(myui.Stretch).Children(func() {
 			w.paintSidebar(c)
-			myui.Column(c).Grow(1).FillHeight().Background(p.canvas).Children(func() {
+			// Win11 经典层级：左侧与顶栏承载 Mica 材质，右侧内容区以左上圆角画布承接。
+			myui.Column(c).Grow(1).FillHeight().Background(p.layer).
+				Radius(8, 0, 0, 0).BorderWidth(1, 0, 0, 1).BorderColor(p.layerStroke).Clip().Children(func() {
 				switch w.page {
 				case mainPageToday:
 					w.paintToday(c)
@@ -252,47 +304,82 @@ func (w *mainWindow) view(c *myui.Context) {
 			})
 		})
 	})
+
+	w.paintCourseDialog(c)
+}
+
+type navItem struct {
+	page int
+	name string
+	icon *myui.SVG
 }
 
 func (w *mainWindow) paintSidebar(c *myui.Context) {
 	p := mainPalette(c)
-	pages := []struct {
-		page int
-		name string
-		icon *myui.SVG
-	}{
+	primaryNav := []navItem{
 		{mainPageToday, "今天", mainIcons.today},
 		{mainPageTimetable, "课表", mainIcons.calendar},
 		{mainPageElectricity, "电费", mainIcons.electricity},
 		{mainPageCampus, "校园网", mainIcons.network},
-		{mainPageSettings, "设置", mainIcons.settings},
 	}
-	myui.Column(c).Width(188).FillHeight().Padding(12, 12, 16, 12).Gap(5).
-		Background(p.sidebar).Children(func() {
-		for _, item := range pages {
-			item := item
-			active := w.page == item.page
-			button := myui.ButtonBase(c.Key(item.name)).Height(40).Padding(0, 12).Gap(11).Radius(7)
-			button.Children(func() {
-				myui.Icon(c, item.icon).FontSize(18)
-				myui.Text(c, item.name).FontSize(14)
-			})
-			if active {
-				button.Background(p.accentSoft).TextColor(tAccent(c))
-				button.Border(1, p.accentBorder)
-			} else if button.Hovered() {
-				button.Background(p.sidebarHover)
-			}
-			if button.Clicked() {
-				w.page = item.page
-			}
+	settingsNav := navItem{mainPageSettings, "设置", mainIcons.settings}
+
+	myui.Column(c).Width(208).FillHeight().Padding(6, 10, 14, 10).Gap(3).Children(func() {
+		for _, item := range primaryNav {
+			w.paintNavButton(c, item, p)
 		}
 		myui.Spacer(c)
+		myui.Box(c).Height(1).Background(p.hairline).Margin(6, 8)
+		w.paintNavButton(c, settingsNav, p)
 		if w.state.Version != "" {
-			myui.Text(c, w.state.Version).FontSize(10).TextColor(c.Theme().TextMuted).
-				SingleLine().Padding(8, 10, 0, 10)
+			myui.Text(c, w.state.Version).FontSize(11).TextColor(c.Theme().TextMuted).
+				SingleLine().Padding(6, 14, 0, 14)
 		}
 	})
+}
+
+func (w *mainWindow) paintNavButton(c *myui.Context, item navItem, p mainColors) {
+	t := c.Theme()
+	active := w.page == item.page
+	button := myui.ButtonBase(c.Key(item.name)).Height(38).Padding(0, 12, 0, 4).Gap(10).
+		Radius(6).AlignItems(myui.Center).Justify(myui.Start)
+
+	indicatorColor := myui.Transparent
+	iconColor := t.TextMuted
+	textColor := t.Text
+	if active {
+		indicatorColor = t.Accent
+		iconColor = t.Accent
+		if !c.WindowActive() {
+			indicatorColor = t.TextMuted
+			iconColor = t.TextMuted
+		}
+	} else if button.Hovered() {
+		iconColor = t.Text
+	}
+
+	button.Children(func() {
+		// Win11 NavigationView 标志性的 3px 圆角选中指示条。
+		myui.Box(c).Width(3).Height(16).Radius(2).Background(indicatorColor).Shrink(0)
+		myui.Icon(c, item.icon).FontSize(16).TextColor(iconColor).Shrink(0)
+		label := myui.Text(c, item.name).FontSize(14).TextColor(textColor).SingleLine()
+		if active {
+			label.Bold()
+		}
+	})
+
+	switch {
+	case button.Pressed():
+		button.Background(p.navPressed)
+	case active:
+		button.Background(p.navActive)
+	case button.Hovered():
+		button.Background(p.navHover)
+	}
+	if button.Clicked() {
+		w.page = item.page
+		w.courseDialogOpen = false
+	}
 }
 
 func mainDisplayMonth(s MainWindowState) string {
