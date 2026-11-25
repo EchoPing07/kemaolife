@@ -157,21 +157,21 @@ type courseColor struct{ fill, hover, border, text myui.Color }
 // 课表 8 色调色板与 Android 端保持同一色相语言，纯色块 + 极淡同色描边，不加左侧竖条。
 func courseColorFor(name string, dark bool) courseColor {
 	light := []courseColor{
-		{myui.Hex("#ffecef"), myui.Hex("#ffe0e5"), myui.RGBA(209, 75, 98, 0.22), myui.Hex("#7a1f31")},  // 玫瑰
-		{myui.Hex("#fff1e6"), myui.Hex("#ffe4d1"), myui.RGBA(212, 107, 40, 0.22), myui.Hex("#733409")}, // 蜜桃
-		{myui.Hex("#fff6df"), myui.Hex("#ffedc2"), myui.RGBA(196, 138, 20, 0.24), myui.Hex("#634400")}, // 琥珀
-		{myui.Hex("#eaf7e6"), myui.Hex("#dcf0d5"), myui.RGBA(71, 145, 52, 0.22), myui.Hex("#204d16")},  // 新芽
-		{myui.Hex("#e4f6ef"), myui.Hex("#d2efe4"), myui.RGBA(30, 140, 110, 0.22), myui.Hex("#0c4536")}, // 薄荷
-		{myui.Hex("#e7f3ff"), myui.Hex("#d6eaff"), myui.RGBA(29, 114, 194, 0.22), myui.Hex("#0d3c6b")}, // 天蓝
-		{myui.Hex("#f0ecff"), myui.Hex("#e3dcff"), myui.RGBA(108, 83, 201, 0.22), myui.Hex("#362673")}, // 淡紫
-		{myui.Hex("#fcedf6"), myui.Hex("#f8deed"), myui.RGBA(184, 71, 138, 0.22), myui.Hex("#631d47")}, // 樱粉
+		{myui.RGB(255, 236, 239), myui.Hex("#ffe0e5"), myui.RGBA(209, 75, 98, 0.22), myui.Hex("#7a1f31")}, // 玫瑰
+		{myui.Hex("#fff1e6"), myui.Hex("#ffe4d1"), myui.RGBA(212, 107, 40, 0.22), myui.Hex("#733409")},    // 蜜桃
+		{myui.Hex("#fff6df"), myui.Hex("#ffedc2"), myui.RGBA(196, 138, 20, 0.24), myui.Hex("#634400")},    // 琥珀
+		{myui.Hex("#eaf7e6"), myui.Hex("#dcf0d5"), myui.RGBA(71, 145, 52, 0.22), myui.Hex("#204d16")},     // 新芽
+		{myui.Hex("#e4f6ef"), myui.Hex("#d2efe4"), myui.RGBA(30, 140, 110, 0.22), myui.Hex("#0c4536")},    // 薄荷
+		{myui.Hex("#e7f3ff"), myui.Hex("#d6eaff"), myui.RGBA(29, 114, 194, 0.22), myui.Hex("#0d3c6b")},    // 天蓝
+		{myui.Hex("#f0ecff"), myui.Hex("#e3dcff"), myui.RGBA(108, 83, 201, 0.22), myui.Hex("#362673")},    // 淡紫
+		{myui.Hex("#fcedf6"), myui.Hex("#f8deed"), myui.RGBA(184, 71, 138, 0.22), myui.Hex("#631d47")},    // 樱粉
 	}
 	darkColors := []courseColor{
 		{myui.Hex("#43262c"), myui.Hex("#502e35"), myui.RGBA(240, 128, 148, 0.24), myui.Hex("#ffd9df")},
 		{myui.Hex("#432f21"), myui.Hex("#503928"), myui.RGBA(242, 156, 97, 0.24), myui.Hex("#ffe4d1")},
 		{myui.Hex("#3e341e"), myui.Hex("#4b3f24"), myui.RGBA(230, 185, 76, 0.24), myui.Hex("#fff0c9")},
 		{myui.Hex("#263c23"), myui.Hex("#2f492b"), myui.RGBA(126, 203, 104, 0.24), myui.Hex("#dcf5d3")},
-		{myui.Hex("#1e3b34"), myui.Hex("#264840"), myui.RGBA(86, 199, 168, 0.24), myui.Hex("#cef3e7")},
+		{myui.Hex("#1e3b34"), myui.Hex("#264840"), myui.RGBA(86, 199, 168, 0.24), myui.RGB(206, 243, 231)},
 		{myui.Hex("#20364a"), myui.Hex("#28425a"), myui.RGBA(107, 180, 245, 0.24), myui.Hex("#d4ebff")},
 		{myui.Hex("#312b4c"), myui.Hex("#3b345c"), myui.RGBA(166, 149, 240, 0.24), myui.Hex("#e6e0ff")},
 		{myui.Hex("#412538"), myui.Hex("#4e2d43"), myui.RGBA(226, 130, 189, 0.24), myui.Hex("#fbdcf0")},
