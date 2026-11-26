@@ -21,6 +21,10 @@ internal object AppearanceText {
     const val ContinuousCornersEnabledSummary = "卡片与按钮使用连续曲率圆角"
     const val ContinuousCornersDisabledSummary = "当前使用标准圆弧圆角，开启后全 App 改为连续曲率"
 
+    const val BottomBarLabels = "底栏文字标签"
+    const val BottomBarLabelsEnabledSummary = "悬浮底栏同时显示图标与文字"
+    const val BottomBarLabelsDisabledSummary = "悬浮底栏仅显示图标，形态更紧凑"
+
     const val Preview = "配色预览"
     const val SystemPalette = "系统动态配色"
     const val PreviewBackground = "界面背景"

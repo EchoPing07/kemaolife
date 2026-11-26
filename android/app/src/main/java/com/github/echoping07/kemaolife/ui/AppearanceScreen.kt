@@ -76,7 +76,7 @@ internal fun AppearanceScreen(state: AppState, viewModel: AppViewModel) {
             )
         }
         GroupGap()
-        GroupSurface(GroupPosition.LAST, modifier = Modifier.fillMaxWidth()) {
+        GroupSurface(GroupPosition.MIDDLE, modifier = Modifier.fillMaxWidth()) {
             AppearanceSwitchRow(
                 title = AppearanceText.ContinuousCorners,
                 summary = if (state.continuousCorners) AppearanceText.ContinuousCornersEnabledSummary
@@ -84,6 +84,17 @@ internal fun AppearanceScreen(state: AppState, viewModel: AppViewModel) {
                 checked = state.continuousCorners,
                 enabled = true,
                 onCheckedChange = viewModel::setContinuousCorners,
+            )
+        }
+        GroupGap()
+        GroupSurface(GroupPosition.LAST, modifier = Modifier.fillMaxWidth()) {
+            AppearanceSwitchRow(
+                title = AppearanceText.BottomBarLabels,
+                summary = if (state.showBottomBarLabels) AppearanceText.BottomBarLabelsEnabledSummary
+                else AppearanceText.BottomBarLabelsDisabledSummary,
+                checked = state.showBottomBarLabels,
+                enabled = true,
+                onCheckedChange = viewModel::setShowBottomBarLabels,
             )
         }
 

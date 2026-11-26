@@ -15,6 +15,7 @@ class ThemePreferences(context: Context) {
         dynamicColor = loadDynamicColor(),
         amoled = loadAmoled(),
         continuousCorners = loadContinuousCorners(),
+        showBottomBarLabels = loadShowBottomBarLabels(),
     )
 
     fun loadMode(): String = normalizeThemeMode(
@@ -30,6 +31,10 @@ class ThemePreferences(context: Context) {
     fun loadContinuousCorners(): Boolean =
         preferences.getBoolean(KEY_CONTINUOUS_CORNERS, DEFAULT_CONTINUOUS_CORNERS)
 
+    /** 悬浮底栏是否显示文字标签；未显式设置时默认显示。 */
+    fun loadShowBottomBarLabels(): Boolean =
+        preferences.getBoolean(KEY_SHOW_BOTTOM_BAR_LABELS, DEFAULT_SHOW_BOTTOM_BAR_LABELS)
+
     /** 兼容旧的主题色保存接口。 */
     fun save(theme: String) {
         preferences.edit().putString(KEY_THEME, normalizeThemeColor(theme)).apply()
@@ -42,6 +47,7 @@ class ThemePreferences(context: Context) {
             .putBoolean(KEY_DYNAMIC_COLOR, settings.dynamicColor)
             .putBoolean(KEY_AMOLED, settings.amoled)
             .putBoolean(KEY_CONTINUOUS_CORNERS, settings.continuousCorners)
+            .putBoolean(KEY_SHOW_BOTTOM_BAR_LABELS, settings.showBottomBarLabels)
             .apply()
     }
 
@@ -63,11 +69,16 @@ class ThemePreferences(context: Context) {
         preferences.edit().putBoolean(KEY_CONTINUOUS_CORNERS, enabled).apply()
     }
 
+    fun saveShowBottomBarLabels(enabled: Boolean) {
+        preferences.edit().putBoolean(KEY_SHOW_BOTTOM_BAR_LABELS, enabled).apply()
+    }
+
     private companion object {
         const val KEY_THEME = "theme_color"
         const val KEY_THEME_MODE = "theme_mode"
         const val KEY_DYNAMIC_COLOR = "dynamic_color"
         const val KEY_AMOLED = "amoled"
         const val KEY_CONTINUOUS_CORNERS = "continuous_corners"
+        const val KEY_SHOW_BOTTOM_BAR_LABELS = "show_bottom_bar_labels"
     }
 }

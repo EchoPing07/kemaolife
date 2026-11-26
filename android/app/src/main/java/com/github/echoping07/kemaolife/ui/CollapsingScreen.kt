@@ -9,13 +9,19 @@ import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.ime
+import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.union
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.verticalScroll
@@ -31,7 +37,7 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.unit.IntOffset
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.github.echoping07.kemaolife.R
@@ -43,7 +49,7 @@ private val ExpandedTitleLineHeight = 42.sp
 private val CollapsedTitleHeight = 52.dp
 private val ExpandedTitleGap = 12.dp
 private val ExpandedTitleHeight = 52.dp
-private val PageBottomPadding = 24.dp
+internal val PageBottomPadding = 24.dp
 
 /** 两个标题使用独立排版；滚动只驱动位移与淡入淡出，不缩放返回按钮或标题字形。 */
 internal fun collapsingTitleProgress(scrollPx: Int, collapseDistancePx: Int): Float {
@@ -78,6 +84,8 @@ internal fun CollapsingScreen(
     onBack: (() -> Unit)? = null,
     actions: @Composable RowScope.() -> Unit = {},
     scrollState: ScrollState? = null,
+    bottomContentPadding: Dp = PageBottomPadding,
+    floatingActionButton: (@Composable () -> Unit)? = null,
     content: @Composable ColumnScope.() -> Unit,
 ) {
     val scroll = scrollState ?: rememberScrollState()
@@ -86,6 +94,10 @@ internal fun CollapsingScreen(
     val progress = collapsingTitleProgress(scroll.value, collapseDistance.roundToInt())
     val titleOffset = with(density) { -ExpandedTitleHeight.toPx() * progress }
     val motionEnabled = animationsEnabled()
+    // 软键盘弹出时只补超出系统导航栏的部分，避免与调用方已计入的底部导航栏 inset 叠加。
+    val imeBottom = WindowInsets.ime.asPaddingValues().calculateBottomPadding()
+    val navBottom = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
+    val extraImePadding = (imeBottom - navBottom).coerceAtLeast(0.dp)
 
     BoxWithConstraints(modifier = modifier.fillMaxSize()) {
         // 视口高取本层约束：滚动区与固定顶栏共用同一个 Box，高度一致。
@@ -121,10 +133,10 @@ internal fun CollapsingScreen(
             )
             Spacer(Modifier.height(16.dp))
             content()
-            // 属于滚动内容的尾部留白：最后一张卡可以离开底栏，不形成固定空白带。
+            // 属于滚动内容的尾部留白：最后一张卡可以离开悬浮底栏 / FAB，不形成固定空白带。
             // 内容不足一屏 + 收起距离时，[collapsingContentMinHeightPx] 会在其后补足空白，
             // 空白同样属于滚动内容，可以随内容一起滚走。
-            Spacer(Modifier.height(PageBottomPadding))
+            Spacer(Modifier.height(bottomContentPadding + extraImePadding))
         }
 
         Row(
@@ -163,6 +175,19 @@ internal fun CollapsingScreen(
                     .alpha(if (motionEnabled) progress else if (scroll.value > 0) 1f else 0f),
             )
             Row(verticalAlignment = Alignment.CenterVertically, content = actions)
+        }
+
+        if (floatingActionButton != null) {
+            // 悬浮操作钮归属页面本身（预测性返回时随页面一起移出），
+            // 用 navigationBars union ime 避免软键盘弹出时与系统导航栏双重垫高。
+            Box(
+                modifier = Modifier
+                    .align(Alignment.BottomEnd)
+                    .windowInsetsPadding(WindowInsets.navigationBars.union(WindowInsets.ime))
+                    .padding(end = 20.dp, bottom = 20.dp),
+            ) {
+                floatingActionButton()
+            }
         }
     }
 }

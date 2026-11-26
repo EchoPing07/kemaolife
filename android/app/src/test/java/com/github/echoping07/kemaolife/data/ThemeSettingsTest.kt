@@ -16,9 +16,17 @@ class ThemeSettingsTest {
                 dynamicColor = true,
                 amoled = false,
                 continuousCorners = false,
+                showBottomBarLabels = true,
             ),
             ThemeSettings(),
         )
+    }
+
+    @Test
+    fun bottomBarLabelsEnabledByDefaultAndCanBeDisabled() {
+        assertTrue(DEFAULT_SHOW_BOTTOM_BAR_LABELS)
+        assertTrue(ThemeSettings().showBottomBarLabels)
+        assertFalse(ThemeSettings(showBottomBarLabels = false).showBottomBarLabels)
     }
 
     @Test

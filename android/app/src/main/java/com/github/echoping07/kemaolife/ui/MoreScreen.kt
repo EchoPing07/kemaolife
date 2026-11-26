@@ -40,6 +40,7 @@ import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.github.echoping07.kemaolife.R
 import com.github.echoping07.kemaolife.data.CampusState
@@ -62,6 +63,7 @@ internal fun MoreScreen(
     state: AppState,
     viewModel: AppViewModel,
     onGoSettings: () -> Unit,
+    bottomContentPadding: Dp = PageBottomPadding,
 ) {
     // 只把稳定依赖放进 effect：ViewModel 自己读最新 state，不捕获整个 AppState。
     // 进入本页的自动查询按最小间隔节流；手动刷新按钮不受约束。
@@ -71,7 +73,10 @@ internal fun MoreScreen(
     viewModel.campusFeedback.ExpireFeedback()
     viewModel.campusActionFeedback.ExpireFeedback()
 
-    CollapsingScreen(title = stringResource(R.string.tab_more)) {
+    CollapsingScreen(
+        title = stringResource(R.string.tab_more),
+        bottomContentPadding = bottomContentPadding,
+    ) {
         if (state.credentials.studentId.isBlank() || state.credentials.electricityAccount.isBlank()) {
             SetupCard(
                 missingEducation = state.credentials.studentId.isBlank(),

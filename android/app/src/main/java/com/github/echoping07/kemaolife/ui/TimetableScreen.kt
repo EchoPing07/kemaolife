@@ -83,7 +83,11 @@ private data class CourseTarget(val day: DaySchedule, val entry: Entry)
  * （docs/android.md tab1）。邻居页内容由 ViewModel 预取进内存，否则拖到一半只有留白。
  */
 @Composable
-internal fun TimetableScreen(state: AppState, viewModel: AppViewModel) {
+internal fun TimetableScreen(
+    state: AppState,
+    viewModel: AppViewModel,
+    bottomContentPadding: Dp = 16.dp,
+) {
     var showWeekPicker by remember { mutableStateOf(false) }
     var detail by remember { mutableStateOf<CourseTarget?>(null) }
     val week = state.week
@@ -192,6 +196,7 @@ internal fun TimetableScreen(state: AppState, viewModel: AppViewModel) {
                         prefixLocationAt = state.prefixLocationAt,
                         hideOverflow = state.hideTimetableOverflow,
                         scrollState = gridScroll,
+                        bottomContentPadding = bottomContentPadding,
                         onSync = { viewModel.syncTimetable() },
                         onCourseClick = { day, entry -> detail = CourseTarget(day, entry) },
                     )
@@ -207,6 +212,7 @@ internal fun TimetableScreen(state: AppState, viewModel: AppViewModel) {
                     prefixLocationAt = state.prefixLocationAt,
                     hideOverflow = state.hideTimetableOverflow,
                     scrollState = gridScroll,
+                    bottomContentPadding = bottomContentPadding,
                     onSync = { viewModel.syncTimetable() },
                     onCourseClick = { day, entry -> detail = CourseTarget(day, entry) },
                 )
@@ -271,6 +277,7 @@ private fun PageContent(
     prefixLocationAt: Boolean,
     hideOverflow: Boolean,
     scrollState: ScrollState,
+    bottomContentPadding: Dp,
     onSync: () -> Unit,
     onCourseClick: (DaySchedule, Entry) -> Unit,
 ) {
@@ -291,6 +298,7 @@ private fun PageContent(
                 prefixLocationAt = prefixLocationAt,
                 hideOverflow = hideOverflow,
                 scrollState = scrollState,
+                bottomContentPadding = bottomContentPadding,
                 onCourseClick = onCourseClick,
             )
         }
@@ -596,13 +604,14 @@ private fun WeekGrid(
     prefixLocationAt: Boolean,
     hideOverflow: Boolean,
     scrollState: ScrollState,
+    bottomContentPadding: Dp,
     onCourseClick: (DaySchedule, Entry) -> Unit,
 ) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
             .verticalScroll(scrollState)
-            .padding(end = GridEndPadding, bottom = 16.dp)
+            .padding(end = GridEndPadding, bottom = bottomContentPadding)
             .height(RowHeight * TIMETABLE_ROWS),
     ) {
         Column(modifier = Modifier.width(GutterWidth)) {

@@ -1,31 +1,40 @@
 package com.github.echoping07.kemaolife.ui
 
-import androidx.activity.compose.BackHandler
+import androidx.activity.BackEventCompat
+import androidx.activity.compose.PredictiveBackHandler
 import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.EnterTransition
+import androidx.compose.animation.ExitTransition
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.scaleIn
 import androidx.compose.animation.scaleOut
-import androidx.compose.animation.slideInHorizontally
-import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.togetherWith
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
-import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.selection.toggleable
-import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
-import androidx.compose.material3.Button
+import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -33,16 +42,24 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontWeight
@@ -50,89 +67,169 @@ import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.github.echoping07.kemaolife.R
 import com.github.echoping07.kemaolife.data.AppPreferences
 import com.github.echoping07.kemaolife.data.Credentials
 import com.github.echoping07.kemaolife.ui.theme.appShape
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.launch
 
 private enum class SettingsPage { ROOT, EDUCATION, ELECTRICITY, CAMPUS, APPEARANCE, ABOUT, LOGS }
 
-/** 设置总览只承担导航；凭据表单放进各自页面，避免三个功能域一次全部铺开。 */
+/** 带右下角悬浮保存钮的二级页尾部留白（56dp FAB + 20dp 外距 + 20dp 呼吸空隙，不含导航栏 inset）。 */
+private val FabBottomClearance = 96.dp
+
+/** 设置总览只承担导航；凭据表单放进各自页面，二级页支持预测性返回并自动隐藏主悬浮底栏。 */
 @Composable
 internal fun SettingsScreen(
     state: AppState,
     viewModel: AppViewModel,
+    rootBottomPadding: Dp = PageBottomPadding,
+    onBottomBarRevealChange: (Float) -> Unit = {},
 ) {
     var pageName by rememberSaveable { mutableStateOf(SettingsPage.ROOT.name) }
     val page = SettingsPage.valueOf(pageName)
     val motionEnabled = animationsEnabled()
-    BackHandler(enabled = page != SettingsPage.ROOT) { pageName = SettingsPage.ROOT.name }
+    val uiScope = rememberCoroutineScope()
+    val rootScrollState = rememberScrollState()
 
-    AnimatedContent(
-        targetState = page,
-        transitionSpec = {
-            if (!motionEnabled) {
-                androidx.compose.animation.EnterTransition.None togetherWith
-                    androidx.compose.animation.ExitTransition.None
-            } else if (targetState != SettingsPage.ROOT) {
-                // 与 RikkaHub 一致：子页整页推入，总览左移半屏、缩小并淡出。
-                slideInHorizontally { it } togetherWith
-                    slideOutHorizontally { -it / 2 } + scaleOut(targetScale = 0.7f) + fadeOut()
+    var renderedChild by remember { mutableStateOf(page.takeIf { it != SettingsPage.ROOT }) }
+    val transitionProgress = remember { Animatable(if (page == SettingsPage.ROOT) 0f else 1f) }
+    var isPredictiveBackActive by remember { mutableStateOf(false) }
+    val backGestureProgress = remember { Animatable(0f) }
+    var backSwipeEdge by remember { mutableIntStateOf(BackEventCompat.EDGE_LEFT) }
+    var backSettleJob by remember { mutableStateOf<Job?>(null) }
+
+    LaunchedEffect(page, motionEnabled) {
+        if (page != SettingsPage.ROOT) {
+            backSettleJob?.cancel()
+            isPredictiveBackActive = false
+            backGestureProgress.snapTo(0f)
+            renderedChild = page
+            if (motionEnabled) {
+                transitionProgress.animateTo(1f, tween(280, easing = FastOutSlowInEasing))
             } else {
-                slideInHorizontally { -it / 2 } + scaleIn(initialScale = 0.7f) + fadeIn() togetherWith
-                    slideOutHorizontally { it }
+                transitionProgress.snapTo(1f)
             }
-        },
-        label = "settingsNavigation",
-        modifier = Modifier.fillMaxSize(),
-    ) { currentPage ->
-        val title =
-            stringResource(
-                when (currentPage) {
-                    SettingsPage.ROOT -> R.string.tab_settings
-                    SettingsPage.EDUCATION -> R.string.section_edu
-                    SettingsPage.ELECTRICITY -> R.string.section_power
-                    SettingsPage.CAMPUS -> R.string.section_portal
-                    SettingsPage.APPEARANCE -> R.string.settings_appearance
-                    SettingsPage.ABOUT -> R.string.settings_about
-                    SettingsPage.LOGS -> R.string.settings_logs
-                },
+        } else if (!isPredictiveBackActive) {
+            if (motionEnabled) {
+                transitionProgress.animateTo(0f, tween(240, easing = FastOutSlowInEasing))
+            } else {
+                transitionProgress.snapTo(0f)
+            }
+            renderedChild = null
+        }
+    }
+
+    // 与主界面的悬浮底栏联动：二级页隐藏底栏，预测性返回拖拽时随手势进度平滑恢复。
+    LaunchedEffect(Unit) {
+        snapshotFlow {
+            PredictiveBackMath.bottomBarReveal(
+                hasChild = renderedChild != null,
+                transitionProgress = transitionProgress.value,
+                predictiveBackActive = isPredictiveBackActive,
+                predictiveBackProgress = backGestureProgress.value,
             )
-        val testTarget =
-            when (currentPage) {
-                SettingsPage.EDUCATION -> ProbeTarget.TIMETABLE
-                SettingsPage.ELECTRICITY -> ProbeTarget.ELECTRICITY
-                SettingsPage.CAMPUS -> ProbeTarget.CAMPUS
-                else -> null
+        }.collect(onBottomBarRevealChange)
+    }
+    DisposableEffect(Unit) {
+        onDispose { onBottomBarRevealChange(1f) }
+    }
+
+    PredictiveBackHandler(enabled = page != SettingsPage.ROOT) { events: Flow<BackEventCompat> ->
+        backSettleJob?.cancel()
+        var receivedProgress = false
+        try {
+            events.collect { event ->
+                receivedProgress = true
+                isPredictiveBackActive = true
+                backSwipeEdge = event.swipeEdge
+                if (motionEnabled) {
+                    backGestureProgress.snapTo(event.progress.coerceIn(0f, 1f))
+                }
             }
-        // 顶栏、返回按钮与内容必须属于同一转场页面；否则 key(page) 会连动画容器一起重建。
-        CollapsingScreen(
-            title = title,
-            onBack = if (currentPage == SettingsPage.ROOT) null else ({ pageName = SettingsPage.ROOT.name }),
-            actions = {
-                if (testTarget != null) {
-                    IconButton(onClick = { viewModel.runProbe(testTarget) }, modifier = Modifier.size(40.dp)) {
-                        Icon(
-                            imageVector = TabIcons.PlugConnected,
-                            contentDescription = stringResource(R.string.action_test),
-                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                            modifier = Modifier.size(23.dp),
-                        )
+            if (receivedProgress && motionEnabled) {
+                pageName = SettingsPage.ROOT.name
+                backSettleJob =
+                    uiScope.launch {
+                        backGestureProgress.animateTo(1f, tween(180, easing = FastOutSlowInEasing))
+                        transitionProgress.snapTo(0f)
+                        backGestureProgress.snapTo(0f)
+                        isPredictiveBackActive = false
+                        renderedChild = null
                     }
-                }
-                // 日志页的清空按钮：只清内容，不影响「记录请求」开关。
-                if (currentPage == SettingsPage.LOGS) {
-                    LogClearAction(
-                        enabled = state.log?.count?.let { it > 0 } == true,
-                        onClick = viewModel::clearRequestLog,
-                    )
-                }
-            },
-            modifier = Modifier.fillMaxSize(),
-        ) {
-            when (currentPage) {
-                SettingsPage.ROOT -> {
+            } else {
+                // 三键返回或关闭动画时没有手势进度流，回落普通退出转场。
+                isPredictiveBackActive = false
+                backGestureProgress.snapTo(0f)
+                pageName = SettingsPage.ROOT.name
+            }
+        } catch (e: CancellationException) {
+            // PredictiveBackHandler 取消手势时会同时取消当前协程，回弹动画需挂到外层 uiScope。
+            if (page != SettingsPage.ROOT) {
+                backSettleJob =
+                    uiScope.launch {
+                        if (motionEnabled) {
+                            backGestureProgress.animateTo(0f, tween(200, easing = FastOutSlowInEasing))
+                        } else {
+                            backGestureProgress.snapTo(0f)
+                        }
+                        isPredictiveBackActive = false
+                    }
+            }
+            throw e
+        }
+    }
+
+    val navBottom = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
+    val childSimpleBottomPadding = navBottom + PageBottomPadding
+    val childFabBottomPadding = navBottom + FabBottomClearance
+    val density = LocalDensity.current
+
+    BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
+        val viewportWidthPx = constraints.maxWidth.toFloat()
+        val hasChild = renderedChild != null
+        val transform =
+            if (!motionEnabled) {
+                null
+            } else if (isPredictiveBackActive) {
+                PredictiveBackMath.predictiveBack(
+                    progress = backGestureProgress.value,
+                    swipeEdge = backSwipeEdge,
+                    viewportWidthPx = viewportWidthPx,
+                )
+            } else {
+                PredictiveBackMath.slideTransition(
+                    childProgress = transitionProgress.value,
+                    viewportWidthPx = viewportWidthPx,
+                )
+            }
+
+        // 仅在总览可见或转场 / 预测性返回露底期间组合总览页；滚动位置由 rootScrollState 跨进退保留。
+        val showRoot = !hasChild || isPredictiveBackActive || transitionProgress.value < 0.999f
+        if (showRoot) {
+            Box(
+                modifier =
+                    Modifier
+                        .fillMaxSize()
+                        .graphicsLayer {
+                            if (hasChild && transform != null) {
+                                translationX = transform.rootTranslationX
+                                scaleX = transform.rootScale
+                                scaleY = transform.rootScale
+                            }
+                        }.background(MaterialTheme.colorScheme.surface),
+            ) {
+                CollapsingScreen(
+                    title = stringResource(R.string.tab_settings),
+                    scrollState = rootScrollState,
+                    bottomContentPadding = rootBottomPadding,
+                    modifier = Modifier.fillMaxSize(),
+                ) {
                     SettingsOverview(
                         state = state,
                         onThemeMode = viewModel::setThemeMode,
@@ -144,32 +241,146 @@ internal fun SettingsScreen(
                         onLogs = { pageName = SettingsPage.LOGS.name },
                     )
                 }
-
-                SettingsPage.EDUCATION -> {
-                    EducationSettings(state, viewModel)
-                }
-
-                SettingsPage.ELECTRICITY -> {
-                    ElectricitySettings(state, viewModel)
-                }
-
-                SettingsPage.CAMPUS -> {
-                    CampusSettings(state, viewModel)
-                }
-
-                SettingsPage.APPEARANCE -> {
-                    AppearanceScreen(state, viewModel)
-                }
-
-                SettingsPage.ABOUT -> {
-                    AboutScreen(state, viewModel)
-                }
-
-                SettingsPage.LOGS -> {
-                    LogsScreen(state, viewModel)
+                if (hasChild && transform != null && transform.rootScrimAlpha > 0.001f) {
+                    Box(
+                        modifier =
+                            Modifier
+                                .fillMaxSize()
+                                .background(Color.Black.copy(alpha = transform.rootScrimAlpha)),
+                    )
                 }
             }
         }
+
+        val child = renderedChild
+        if (child != null) {
+            key(child) {
+                val cornerDp = transform?.childCornerDp ?: 0f
+                val shadowPx = with(density) { 12.dp.toPx() }
+                Box(
+                    modifier =
+                        Modifier
+                            .fillMaxSize()
+                            .graphicsLayer {
+                                if (transform != null) {
+                                    translationX = transform.childTranslationX
+                                    scaleX = transform.childScale
+                                    scaleY = transform.childScale
+                                    alpha = transform.childAlpha
+                                }
+                                if (cornerDp > 0.5f) {
+                                    shape = RoundedCornerShape(cornerDp.dp)
+                                    clip = true
+                                    shadowElevation = shadowPx
+                                }
+                            }.background(MaterialTheme.colorScheme.surface),
+                ) {
+                    SettingsChildPage(
+                        page = child,
+                        state = state,
+                        viewModel = viewModel,
+                        onBack = { pageName = SettingsPage.ROOT.name },
+                        fabBottomPadding = childFabBottomPadding,
+                        simpleBottomPadding = childSimpleBottomPadding,
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun SettingsChildPage(
+    page: SettingsPage,
+    state: AppState,
+    viewModel: AppViewModel,
+    onBack: () -> Unit,
+    fabBottomPadding: Dp,
+    simpleBottomPadding: Dp,
+) {
+    when (page) {
+        SettingsPage.EDUCATION -> {
+            EducationSettings(
+                state = state,
+                viewModel = viewModel,
+                onBack = onBack,
+                bottomContentPadding = fabBottomPadding,
+            )
+        }
+
+        SettingsPage.ELECTRICITY -> {
+            ElectricitySettings(
+                state = state,
+                viewModel = viewModel,
+                onBack = onBack,
+                bottomContentPadding = fabBottomPadding,
+            )
+        }
+
+        SettingsPage.CAMPUS -> {
+            CampusSettings(
+                state = state,
+                viewModel = viewModel,
+                onBack = onBack,
+                bottomContentPadding = fabBottomPadding,
+            )
+        }
+
+        SettingsPage.APPEARANCE -> {
+            CollapsingScreen(
+                title = stringResource(R.string.settings_appearance),
+                onBack = onBack,
+                bottomContentPadding = simpleBottomPadding,
+                modifier = Modifier.fillMaxSize(),
+            ) {
+                AppearanceScreen(state, viewModel)
+            }
+        }
+
+        SettingsPage.ABOUT -> {
+            CollapsingScreen(
+                title = stringResource(R.string.settings_about),
+                onBack = onBack,
+                bottomContentPadding = simpleBottomPadding,
+                modifier = Modifier.fillMaxSize(),
+            ) {
+                AboutScreen(state, viewModel)
+            }
+        }
+
+        SettingsPage.LOGS -> {
+            CollapsingScreen(
+                title = stringResource(R.string.settings_logs),
+                onBack = onBack,
+                actions = {
+                    // 日志页的清空按钮：只清内容，不影响「记录请求」开关。
+                    LogClearAction(
+                        enabled = state.log?.count?.let { it > 0 } == true,
+                        onClick = viewModel::clearRequestLog,
+                    )
+                },
+                bottomContentPadding = simpleBottomPadding,
+                modifier = Modifier.fillMaxSize(),
+            ) {
+                LogsScreen(state, viewModel)
+            }
+        }
+
+        SettingsPage.ROOT -> {
+            Unit
+        }
+    }
+}
+
+@Composable
+private fun ProbeTestAction(onClick: () -> Unit) {
+    IconButton(onClick = onClick, modifier = Modifier.size(40.dp)) {
+        Icon(
+            imageVector = TabIcons.PlugConnected,
+            contentDescription = stringResource(R.string.action_test),
+            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.size(23.dp),
+        )
     }
 }
 
@@ -363,6 +574,8 @@ internal fun SettingsDestination(
 private fun EducationSettings(
     state: AppState,
     viewModel: AppViewModel,
+    onBack: () -> Unit,
+    bottomContentPadding: Dp,
 ) {
     var studentId by remember(state.credentials.studentId) { mutableStateOf(state.credentials.studentId) }
     var password by remember { mutableStateOf("") }
@@ -370,24 +583,33 @@ private fun EducationSettings(
     LaunchedEffect(state.settingsSaved) {
         if (state.settingsSaved) password = ""
     }
-    CredentialForm(
-        saved = state.settingsSaved,
-        onSavedShown = viewModel::consumeSettingsSaved,
-        onSave = {
-            // 增量提交：基于 ViewModel 里的最新凭据合并，不拿组合时的快照覆盖其它域。
-            val student = studentId.trim()
-            val pwd = password
-            viewModel.updateCredentials {
-                it.copy(studentId = student, eduPassword = pwd)
-            }
-            // 间隔与本页凭据一起保存；保存按钮负责钳制并回填实际值。
-            viewModel.setTimetableInterval(
-                interval.toIntOrNull() ?: AppPreferences.DEFAULT_TIMETABLE_INTERVAL,
+    CollapsingScreen(
+        title = stringResource(R.string.section_edu),
+        onBack = onBack,
+        actions = { ProbeTestAction { viewModel.runProbe(ProbeTarget.TIMETABLE) } },
+        bottomContentPadding = bottomContentPadding,
+        floatingActionButton = {
+            SaveFab(
+                saved = state.settingsSaved,
+                onSavedShown = viewModel::consumeSettingsSaved,
+                onSave = {
+                    // 增量提交：基于 ViewModel 里的最新凭据合并，不拿组合时的快照覆盖其它域。
+                    val student = studentId.trim()
+                    val pwd = password
+                    viewModel.updateCredentials {
+                        it.copy(studentId = student, eduPassword = pwd)
+                    }
+                    // 间隔与本页凭据一起保存；保存按钮负责钳制并回填实际值。
+                    viewModel.setTimetableInterval(
+                        interval.toIntOrNull() ?: AppPreferences.DEFAULT_TIMETABLE_INTERVAL,
+                    )
+                    interval =
+                        viewModel.state.value.timetableInterval
+                            .toString()
+                },
             )
-            interval =
-                viewModel.state.value.timetableInterval
-                    .toString()
         },
+        modifier = Modifier.fillMaxSize(),
     ) {
         SettingsGroupLabel(stringResource(R.string.settings_group_configuration))
         SettingsFormCard {
@@ -474,6 +696,8 @@ private fun EducationSettings(
 private fun ElectricitySettings(
     state: AppState,
     viewModel: AppViewModel,
+    onBack: () -> Unit,
+    bottomContentPadding: Dp,
 ) {
     var inherit by remember(state.credentials.electricityInheritEducation) {
         mutableStateOf(state.credentials.electricityInheritEducation)
@@ -488,27 +712,36 @@ private fun ElectricitySettings(
         mutableStateOf(state.electricityInterval.toString())
     }
 
-    CredentialForm(
-        saved = state.settingsSaved,
-        onSavedShown = viewModel::consumeSettingsSaved,
-        onSave = {
-            val useInherit = inherit
-            val own = if (useInherit) "" else ownAccount.trim()
-            val code = customerCode.trim().ifBlank { Credentials.DEFAULT_CUSTOMER_CODE }
-            viewModel.updateCredentials {
-                it.copy(
-                    electricityInheritEducation = useInherit,
-                    electricityStudentId = own,
-                    customerCode = code,
-                )
-            }
-            viewModel.setElectricityInterval(
-                interval.toIntOrNull() ?: AppPreferences.DEFAULT_ELECTRICITY_INTERVAL,
+    CollapsingScreen(
+        title = stringResource(R.string.section_power),
+        onBack = onBack,
+        actions = { ProbeTestAction { viewModel.runProbe(ProbeTarget.ELECTRICITY) } },
+        bottomContentPadding = bottomContentPadding,
+        floatingActionButton = {
+            SaveFab(
+                saved = state.settingsSaved,
+                onSavedShown = viewModel::consumeSettingsSaved,
+                onSave = {
+                    val useInherit = inherit
+                    val own = if (useInherit) "" else ownAccount.trim()
+                    val code = customerCode.trim().ifBlank { Credentials.DEFAULT_CUSTOMER_CODE }
+                    viewModel.updateCredentials {
+                        it.copy(
+                            electricityInheritEducation = useInherit,
+                            electricityStudentId = own,
+                            customerCode = code,
+                        )
+                    }
+                    viewModel.setElectricityInterval(
+                        interval.toIntOrNull() ?: AppPreferences.DEFAULT_ELECTRICITY_INTERVAL,
+                    )
+                    interval =
+                        viewModel.state.value.electricityInterval
+                            .toString()
+                },
             )
-            interval =
-                viewModel.state.value.electricityInterval
-                    .toString()
         },
+        modifier = Modifier.fillMaxSize(),
     ) {
         SettingsGroupLabel(stringResource(R.string.settings_group_configuration))
         GroupSurface(position = GroupPosition.FIRST, modifier = Modifier.fillMaxWidth()) {
@@ -571,6 +804,8 @@ private fun ElectricitySettings(
 private fun CampusSettings(
     state: AppState,
     viewModel: AppViewModel,
+    onBack: () -> Unit,
+    bottomContentPadding: Dp,
 ) {
     var user by remember(state.credentials.campusUser) { mutableStateOf(state.credentials.campusUser) }
     var password by remember { mutableStateOf("") }
@@ -580,17 +815,26 @@ private fun CampusSettings(
     LaunchedEffect(state.settingsSaved) {
         if (state.settingsSaved) password = ""
     }
-    CredentialForm(
-        saved = state.settingsSaved,
-        onSavedShown = viewModel::consumeSettingsSaved,
-        onSave = {
-            val account = user.trim()
-            val pwd = password
-            val fp = fingerprint.trim()
-            viewModel.updateCredentials {
-                it.copy(campusUser = account, campusPassword = pwd, campusFingerprint = fp)
-            }
+    CollapsingScreen(
+        title = stringResource(R.string.section_portal),
+        onBack = onBack,
+        actions = { ProbeTestAction { viewModel.runProbe(ProbeTarget.CAMPUS) } },
+        bottomContentPadding = bottomContentPadding,
+        floatingActionButton = {
+            SaveFab(
+                saved = state.settingsSaved,
+                onSavedShown = viewModel::consumeSettingsSaved,
+                onSave = {
+                    val account = user.trim()
+                    val pwd = password
+                    val fp = fingerprint.trim()
+                    viewModel.updateCredentials {
+                        it.copy(campusUser = account, campusPassword = pwd, campusFingerprint = fp)
+                    }
+                },
+            )
         },
+        modifier = Modifier.fillMaxSize(),
     ) {
         SettingsGroupLabel(stringResource(R.string.settings_group_configuration))
         SettingsFormCard {
@@ -635,44 +879,62 @@ private fun CampusSettings(
     }
 }
 
+/** 教务 / 电费 / 校园网右下角纯图标悬浮保存按钮；保存成功后短暂切换为完成态图标。 */
 @Composable
-private fun CredentialForm(
+private fun SaveFab(
     saved: Boolean,
     onSavedShown: () -> Unit,
     onSave: () -> Unit,
-    content: @Composable ColumnScope.() -> Unit,
 ) {
-    Column(modifier = Modifier.fillMaxWidth()) {
-        content()
-
-        LaunchedEffect(saved) {
-            if (saved) {
-                kotlinx.coroutines.delay(1800)
-                onSavedShown()
-            }
+    val motionEnabled = animationsEnabled()
+    LaunchedEffect(saved) {
+        if (saved) {
+            kotlinx.coroutines.delay(1800)
+            onSavedShown()
         }
-        // 主操作收在内容末尾右侧；胶囊轮廓和图标让它保持明确，但不再横贯整屏。
-        Button(
-            onClick = onSave,
-            shape = CircleShape,
-            contentPadding = PaddingValues(horizontal = 28.dp),
-            modifier =
-                Modifier
-                    .align(Alignment.End)
-                    .padding(top = 20.dp, bottom = 8.dp)
-                    .widthIn(min = 132.dp)
-                    .height(56.dp),
-        ) {
+    }
+    val containerColor by animateColorAsState(
+        targetValue =
+            if (saved) {
+                MaterialTheme.colorScheme.tertiaryContainer
+            } else {
+                MaterialTheme.colorScheme.primary
+            },
+        animationSpec = if (motionEnabled) tween(200) else tween(0),
+        label = "saveFabContainer",
+    )
+    val contentColor by animateColorAsState(
+        targetValue =
+            if (saved) {
+                MaterialTheme.colorScheme.onTertiaryContainer
+            } else {
+                MaterialTheme.colorScheme.onPrimary
+            },
+        animationSpec = if (motionEnabled) tween(200) else tween(0),
+        label = "saveFabContent",
+    )
+    FloatingActionButton(
+        onClick = onSave,
+        shape = appShape(16.dp),
+        containerColor = containerColor,
+        contentColor = contentColor,
+    ) {
+        AnimatedContent(
+            targetState = saved,
+            transitionSpec = {
+                if (motionEnabled) {
+                    (fadeIn(tween(180)) + scaleIn(tween(180), initialScale = 0.78f)) togetherWith
+                        (fadeOut(tween(120)) + scaleOut(tween(120), targetScale = 0.78f))
+                } else {
+                    EnterTransition.None togetherWith ExitTransition.None
+                }
+            },
+            label = "saveFabIcon",
+        ) { isSaved ->
             Icon(
-                imageVector = TabIcons.Check,
-                contentDescription = null,
-                modifier = Modifier.size(20.dp),
-            )
-            Spacer(Modifier.width(8.dp))
-            Text(
-                text = stringResource(if (saved) R.string.save_done else R.string.action_save),
-                style = MaterialTheme.typography.titleSmall,
-                fontWeight = FontWeight.Bold,
+                imageVector = if (isSaved) TabIcons.CircleCheck else TabIcons.Check,
+                contentDescription = stringResource(if (isSaved) R.string.save_done else R.string.action_save),
+                modifier = Modifier.size(24.dp),
             )
         }
     }
