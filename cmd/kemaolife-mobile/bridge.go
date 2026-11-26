@@ -25,6 +25,7 @@ import (
 
 	"github.com/EchoPing07/kemaolife/internal/app"
 	"github.com/EchoPing07/kemaolife/internal/core"
+	"github.com/EchoPing07/kemaolife/internal/core/alert"
 	"github.com/EchoPing07/kemaolife/internal/core/model"
 	"github.com/EchoPing07/kemaolife/internal/core/timetable"
 	"github.com/EchoPing07/kemaolife/internal/platform"
@@ -273,6 +274,12 @@ type callRequest struct {
 	Enabled bool `json:"enabled"`
 	// OptimizeLocation 给 `timetable.export` 用，缺省 false（导出原始课室名）。
 	OptimizeLocation bool `json:"optimizeLocation"`
+	// 以下五个字段仅给 `electricity.alert` 用（纯本地判定，0 请求；docs/contract.md §6）。
+	AlertStatus      *model.ElectricityStatus `json:"status"`
+	AlertMode        string                   `json:"mode"`
+	BalanceThreshold float64                  `json:"balanceThreshold"`
+	DaysThreshold    int                      `json:"daysThreshold"`
+	AlertState       alert.State              `json:"state"`
 }
 
 // Call takes a request JSON and returns a response JSON. Unknown op yields
@@ -319,6 +326,8 @@ func Call(reqJSON string) string {
 		return s.electricityReport(req.Month)
 	case "electricity.probe":
 		return s.electricityProbe(req.Month)
+	case "electricity.alert":
+		return s.electricityAlert(req)
 	case "campusnet.status":
 		return s.campusStatus()
 	case "campusnet.probe":
@@ -416,6 +425,43 @@ func (s *session) electricityReport(month string) string {
 		return failure(err)
 	}
 	return success(s.clock.Now(), report)
+}
+
+// electricityAlert 复用 core/alert.Evaluate 判定是否需要发低电费提醒（0 请求）。
+//
+// 业务判定必须留在 Go core（AGENTS A3），Kotlin 只把查询结果与去重状态传进来，
+// 拿到脱敏后的标题 / 正文与新状态后再决定是否投递系统通知。Android 只在用户主动
+// 打开 / 查询时评估，不设静默时段（QuietStartHour == QuietEndHour == 0）。
+func (s *session) electricityAlert(req callRequest) string {
+	if req.AlertStatus == nil {
+		return failure(model.NewError(model.CodeInvalidArgument, "缺少电费状态"))
+	}
+	var mode alert.Mode
+	switch strings.ToLower(strings.TrimSpace(req.AlertMode)) {
+	case "", "balance":
+		mode = alert.ModeBalance
+	case "days":
+		mode = alert.ModeDays
+	default:
+		return failure(model.NewError(model.CodeInvalidArgument, "不支持的通知方式"))
+	}
+	status := *req.AlertStatus
+	// 防御性清空个人宿舍标识：通知正文不该依赖它（P2）。
+	status.RoomName = ""
+	status.RoomVerify = ""
+	now := s.clock.Now()
+	dec, next := alert.Evaluate(req.AlertState, status, now, alert.Config{
+		Mode:             mode,
+		BalanceThreshold: req.BalanceThreshold,
+		DaysThreshold:    req.DaysThreshold,
+	})
+	return success(now, map[string]any{
+		"notify": dec.Notify,
+		"title":  dec.Title,
+		"body":   dec.Body,
+		"reason": dec.Reason.String(),
+		"state":  next,
+	})
 }
 
 // campusStatus 判态；offline 是正常状态，不是错误（docs/contract.md §7.4）。

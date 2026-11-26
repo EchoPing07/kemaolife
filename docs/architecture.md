@@ -235,7 +235,7 @@ func ReloginCampusNetwork(ctx context.Context, d CampusDeps) error
 | `SyncTimetable` | 显式 `sync`（只刷新不查询） | 启动读快照后后台同步一次；「刷新课表」独立触发，不与切周合并 | 打开 App（不受最小查询间隔约束）、切回课表 tab（按间隔）、手动刷新 / 设置页「测试」（不受节流） |
 | `ExportTimetableCSV` | 不调 | 不调 | 课表页「导出课表」：只读快照，SAF 落盘 |
 | `CheckElectricity` | 显式 `kemaolife electricity` | `PollOnce` 启动立即查一次，之后 ticker 默认 4 小时；默认立即刷新保留告警；`QueryElectricity` 支持指定月份手动查询且不告警、不改退避 | 打开 App + 进入更多按间隔 + 手动刷新 |
-| `alert.Evaluate` | 不调 | 仅 `PollOnce` 电费成功后由 `desktop.Engine` 调用；月份手动查询不调 | 不调 |
+| `alert.Evaluate` | 不调 | 仅 `PollOnce` 电费成功后由 `desktop.Engine` 调用；月份手动查询不调 | 电费查询成功后经门面 `electricity.alert` 调用（0 请求，无后台定时） |
 | `EnsureCampusNetwork` | 不调 | 仅自动模式，每轮电费轮询前置 | 不调 |
 | `GetCampusNetworkStatus` 等 | 不调 | 启动立即判态一次，之后独立 ticker 默认 120s；主窗口 / 托盘手动按钮用 `CampusNetwork` | 「更多」页 / 手动动作前（默认仅 WiFi 下探测） |
 | 结果去向 | stdout（`--json` 只出数据） | 五页主窗口 + 托盘状态 / 悬浮提示 + 系统通知 | Compose 三 tab |

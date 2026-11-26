@@ -155,6 +155,42 @@ data class ElectricityUsage(
 
 data class DayUsage(val date: String, val use: Double)
 
+/** 电费告警去重状态：对应 Go `core/alert.State`，由门面原样读写。 */
+data class ElectricityAlertState(
+    val balanceAlerted: Boolean = false,
+    val daysAlerted: Boolean = false,
+) {
+    fun toJson(): JSONObject = JSONObject()
+        .put("balanceAlerted", balanceAlerted)
+        .put("daysAlerted", daysAlerted)
+
+    companion object {
+        fun from(obj: JSONObject?): ElectricityAlertState = ElectricityAlertState(
+            balanceAlerted = obj?.optBoolean("balanceAlerted", false) ?: false,
+            daysAlerted = obj?.optBoolean("daysAlerted", false) ?: false,
+        )
+    }
+}
+
+/** `electricity.alert` 的 data：由 Go `core/alert.Evaluate` 产出的通知决策与新状态（AGENTS A3）。 */
+data class ElectricityAlertDecision(
+    val notify: Boolean,
+    val title: String,
+    val body: String,
+    val reason: String,
+    val state: ElectricityAlertState,
+) {
+    companion object {
+        fun from(obj: JSONObject): ElectricityAlertDecision = ElectricityAlertDecision(
+            notify = obj.optBoolean("notify", false),
+            title = obj.optString("title"),
+            body = obj.optString("body"),
+            reason = obj.optString("reason"),
+            state = ElectricityAlertState.from(obj.optJSONObject("state")),
+        )
+    }
+}
+
 /** 校园网三态。`offline` 是正常状态，不是错误（docs/contract.md §7.4）。 */
 enum class CampusState(val wire: String) {
     ONLINE("online"),

@@ -203,6 +203,7 @@ func Call(reqJSON string) string { /* ... */ }
 | `timetable.export` | `optimizeLocation`（可选 bool，缺省 `false`） | — | 课表页「导出课表」（WakeUp CSV，见 §7.2） |
 | `electricity.report` | `month`（`YYYY-MM`，可选） | `kemaolife electricity` | |
 | `electricity.probe` | `month`（可选） | — | 设置页「电费」详情页「测试」 |
+| `electricity.alert` | `status`、`mode`（可选）、`balanceThreshold`、`daysThreshold`、`state`（可选） | — | 电费低阈值提醒判定（纯计算，0 请求，复用 `core/alert.Evaluate`） |
 | `campusnet.status` | — | — | |
 | `campusnet.probe` | — | — | 设置页「校园网」详情页「测试」 |
 | `campusnet.login` | — | — | |
@@ -240,6 +241,7 @@ func Call(reqJSON string) string { /* ... */ }
 7. `*.probe` 三个 `op` 是「测试」按钮专用：动作本身的成败放在 `data.ok`，外层信封恒 `ok:true`，始终带 `elapsedMs` 与脱敏后的 `message`；失败时另给 `code`（取 §8 错误码）。`message` 只按错误码映射为固定中文文案，不带上游原文、用户输入或内部错误文本。回报只含可展示摘要，不含 `roomName` / `roomVerify` / Cookie；`data.detail` 是白名单字段，未知字段不展示。`electricity.probe` 成功时另给可选 `data.report`（`ElectricityReport`，其中 `roomName` 恒为空、`roomVerify` 恒脱敏），`campusnet.probe` 成功时另给可选 `data.campusStatus`，供 UI 用同一次请求的结果刷新卡片，不再二次联网；老客户端忽略这两个可选字段即可。
 8. **会话代次**：每次成功 `Init` 递增会话代次并取消上一代次的请求上下文；在途旧 `Call` 可以继续跑完，但不得覆盖新一代次写出的快照（由会话绑定的 `context` 与代次守卫 KVStore 共同实现）。`time.Local` 只在进程内校准一次，重复 `Init` 不再写全局时区。
 9. **请求记录**（设置页「日志」）：`log.enable` 打开 / 关闭记录，打开时清空旧条目；`log.list` 返回最近 `limit` 条摘要（新的在前，环形窗口默认 100 条）；`log.detail` 返回单条完整记录，序号已被丢弃时回 `2001`；`log.clear` 清空并回报清掉的条数。记录内容为该次 HTTP 往返的方法 / URL / 标头 / 请求正文 / 响应状态与标头、正文 / 耗时，标头与正文按原始字节保留，不做字段级遮罩。隐私约束（默认关闭、只存进程内存、不入仓、64 KiB 截断、关闭即清空）见 [privacy.md §7](privacy.md)。`Init` 的 `requestLog` 只用于「恢复上次打开的开关」，关闭一律走 `log.enable`（否则保存凭据触发的重新 `Init` 会静默关掉记录）。
+10. **电费低阈值判定**（`electricity.alert`）：纯本地评估（0 请求），直接复用 `core/alert.Evaluate`，不设静默时段。请求须给 `status`（`ElectricityStatus` 必要展示字段：`balance` / `unit` / `collectedAt` / `estimatedDays`，不含 `roomName` / `roomVerify`），可选 `mode`（`"balance"`｜`"days"`，省略默认 `"balance"`；未知取值回 `2001`）、`balanceThreshold`（正数，默认 `10`）、`daysThreshold`（正整数，默认 `3`）、`state`（`{balanceAlerted, daysAlerted}`）。响应 `data` 为 `{notify, title, body, reason, state}`，其中 `reason` 取 `""` / `"balance"` / `"days"`，`body` 恒包含「数据截至 `<collectedAt>`」且不含宿舍标识。
 
 ## 7. 数据结构
 

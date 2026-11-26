@@ -747,3 +747,103 @@ func mustRequest(t *testing.T, url string) *http.Request {
 	}
 	return req
 }
+
+// electricity.alert：纯本地告警评估（0 请求），默认按电费 10 度阈值，支持切换预计天数与去重重置。
+func TestElectricityAlertOpBalanceAndDaysModes(t *testing.T) {
+	saved := time.Local
+	resetTimeZoneForTest()
+	t.Cleanup(func() {
+		time.Local = saved
+		resetTimeZoneForTest()
+	})
+	testSession(t, initConfig{TimeZone: "Asia/Shanghai", TimeZoneOffsetSeconds: 8 * 3600})
+
+	// 默认模式（空 / balance）+ 默认阈值（10 度）：低于阈值提醒，正文带本地时区的「数据截至」，不含宿舍标识。
+	first := decode(t, Call(`{
+		"op":"electricity.alert",
+		"status":{"roomName":"<校区>_<楼栋>_<楼层>_<房间>","balance":8.5,"unit":"度","collectedAt":"2026-11-06T22:48:42+08:00","estimatedDays":2}
+	}`))
+	if first["ok"] != true {
+		t.Fatalf("electricity.alert 失败: %v", first)
+	}
+	data := first["data"].(map[string]any)
+	if data["notify"] != true || data["reason"] != "balance" {
+		t.Fatalf("首次低于 10 度应提醒: %v", data)
+	}
+	body, _ := data["body"].(string)
+	if !strings.Contains(body, "10 度阈值") || !strings.Contains(body, "数据截至 2026-11-06 22:48") {
+		t.Errorf("通知正文格式不对: %q", body)
+	}
+	if strings.Contains(body, "<校区>") {
+		t.Errorf("通知正文不得泄露 roomName: %q", body)
+	}
+	st := data["state"].(map[string]any)
+	if st["balanceAlerted"] != true {
+		t.Errorf("应置位 balanceAlerted: %v", st)
+	}
+
+	// 带上已提醒状态再评估：不重复提醒。
+	second := decode(t, Call(`{
+		"op":"electricity.alert",
+		"mode":"balance",
+		"balanceThreshold":10,
+		"status":{"balance":7.0,"unit":"度","collectedAt":"2026-11-06T22:48:42+08:00","estimatedDays":1},
+		"state":{"balanceAlerted":true,"daysAlerted":false}
+	}`))
+	if second["data"].(map[string]any)["notify"] != false {
+		t.Errorf("同一阈值区间不应重复提醒: %v", second)
+	}
+
+	// 余额回升后重置标记。
+	recovered := decode(t, Call(`{
+		"op":"electricity.alert",
+		"mode":"balance",
+		"balanceThreshold":10,
+		"status":{"balance":50.0,"unit":"度","collectedAt":"2026-11-06T22:48:42+08:00","estimatedDays":10},
+		"state":{"balanceAlerted":true,"daysAlerted":false}
+	}`))
+	recData := recovered["data"].(map[string]any)
+	if recData["notify"] != false || recData["state"].(map[string]any)["balanceAlerted"] != false {
+		t.Errorf("回升后应不提醒并重置 balanceAlerted: %v", recData)
+	}
+
+	// days 模式：只看预计天数，余额很低但天数充足时不触发；天数低于阈值时触发。
+	daysSafe := decode(t, Call(`{
+		"op":"electricity.alert",
+		"mode":"days",
+		"balanceThreshold":10,
+		"daysThreshold":3,
+		"status":{"balance":2.0,"unit":"度","collectedAt":"2026-11-06T22:48:42+08:00","estimatedDays":5}
+	}`))
+	if daysSafe["data"].(map[string]any)["notify"] != false {
+		t.Errorf("days 模式天数充足不应因余额低触发: %v", daysSafe)
+	}
+
+	daysHit := decode(t, Call(`{
+		"op":"electricity.alert",
+		"mode":"days",
+		"daysThreshold":3,
+		"status":{"balance":25.0,"unit":"度","collectedAt":"2026-11-06T22:48:42+08:00","estimatedDays":2}
+	}`))
+	daysData := daysHit["data"].(map[string]any)
+	if daysData["notify"] != true || daysData["reason"] != "days" {
+		t.Fatalf("days 模式低于阈值应触发: %v", daysData)
+	}
+	if !strings.Contains(daysData["body"].(string), "已低于 3 天阈值") {
+		t.Errorf("days 模式正文不对: %v", daysData["body"])
+	}
+}
+
+func TestElectricityAlertOpValidation(t *testing.T) {
+	testSession(t, initConfig{})
+
+	missing := decode(t, Call(`{"op":"electricity.alert"}`))
+	if missing["ok"] != false || int(missing["error"].(map[string]any)["code"].(float64)) != 2001 {
+		t.Errorf("缺 status 应回 2001: %v", missing)
+	}
+
+	badMode := decode(t, Call(`{"op":"electricity.alert","mode":"unknown","status":{"balance":5}}`))
+	if badMode["ok"] != false || int(badMode["error"].(map[string]any)["code"].(float64)) != 2001 {
+		t.Errorf("未知 mode 应回 2001: %v", badMode)
+	}
+}

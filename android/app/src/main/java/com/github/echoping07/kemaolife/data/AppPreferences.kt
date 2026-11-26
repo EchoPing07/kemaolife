@@ -43,6 +43,54 @@ class AppPreferences(context: Context) {
             putInt(KEY_ELECTRICITY_INTERVAL, clamped(value, MIN_INTERVAL))
         }
 
+    /** 电费低阈值通知开关（默认打开，docs/android.md）。 */
+    var electricityAlertEnabled: Boolean
+        get() = prefs.getBoolean(KEY_ELECTRICITY_ALERT_ENABLED, DEFAULT_ELECTRICITY_ALERT_ENABLED)
+        set(value) = prefs.editCommit { putBoolean(KEY_ELECTRICITY_ALERT_ENABLED, value) }
+
+    /** 电费通知触发方式：`balance`（默认）或 `days`（预计天数）。 */
+    var electricityAlertMode: String
+        get() = normalizeAlertMode(prefs.getString(KEY_ELECTRICITY_ALERT_MODE, ALERT_MODE_BALANCE))
+        set(value) = prefs.editCommit {
+            putString(KEY_ELECTRICITY_ALERT_MODE, normalizeAlertMode(value))
+        }
+
+    /** 电费余额提醒阈值（度，默认 10 度）；以字符串落盘避免 Float 精度漂移。 */
+    var electricityBalanceThreshold: Double
+        get() {
+            val raw = prefs.getString(KEY_ELECTRICITY_BALANCE_THRESHOLD, null)?.toDoubleOrNull()
+            return if (raw == null) DEFAULT_BALANCE_THRESHOLD else clampedBalanceThreshold(raw)
+        }
+        set(value) = prefs.editCommit {
+            putString(
+                KEY_ELECTRICITY_BALANCE_THRESHOLD,
+                formatBalanceThreshold(clampedBalanceThreshold(value)),
+            )
+        }
+
+    /** 电费预计可用天数提醒阈值（天，默认 3 天）。 */
+    var electricityDaysThreshold: Int
+        get() = clampedDaysThreshold(prefs.getInt(KEY_ELECTRICITY_DAYS_THRESHOLD, DEFAULT_DAYS_THRESHOLD))
+        set(value) = prefs.editCommit {
+            putInt(KEY_ELECTRICITY_DAYS_THRESHOLD, clampedDaysThreshold(value))
+        }
+
+    /** 电费提醒去重状态（对应 Go `core/alert.State`），跨冷启动保留，充值回升后由 Go 重置。 */
+    var electricityAlertState: ElectricityAlertState
+        get() = ElectricityAlertState(
+            balanceAlerted = prefs.getBoolean(KEY_ALERT_BALANCE_ALERTED, false),
+            daysAlerted = prefs.getBoolean(KEY_ALERT_DAYS_ALERTED, false),
+        )
+        set(value) = prefs.editCommit {
+            putBoolean(KEY_ALERT_BALANCE_ALERTED, value.balanceAlerted)
+            putBoolean(KEY_ALERT_DAYS_ALERTED, value.daysAlerted)
+        }
+
+    /** 是否已自动发起过一次系统通知权限申请（避免用户拒绝后每次启动反复打扰）。 */
+    var notificationPermissionAsked: Boolean
+        get() = prefs.getBoolean(KEY_NOTIFICATION_PERMISSION_ASKED, false)
+        set(value) = prefs.editCommit { putBoolean(KEY_NOTIFICATION_PERMISSION_ASKED, value) }
+
     /** 教务高级：「课室显示优化」开关（默认开启，docs/android.md）。 */
     var optimizeLocationDisplay: Boolean
         get() = prefs.getBoolean(KEY_OPTIMIZE_LOCATION_DISPLAY, DEFAULT_OPTIMIZE_LOCATION_DISPLAY)
@@ -125,6 +173,14 @@ class AppPreferences(context: Context) {
         }
     }
 
+    /** 重置电费低阈值通知的去重标记（换账号 / 调整阈值 / 切换通知方式时调用）。 */
+    fun clearElectricityAlertState() {
+        prefs.editCommit {
+            putBoolean(KEY_ALERT_BALANCE_ALERTED, false)
+            putBoolean(KEY_ALERT_DAYS_ALERTED, false)
+        }
+    }
+
     /** 单调时钟上的「现在」；用于所有自动查询节流。 */
     fun nowElapsed(): Long = SystemClock.elapsedRealtime()
 
@@ -152,6 +208,82 @@ class AppPreferences(context: Context) {
         const val DEFAULT_PREFIX_LOCATION_AT = true
         const val DEFAULT_HIDE_TIMETABLE_OVERFLOW = false
         const val DEFAULT_OPTIMIZE_LOCATION_EXPORT = false
+
+        /** 电费低阈值通知默认值（docs/android.md）：默认打开、按电费 10 度提醒，预计天数默认 3 天。 */
+        const val DEFAULT_ELECTRICITY_ALERT_ENABLED = true
+        const val ALERT_MODE_BALANCE = "balance"
+        const val ALERT_MODE_DAYS = "days"
+        const val DEFAULT_BALANCE_THRESHOLD = 10.0
+        const val MIN_BALANCE_THRESHOLD = 0.1
+        const val MAX_BALANCE_THRESHOLD = 9999.0
+        const val DEFAULT_DAYS_THRESHOLD = 3
+        const val MIN_DAYS_THRESHOLD = 1
+        const val MAX_DAYS_THRESHOLD = 365
+
+        fun normalizeAlertMode(raw: String?): String =
+            if (raw?.trim()?.lowercase(java.util.Locale.US) == ALERT_MODE_DAYS) {
+                ALERT_MODE_DAYS
+            } else {
+                ALERT_MODE_BALANCE
+            }
+
+        /** 把电费余额阈值钳制进合法正数区间并保留最多两位小数。 */
+        fun clampedBalanceThreshold(value: Double): Double {
+            if (!value.isFinite()) return DEFAULT_BALANCE_THRESHOLD
+            val clamped = value.coerceIn(MIN_BALANCE_THRESHOLD, MAX_BALANCE_THRESHOLD)
+            return kotlin.math.round(clamped * 100.0) / 100.0
+        }
+
+        /** 把预计可用天数阈值钳制进 [1, 365]。 */
+        fun clampedDaysThreshold(days: Int): Int =
+            days.coerceIn(MIN_DAYS_THRESHOLD, MAX_DAYS_THRESHOLD)
+
+        /** 简洁格式化余额阈值：10.0 → "10"，10.5 → "10.5"，10.25 → "10.25"。 */
+        fun formatBalanceThreshold(value: Double): String {
+            val rounded = kotlin.math.round(value * 100.0) / 100.0
+            return if (rounded == rounded.toLong().toDouble()) {
+                rounded.toLong().toString()
+            } else {
+                String.format(java.util.Locale.US, "%.2f", rounded)
+                    .trimEnd('0')
+                    .trimEnd('.')
+            }
+        }
+
+        /** 过滤余额阈值输入：仅允许数字与单个小数点，限制整数位与小数位长度。 */
+        fun sanitizeDecimalInput(
+            text: String,
+            maxIntegerDigits: Int = 4,
+            maxFractionDigits: Int = 2,
+        ): String {
+            val out = StringBuilder()
+            var seenDot = false
+            var intDigits = 0
+            var fracDigits = 0
+            for (ch in text) {
+                when {
+                    ch in '0'..'9' -> {
+                        if (!seenDot && intDigits < maxIntegerDigits) {
+                            out.append(ch)
+                            intDigits++
+                        } else if (seenDot && fracDigits < maxFractionDigits) {
+                            out.append(ch)
+                            fracDigits++
+                        }
+                    }
+
+                    ch == '.' && !seenDot -> {
+                        if (out.isEmpty()) {
+                            out.append('0')
+                            intDigits = 1
+                        }
+                        out.append('.')
+                        seenDot = true
+                    }
+                }
+            }
+            return out.toString()
+        }
 
         /**
          * 纯钳制函数（不依赖 Android，单测直接调用生产实现）。
@@ -181,6 +313,13 @@ class AppPreferences(context: Context) {
 
         private const val KEY_TIMETABLE_INTERVAL = "timetable_interval_minutes"
         private const val KEY_ELECTRICITY_INTERVAL = "electricity_interval_minutes"
+        private const val KEY_ELECTRICITY_ALERT_ENABLED = "electricity_alert_enabled"
+        private const val KEY_ELECTRICITY_ALERT_MODE = "electricity_alert_mode"
+        private const val KEY_ELECTRICITY_BALANCE_THRESHOLD = "electricity_balance_threshold"
+        private const val KEY_ELECTRICITY_DAYS_THRESHOLD = "electricity_days_threshold"
+        private const val KEY_ALERT_BALANCE_ALERTED = "electricity_alert_balance_alerted"
+        private const val KEY_ALERT_DAYS_ALERTED = "electricity_alert_days_alerted"
+        private const val KEY_NOTIFICATION_PERMISSION_ASKED = "notification_permission_asked"
         private const val KEY_OPTIMIZE_LOCATION_DISPLAY = "optimize_location_display"
         private const val KEY_PREFIX_LOCATION_AT = "prefix_location_at"
         private const val KEY_HIDE_TIMETABLE_OVERFLOW = "hide_timetable_overflow"

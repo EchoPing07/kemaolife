@@ -1,14 +1,25 @@
-// Package alert 实现 Windows 端电费告警判定（docs/windows.md §6）。
+// Package alert 实现电费告警判定（docs/windows.md §6、docs/android.md）。
 //
-// 这里只有纯函数：不读时钟、不发通知、不写文件。调用方（cmd/kemaolife-desktop）
-// 负责把 Clock 取到的时间传进来、把通知交给 Notifier、把状态留在内存。
+// 这里只有纯函数：不读时钟、不发通知、不写文件。调用方（Windows 桌面引擎或
+// Android 门面）负责把 Clock 取到的时间传进来、把通知交给系统、把状态保存下来。
 package alert
 
 import (
 	"fmt"
+	"math"
+	"strconv"
 	"time"
 
 	"github.com/EchoPing07/kemaolife/internal/core/model"
+)
+
+// Mode 控制告警判定检查哪类阈值；零值 ModeBoth 保持双通道默认行为（Windows）。
+type Mode int
+
+const (
+	ModeBoth    Mode = iota // 同时检查余额与可用天数阈值
+	ModeBalance             // 仅检查余额阈值
+	ModeDays                // 仅检查预计可用天数阈值
 )
 
 // 默认值（docs/windows.md §6「默认值」表）。阈值与静默时段可配置。
@@ -26,8 +37,9 @@ const (
 	MaxBackoff = 24 * time.Hour
 )
 
-// Config 是告警判定需要的配置（来自设置窗口）。
+// Config 是告警判定需要的配置（来自设置窗口 / 设置页）。
 type Config struct {
+	Mode             Mode    // 零值 ModeBoth 表示余额与天数双通道
 	BalanceThreshold float64 // 余额 ≤ 该值触发（度）
 	DaysThreshold    int     // 可用天数 ≤ 该值触发
 	QuietStartHour   int     // 静默起点（含），与 QuietEndHour 相同表示无静默时段
@@ -52,6 +64,18 @@ const (
 	ReasonDays           // 可用天数跌到阈值
 )
 
+// String 返回契约层的触发原因标识（"" / "balance" / "days"）。
+func (r Reason) String() string {
+	switch r {
+	case ReasonBalance:
+		return "balance"
+	case ReasonDays:
+		return "days"
+	default:
+		return ""
+	}
+}
+
 // Decision 是一次判定结果。
 type Decision struct {
 	Notify bool
@@ -72,19 +96,23 @@ func Evaluate(prev State, cur model.ElectricityStatus, now time.Time, cfg Config
 	next := prev
 	cfg = cfg.withDefaults()
 
-	// 回升即重置：这是「充值后能再次提醒」的唯一入口。
-	if cur.Balance > cfg.BalanceThreshold {
+	checkBalance := cfg.Mode == ModeBoth || cfg.Mode == ModeBalance
+	checkDays := cfg.Mode == ModeBoth || cfg.Mode == ModeDays
+
+	// 回升即重置：这是「充值后能再次提醒」的唯一入口；未启用的通道也清零，
+	// 切换通知方式时不会残留另一通道的旧去重标记。
+	if !checkBalance || cur.Balance > cfg.BalanceThreshold {
 		next.BalanceAlerted = false
 	}
-	if cur.EstimatedDays == nil || *cur.EstimatedDays > cfg.DaysThreshold {
+	if !checkDays || cur.EstimatedDays == nil || *cur.EstimatedDays > cfg.DaysThreshold {
 		next.DaysAlerted = false
 	}
 
 	reason := ReasonNone
 	switch {
-	case cur.Balance <= cfg.BalanceThreshold && !next.BalanceAlerted:
+	case checkBalance && cur.Balance <= cfg.BalanceThreshold && !next.BalanceAlerted:
 		reason = ReasonBalance
-	case cur.EstimatedDays != nil && *cur.EstimatedDays <= cfg.DaysThreshold && !next.DaysAlerted:
+	case checkDays && cur.EstimatedDays != nil && *cur.EstimatedDays <= cfg.DaysThreshold && !next.DaysAlerted:
 		reason = ReasonDays
 	}
 	if reason == ReasonNone {
@@ -144,10 +172,16 @@ func body(cur model.ElectricityStatus, cfg Config, reason Reason) string {
 		head = fmt.Sprintf("剩余 %.2f %s，约可用 %d 天，已低于 %d 天阈值",
 			cur.Balance, unit, days, cfg.DaysThreshold)
 	default:
-		head = fmt.Sprintf("剩余 %.2f %s，已低于 %.0f %s阈值",
-			cur.Balance, unit, cfg.BalanceThreshold, unit)
+		head = fmt.Sprintf("剩余 %.2f %s，已低于 %s %s阈值",
+			cur.Balance, unit, formatThreshold(cfg.BalanceThreshold), unit)
 	}
 	return head + "\n数据截至 " + displayCollectedAt(cur.CollectedAt) + "（电表约 1 天延迟）"
+}
+
+// formatThreshold 把余额阈值格式化为简洁数字（10.0 → "10"，12.5 → "12.5"）。
+func formatThreshold(v float64) string {
+	rounded := math.Round(v*100) / 100
+	return strconv.FormatFloat(rounded, 'f', -1, 64)
 }
 
 // displayCollectedAt 把 RFC3339 转成人类可读的本地时间；解析不了就原样给出，

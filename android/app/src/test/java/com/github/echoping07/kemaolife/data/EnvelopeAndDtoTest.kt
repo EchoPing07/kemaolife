@@ -284,6 +284,28 @@ class EnvelopeAndDtoTest {
         assertEquals("""{"result":"0"}""", entry.responseBody)
     }
 
+    @Test
+    fun `电费告警判定信封投影出通知正文与去重状态`() {
+        val env = Envelope.parse(
+            """{"ok":true,"data":{"notify":true,"title":"宿舍电费提醒",
+               "body":"剩余 8.50 度，已低于 10 度阈值\n数据截至 2026-11-06 22:48（电表约 1 天延迟）",
+               "reason":"balance","state":{"balanceAlerted":true,"daysAlerted":false}},
+               "ts":"2026-11-06T22:50:00+08:00"}""",
+        )
+        assertTrue(env.ok)
+        val decision = ElectricityAlertDecision.from(env.data!!)
+        assertTrue(decision.notify)
+        assertEquals("宿舍电费提醒", decision.title)
+        assertTrue(decision.body.contains("数据截至"))
+        assertEquals("balance", decision.reason)
+        assertTrue(decision.state.balanceAlerted)
+        assertFalse(decision.state.daysAlerted)
+
+        val stateJson = decision.state.toJson()
+        assertTrue(stateJson.getBoolean("balanceAlerted"))
+        assertFalse(stateJson.getBoolean("daysAlerted"))
+    }
+
     private companion object {
         /** UTF-8 BOM：用码位构造，源码里不出现不可见字符。 */
         val BOM: String = String(Character.toChars(0xFEFF))

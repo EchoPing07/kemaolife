@@ -27,7 +27,7 @@
 |---|---|---|---|
 | **CLI**（linux / darwin） | 单二进制 `kemaolife` + 子命令 + Agent Skill | agent | 课表四维度查询（每次先刷新，断网回落旧快照）、电费余额与每日用量一次查 |
 | **Windows** | `kemaolife-desktop.exe` 原生主窗口 + 托盘常驻 | 人 | 今天 / 课表 / 电费 / 校园网 / 设置五页；完整周课表缓存切周与独立刷新、电费轮询（默认 4 小时）+ 阈值提醒、校园网判态与手动 / 自动认证、开机自启一次 |
-| **Android** | Kotlin / Compose 原生 App，三 tab | 人 | 单页周视图 + 横向翻页、WakeUp CSV 导出、电费与校园网手动动作、取件码跳转；缓存优先，无后台 |
+| **Android** | Kotlin / Compose 原生 App，三 tab | 人 | 单页周视图 + 横向翻页、WakeUp CSV 导出、电费查询与低阈值通知、校园网手动动作、取件码跳转；缓存优先，无后台 |
 
 三端一律原生 UI，不引入浏览器内核。Windows 采用主窗口 + 托盘，Android 不加后台服务，CLI 不做 GUI。CLI 与桌面端不共享配置与凭据存储。
 
@@ -43,7 +43,7 @@
 
 ```
 教务系统 ──CAS 登录──► 快照 ──本地计算──► 课表（CLI 每次查询先刷新；Windows / Android 查询纯读缓存，Windows 启动及手动独立同步）
-水电后端 ──余额 + 每日用量──► 可用天数估算 ──►（Windows）阈值提醒
+水电后端 ──余额 + 每日用量──► 可用天数估算 ──►（Windows / Android）阈值提醒
 Portal   ──探测 302──► 判态 ──► 登录 / 下线 / 重登（Windows 手动 / 自动；Android 全手动）
 ```
 

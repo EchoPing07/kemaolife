@@ -88,6 +88,7 @@
     <!-- 设置页：总览 + 教务 / 电费 / 校园网三个二级页。 -->
     <string name="settings_accounts">账号与服务</string>
     <string name="settings_group_configuration">配置</string>
+    <string name="settings_group_notification">通知</string>
     <string name="settings_group_advanced">高级</string>
     <string name="settings_not_configured">尚未配置</string>
     <string name="settings_edu_configured">教务账号已配置</string>
@@ -178,6 +179,22 @@
     <string name="field_inherit_edu_hint">打开时电费直接使用教务学号，关闭后可单独填写。</string>
     <string name="field_inherit_edu_value">当前使用教务学号</string>
     <string name="field_electricity_student_id">电费学号</string>
+    <string name="notification_channel_electricity_name">电费提醒</string>
+    <string name="notification_channel_electricity_desc">宿舍电费低于设定阈值时发送通知</string>
+    <string name="field_electricity_alert">低电费通知</string>
+    <string name="field_electricity_alert_hint">查询电费后，低于设定阈值时发送系统通知</string>
+    <string name="alert_permission_missing_title">系统通知权限未开启</string>
+    <string name="alert_permission_missing_hint">点击开启通知权限，否则无法收到电费提醒</string>
+    <string name="field_alert_mode">通知方式</string>
+    <string name="field_alert_mode_hint">达到或低于设定阈值提醒一次，回升后重置</string>
+    <string name="alert_mode_balance">电费</string>
+    <string name="alert_mode_days">预计天数</string>
+    <string name="field_alert_balance_threshold">电费阈值（度）</string>
+    <string name="alert_balance_threshold_hint">剩余电费低于或等于该值时通知（默认 %1$s 度）</string>
+    <string name="alert_balance_threshold_clamped">范围 %1$s–%2$s 度，保存后自动调整</string>
+    <string name="field_alert_days_threshold">预计天数阈值（天）</string>
+    <string name="alert_days_threshold_hint">预计可用天数低于或等于该值时通知（默认 %1$d 天），无法估算时不通知</string>
+    <string name="alert_days_threshold_clamped">范围 %1$d–%2$d 天，保存后自动调整</string>
     <string name="field_min_interval">最小查询间隔</string>
     <string name="field_optimize_location_display">课室显示优化</string>
     <string name="field_optimize_location_display_hint">在课表网格与今日概览精简冗长的课室名称，点击课程详情仍显示完整地点。</string>

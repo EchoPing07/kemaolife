@@ -68,6 +68,33 @@ class Repository(private val bridge: Bridge) {
     fun testElectricity(): Result<ProbeResult> =
         bridge.call("electricity.probe").toResult { ProbeResult.from(it) }
 
+    /**
+     * `electricity.alert`：调用 Go `core/alert.Evaluate` 判定是否低于阈值（0 请求）。
+     *
+     * 只传必要展示字段，不传 `roomName` / `roomVerify`（P2）；告警判定与文案生成全在 Go 侧（AGENTS A3）。
+     */
+    fun evaluateElectricityAlert(
+        status: ElectricityStatus,
+        mode: String,
+        balanceThreshold: Double,
+        daysThreshold: Int,
+        prevState: ElectricityAlertState,
+    ): Result<ElectricityAlertDecision> {
+        val statusJson = org.json.JSONObject()
+            .put("balance", status.balance)
+            .put("unit", status.unit)
+            .put("collectedAt", status.collectedAt)
+            .put("estimatedDays", status.estimatedDays ?: org.json.JSONObject.NULL)
+        return bridge.call(
+            "electricity.alert",
+            "status" to statusJson,
+            "mode" to mode,
+            "balanceThreshold" to balanceThreshold,
+            "daysThreshold" to daysThreshold,
+            "state" to prevState.toJson(),
+        ).toResult { ElectricityAlertDecision.from(it) }
+    }
+
     // ---- 校园网 -----------------------------------------------------------
 
     fun campusStatus(): Result<CampusStatus> =

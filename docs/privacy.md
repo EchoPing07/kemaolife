@@ -41,7 +41,7 @@
 
 ## 5. 数据时效标注
 
-电表数据约有 **1 天延迟**，不是实时值。CLI 人类可读输出、Windows 告警通知正文、Android 电费页必须标注「数据截至 `<collectedAt>`」；Windows 托盘菜单与悬浮提示只显示当前值，不展示采集时刻。
+电表数据约有 **1 天延迟**，不是实时值。CLI 人类可读输出、Windows / Android 告警通知正文、Android 电费页必须标注「数据截至 `<collectedAt>`」；Windows 托盘菜单与悬浮提示只显示当前值，不展示采集时刻。
 
 ## 6. Android 本机缓存最小化
 

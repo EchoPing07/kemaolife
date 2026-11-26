@@ -210,3 +210,71 @@ func TestNextBackoffUsesClampedBase(t *testing.T) {
 		t.Errorf("退避起点应为钳制值 %v, got %v", alert.PollIntervalFloor, d)
 	}
 }
+
+// ModeBalance 只检查余额阈值，即使预计天数低于阈值也不触发，且会清掉天数旧标记。
+func TestEvaluateModeBalanceIgnoresDays(t *testing.T) {
+	cfg := alert.Config{
+		Mode:             alert.ModeBalance,
+		BalanceThreshold: 12.5,
+		DaysThreshold:    3,
+	}
+	// 余额充足但预计天数仅 1 天：ModeBalance 不应触发，且清除遗留 DaysAlerted。
+	dec, state := alert.Evaluate(alert.State{DaysAlerted: true}, status(50, days(1)), noon(), cfg)
+	if dec.Notify || state.DaysAlerted {
+		t.Fatalf("ModeBalance 不应按天数触发且应清 DaysAlerted: dec=%+v state=%+v", dec, state)
+	}
+
+	// 余额跌破 12.5 度：触发并按简洁数字展示阈值。
+	dec, state = alert.Evaluate(state, status(12.5, days(10)), noon(), cfg)
+	if !dec.Notify || dec.Reason != alert.ReasonBalance || dec.Reason.String() != "balance" {
+		t.Fatalf("余额等于阈值应触发: %+v", dec)
+	}
+	if !strings.Contains(dec.Body, "12.5 度阈值") || !strings.Contains(dec.Body, "数据截至") {
+		t.Errorf("正文格式不符合预期: %q", dec.Body)
+	}
+	if !state.BalanceAlerted {
+		t.Errorf("应置位 BalanceAlerted: %+v", state)
+	}
+}
+
+// ModeDays 只检查预计可用天数阈值，即使余额低于阈值也不触发。
+func TestEvaluateModeDaysIgnoresBalance(t *testing.T) {
+	cfg := alert.Config{
+		Mode:             alert.ModeDays,
+		BalanceThreshold: 10,
+		DaysThreshold:    3,
+	}
+	// 余额仅 2 度但可用 5 天：ModeDays 不应触发，且清除遗留 BalanceAlerted。
+	dec, state := alert.Evaluate(alert.State{BalanceAlerted: true}, status(2, days(5)), noon(), cfg)
+	if dec.Notify || state.BalanceAlerted {
+		t.Fatalf("ModeDays 不应按余额触发且应清 BalanceAlerted: dec=%+v state=%+v", dec, state)
+	}
+
+	// 预计天数无法估算（nil）也不触发。
+	dec, state = alert.Evaluate(state, status(2, nil), noon(), cfg)
+	if dec.Notify {
+		t.Fatalf("estimatedDays 为 nil 不应触发: %+v", dec)
+	}
+
+	// 预计天数跌到 3 天：触发并置位去重标记。
+	dec, state = alert.Evaluate(state, status(20, days(3)), noon(), cfg)
+	if !dec.Notify || dec.Reason != alert.ReasonDays || dec.Reason.String() != "days" {
+		t.Fatalf("预计天数等于阈值应触发: %+v", dec)
+	}
+	if !strings.Contains(dec.Body, "已低于 3 天阈值") || !strings.Contains(dec.Body, "数据截至") {
+		t.Errorf("正文格式不符合预期: %q", dec.Body)
+	}
+	if !state.DaysAlerted {
+		t.Errorf("应置位 DaysAlerted: %+v", state)
+	}
+
+	// 同一区间不再重复触发；回升到 4 天后重置。
+	dec, state = alert.Evaluate(state, status(18, days(2)), noon(), cfg)
+	if dec.Notify {
+		t.Error("预计天数同一区间只应提醒一次")
+	}
+	dec, state = alert.Evaluate(state, status(40, days(4)), noon(), cfg)
+	if dec.Notify || state.DaysAlerted {
+		t.Errorf("预计天数回升后应重置: dec=%+v state=%+v", dec, state)
+	}
+}

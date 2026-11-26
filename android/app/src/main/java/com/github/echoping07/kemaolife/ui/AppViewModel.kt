@@ -18,6 +18,7 @@ import com.github.echoping07.kemaolife.data.DEFAULT_DYNAMIC_COLOR
 import com.github.echoping07.kemaolife.data.DEFAULT_FLOATING_BOTTOM_BAR
 import com.github.echoping07.kemaolife.data.DEFAULT_PREDICTIVE_BACK
 import com.github.echoping07.kemaolife.data.DEFAULT_SHOW_BOTTOM_BAR_LABELS
+import com.github.echoping07.kemaolife.data.ElectricityNotifier
 import com.github.echoping07.kemaolife.data.ElectricityReport
 import com.github.echoping07.kemaolife.data.LogEntry
 import com.github.echoping07.kemaolife.data.LogState
@@ -144,6 +145,10 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
             electricity = cachedElectricityReport(),
             timetableInterval = preferences.timetableIntervalMinutes,
             electricityInterval = preferences.electricityIntervalMinutes,
+            electricityAlertEnabled = preferences.electricityAlertEnabled,
+            electricityAlertMode = preferences.electricityAlertMode,
+            electricityBalanceThreshold = preferences.electricityBalanceThreshold,
+            electricityDaysThreshold = preferences.electricityDaysThreshold,
             optimizeLocationDisplay = preferences.optimizeLocationDisplay,
             prefixLocationAt = preferences.prefixLocationAt,
             hideTimetableOverflow = preferences.hideTimetableOverflow,
@@ -444,6 +449,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                         _state.update {
                             it.copy(electricity = report, electricityLoading = false)
                         }
+                        maybeNotifyElectricityAlert(report)
                     },
                     onFailure = { ex ->
                         feedbackId?.let { electricityFeedback.complete(it, actionFeedbackFor(ex)) }
@@ -780,6 +786,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                     if (!probeActive(id, target, s)) return@update s
                     s.copy(electricity = report)
                 }
+                maybeNotifyElectricityAlert(report)
             }
             ProbeTarget.CAMPUS -> probe.campusStatus?.let { status ->
                 _state.update { s ->
@@ -874,6 +881,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                     merged.customerCode != previous.customerCode
                 if (identityChanged) {
                     preferences.clearElectricityCache()
+                    preferences.clearElectricityAlertState()
                     preferences.clearTimetableCache()
                     _state.update {
                         it.copy(
@@ -949,6 +957,86 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     fun setElectricityInterval(minutes: Int) {
         preferences.electricityIntervalMinutes = minutes
         _state.update { it.copy(electricityInterval = preferences.electricityIntervalMinutes) }
+    }
+
+    fun setElectricityAlertEnabled(enabled: Boolean) {
+        val changed = preferences.electricityAlertEnabled != enabled
+        preferences.electricityAlertEnabled = enabled
+        if (changed) preferences.clearElectricityAlertState()
+        _state.update { it.copy(electricityAlertEnabled = enabled) }
+    }
+
+    fun setElectricityAlertMode(mode: String) {
+        val normalized = AppPreferences.normalizeAlertMode(mode)
+        val changed = preferences.electricityAlertMode != normalized
+        preferences.electricityAlertMode = normalized
+        if (changed) preferences.clearElectricityAlertState()
+        _state.update { it.copy(electricityAlertMode = normalized) }
+    }
+
+    fun setElectricityAlertThresholds(balanceThreshold: Double, daysThreshold: Int) {
+        val nextBalance = AppPreferences.clampedBalanceThreshold(balanceThreshold)
+        val nextDays = AppPreferences.clampedDaysThreshold(daysThreshold)
+        val changed =
+            preferences.electricityBalanceThreshold != nextBalance ||
+                preferences.electricityDaysThreshold != nextDays
+        preferences.electricityBalanceThreshold = nextBalance
+        preferences.electricityDaysThreshold = nextDays
+        if (changed) preferences.clearElectricityAlertState()
+        _state.update {
+            it.copy(
+                electricityBalanceThreshold = nextBalance,
+                electricityDaysThreshold = nextDays,
+            )
+        }
+    }
+
+    fun shouldRequestNotificationPermissionOnLaunch(): Boolean =
+        !preferences.notificationPermissionAsked
+
+    fun markNotificationPermissionAsked() {
+        preferences.notificationPermissionAsked = true
+    }
+
+    /** 系统通知权限刚被授予时，如已有电费结果则立即纯本地评估一次（0 请求）。 */
+    fun onNotificationPermissionGranted() {
+        val report = _state.value.electricity ?: return
+        viewModelScope.launch { maybeNotifyElectricityAlert(report) }
+    }
+
+    /**
+     * 经门面 `electricity.alert` 评估是否低于设定阈值并投递系统通知（0 请求）。
+     *
+     * 业务判定全在 Go `core/alert.Evaluate`（AGENTS A3）。系统未授通知权限时
+     * 直接返回、不置位去重标记，避免用户后来开启权限却漏收提醒；评估异常静默忽略，
+     * 绝不干扰电费正常展示。
+     */
+    private suspend fun maybeNotifyElectricityAlert(report: ElectricityReport) {
+        val s = _state.value
+        if (!s.electricityAlertEnabled || !repo.isReady()) return
+        val app = getApplication<Application>()
+        if (!ElectricityNotifier.hasPermission(app)) return
+
+        val prevState = withContext(Dispatchers.IO) { preferences.electricityAlertState }
+        val result = withContext(Dispatchers.IO) {
+            repo.evaluateElectricityAlert(
+                status = report.status,
+                mode = s.electricityAlertMode,
+                balanceThreshold = s.electricityBalanceThreshold,
+                daysThreshold = s.electricityDaysThreshold,
+                prevState = prevState,
+            )
+        }
+        val decision = result.getOrNull() ?: return
+        if (decision.notify) {
+            val posted = ElectricityNotifier.post(app, decision.title, decision.body)
+            if (posted) {
+                withContext(Dispatchers.IO) { preferences.electricityAlertState = decision.state }
+            }
+        } else if (decision.state != prevState) {
+            // 充值回升 / 切换通道产生的重置必须落盘，下次跌破阈值才能重新提醒。
+            withContext(Dispatchers.IO) { preferences.electricityAlertState = decision.state }
+        }
     }
 
     fun setThemeColor(value: String) {
@@ -1131,6 +1219,11 @@ data class AppState(
     /** 两项自动查询的最小间隔（分钟），来自本地偏好；默认均为 5 分钟、下限 1 分钟。 */
     val timetableInterval: Int = AppPreferences.DEFAULT_TIMETABLE_INTERVAL,
     val electricityInterval: Int = AppPreferences.DEFAULT_ELECTRICITY_INTERVAL,
+    /** 电费低阈值通知配置（docs/android.md）：默认打开、电费 10 度通知，预计天数默认 3 天。 */
+    val electricityAlertEnabled: Boolean = AppPreferences.DEFAULT_ELECTRICITY_ALERT_ENABLED,
+    val electricityAlertMode: String = AppPreferences.ALERT_MODE_BALANCE,
+    val electricityBalanceThreshold: Double = AppPreferences.DEFAULT_BALANCE_THRESHOLD,
+    val electricityDaysThreshold: Int = AppPreferences.DEFAULT_DAYS_THRESHOLD,
     /** 教务高级开关：课室显示优化、课室前显示@ 默认开启，过长隐藏、导出优化课室默认关闭（docs/android.md）。 */
     val optimizeLocationDisplay: Boolean = AppPreferences.DEFAULT_OPTIMIZE_LOCATION_DISPLAY,
     val prefixLocationAt: Boolean = AppPreferences.DEFAULT_PREFIX_LOCATION_AT,

@@ -1,25 +1,40 @@
 package com.github.echoping07.kemaolife.ui
 
+import android.Manifest
+import android.app.Activity
+import android.content.Context
+import android.content.ContextWrapper
+import android.os.Build
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.EnterTransition
 import androidx.compose.animation.ExitTransition
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.FiniteAnimationSpec
 import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
+import androidx.compose.animation.expandHorizontally
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.scaleIn
 import androidx.compose.animation.scaleOut
+import androidx.compose.animation.shrinkHorizontally
 import androidx.compose.animation.togetherWith
+import androidx.compose.foundation.background
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsPressedAsState
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.asPaddingValues
@@ -30,6 +45,8 @@ import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.selection.selectable
+import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.FloatingActionButton
@@ -51,6 +68,8 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
@@ -61,11 +80,18 @@ import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
+import androidx.core.app.ActivityCompat
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import com.github.echoping07.kemaolife.R
 import com.github.echoping07.kemaolife.data.AppPreferences
 import com.github.echoping07.kemaolife.data.Credentials
+import com.github.echoping07.kemaolife.data.ElectricityNotifier
 import com.github.echoping07.kemaolife.ui.theme.appShape
 import kotlinx.coroutines.launch
 
@@ -561,6 +587,8 @@ private fun ElectricitySettings(
     onBack: () -> Unit,
     bottomContentPadding: Dp,
 ) {
+    val context = LocalContext.current
+    val lifecycleOwner = LocalLifecycleOwner.current
     var inherit by remember(state.credentials.electricityInheritEducation) {
         mutableStateOf(state.credentials.electricityInheritEducation)
     }
@@ -572,6 +600,56 @@ private fun ElectricitySettings(
     }
     var interval by remember(state.electricityInterval) {
         mutableStateOf(state.electricityInterval.toString())
+    }
+    var balanceThreshold by remember(state.electricityBalanceThreshold) {
+        mutableStateOf(AppPreferences.formatBalanceThreshold(state.electricityBalanceThreshold))
+    }
+    var daysThreshold by remember(state.electricityDaysThreshold) {
+        mutableStateOf(state.electricityDaysThreshold.toString())
+    }
+    var hasNotificationPermission by remember {
+        mutableStateOf(ElectricityNotifier.hasPermission(context))
+    }
+
+    // 从系统通知设置页返回时立即同步最新权限态。
+    DisposableEffect(lifecycleOwner, context) {
+        val observer =
+            LifecycleEventObserver { _, event ->
+                if (event == Lifecycle.Event.ON_RESUME) {
+                    hasNotificationPermission = ElectricityNotifier.hasPermission(context)
+                }
+            }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+    }
+
+    val notificationPermissionLauncher =
+        rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
+            hasNotificationPermission = ElectricityNotifier.hasPermission(context)
+            if (granted && hasNotificationPermission) {
+                viewModel.onNotificationPermissionGranted()
+            }
+        }
+
+    fun requestOrOpenNotificationSettings() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            val activity = context.findActivity()
+            val canAskDirectly =
+                viewModel.shouldRequestNotificationPermissionOnLaunch() ||
+                    (
+                        activity != null &&
+                            ActivityCompat.shouldShowRequestPermissionRationale(
+                                activity,
+                                Manifest.permission.POST_NOTIFICATIONS,
+                            )
+                        )
+            if (canAskDirectly) {
+                viewModel.markNotificationPermissionAsked()
+                notificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+                return
+            }
+        }
+        ElectricityNotifier.openNotificationSettings(context)
     }
 
     CollapsingScreen(
@@ -599,6 +677,21 @@ private fun ElectricitySettings(
                     )
                     interval =
                         viewModel.state.value.electricityInterval
+                            .toString()
+                    viewModel.setElectricityAlertThresholds(
+                        balanceThreshold =
+                            balanceThreshold.toDoubleOrNull()
+                                ?: AppPreferences.DEFAULT_BALANCE_THRESHOLD,
+                        daysThreshold =
+                            daysThreshold.toIntOrNull()
+                                ?: AppPreferences.DEFAULT_DAYS_THRESHOLD,
+                    )
+                    balanceThreshold =
+                        AppPreferences.formatBalanceThreshold(
+                            viewModel.state.value.electricityBalanceThreshold,
+                        )
+                    daysThreshold =
+                        viewModel.state.value.electricityDaysThreshold
                             .toString()
                 },
             )
@@ -635,6 +728,138 @@ private fun ElectricitySettings(
             )
         }
 
+        SettingsGroupLabel(stringResource(R.string.settings_group_notification))
+        GroupSurface(
+            position = if (state.electricityAlertEnabled) GroupPosition.FIRST else GroupPosition.ONLY,
+            modifier = Modifier.fillMaxWidth(),
+        ) {
+            SettingsSwitchRow(
+                title = stringResource(R.string.field_electricity_alert),
+                supporting = stringResource(R.string.field_electricity_alert_hint),
+                checked = state.electricityAlertEnabled,
+                onCheckedChange = { enabled ->
+                    viewModel.setElectricityAlertEnabled(enabled)
+                    if (enabled && !ElectricityNotifier.hasPermission(context)) {
+                        requestOrOpenNotificationSettings()
+                    }
+                },
+            )
+        }
+        if (state.electricityAlertEnabled) {
+            if (!hasNotificationPermission) {
+                GroupGap()
+                GroupSurface(
+                    position = GroupPosition.MIDDLE,
+                    onClick = ::requestOrOpenNotificationSettings,
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Row(
+                        modifier = Modifier.padding(start = 20.dp, end = 16.dp, top = 15.dp, bottom = 15.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Icon(
+                            imageVector = TabIcons.AlertCircle,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.error,
+                            modifier = Modifier.size(22.dp),
+                        )
+                        Spacer(Modifier.width(14.dp))
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = stringResource(R.string.alert_permission_missing_title),
+                                style = MaterialTheme.typography.titleMedium,
+                                color = MaterialTheme.colorScheme.error,
+                            )
+                            Text(
+                                text = stringResource(R.string.alert_permission_missing_hint),
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.padding(top = 3.dp),
+                            )
+                        }
+                        Icon(
+                            imageVector = TabIcons.ChevronRight,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.size(21.dp),
+                        )
+                    }
+                }
+            }
+            GroupGap()
+            ElectricityAlertModeSelector(
+                mode = state.electricityAlertMode,
+                onSelect = viewModel::setElectricityAlertMode,
+                position = GroupPosition.MIDDLE,
+            )
+            GroupGap()
+            SettingsFormCard(position = GroupPosition.LAST) {
+                if (state.electricityAlertMode == AppPreferences.ALERT_MODE_DAYS) {
+                    val parsedDays = daysThreshold.toIntOrNull()
+                    val daysOutOfRange =
+                        parsedDays != null &&
+                            (
+                                parsedDays < AppPreferences.MIN_DAYS_THRESHOLD ||
+                                    parsedDays > AppPreferences.MAX_DAYS_THRESHOLD
+                                )
+                    AppTextField(
+                        value = daysThreshold,
+                        onValueChange = { text ->
+                            daysThreshold = text.filter { it.isDigit() }.take(3)
+                        },
+                        label = stringResource(R.string.field_alert_days_threshold),
+                        leadingIcon = TabIcons.Clock,
+                        keyboardType = KeyboardType.Number,
+                        imeAction = ImeAction.Done,
+                        supporting =
+                            if (daysOutOfRange) {
+                                stringResource(
+                                    R.string.alert_days_threshold_clamped,
+                                    AppPreferences.MIN_DAYS_THRESHOLD,
+                                    AppPreferences.MAX_DAYS_THRESHOLD,
+                                )
+                            } else {
+                                stringResource(
+                                    R.string.alert_days_threshold_hint,
+                                    AppPreferences.DEFAULT_DAYS_THRESHOLD,
+                                )
+                            },
+                    )
+                } else {
+                    val parsedBalance = balanceThreshold.toDoubleOrNull()
+                    val balanceOutOfRange =
+                        parsedBalance != null &&
+                            (
+                                parsedBalance < AppPreferences.MIN_BALANCE_THRESHOLD ||
+                                    parsedBalance > AppPreferences.MAX_BALANCE_THRESHOLD
+                                )
+                    AppTextField(
+                        value = balanceThreshold,
+                        onValueChange = { text ->
+                            balanceThreshold = AppPreferences.sanitizeDecimalInput(text)
+                        },
+                        label = stringResource(R.string.field_alert_balance_threshold),
+                        leadingIcon = TabIcons.Bolt,
+                        keyboardType = KeyboardType.Decimal,
+                        imeAction = ImeAction.Done,
+                        supporting =
+                            if (balanceOutOfRange) {
+                                stringResource(
+                                    R.string.alert_balance_threshold_clamped,
+                                    AppPreferences.formatBalanceThreshold(AppPreferences.MIN_BALANCE_THRESHOLD),
+                                    AppPreferences.formatBalanceThreshold(AppPreferences.MAX_BALANCE_THRESHOLD),
+                                )
+                            } else {
+                                stringResource(
+                                    R.string.alert_balance_threshold_hint,
+                                    AppPreferences.formatBalanceThreshold(AppPreferences.DEFAULT_BALANCE_THRESHOLD),
+                                )
+                            },
+                    )
+                }
+            }
+        }
+
         SettingsGroupLabel(stringResource(R.string.settings_group_advanced))
         SettingsFormCard(position = GroupPosition.FIRST) {
             AppTextField(
@@ -661,6 +886,165 @@ private fun ElectricitySettings(
         }
     }
 }
+
+private data class AlertModeOption(
+    val mode: String,
+    val labelRes: Int,
+    val icon: ImageVector,
+)
+
+private val alertModeOptions = listOf(
+    AlertModeOption(AppPreferences.ALERT_MODE_BALANCE, R.string.alert_mode_balance, TabIcons.Bolt),
+    AlertModeOption(AppPreferences.ALERT_MODE_DAYS, R.string.alert_mode_days, TabIcons.Clock),
+)
+
+/**
+ * 通知方式（电费 / 预计天数）连体二选一，复用颜色模式选择器的 MD3 Expressive 胶囊动效。
+ */
+@Composable
+private fun ElectricityAlertModeSelector(
+    mode: String,
+    onSelect: (String) -> Unit,
+    position: GroupPosition,
+) {
+    val current = AppPreferences.normalizeAlertMode(mode)
+    val motionEnabled = animationsEnabled()
+    GroupSurface(position = position, modifier = Modifier.fillMaxWidth()) {
+        Column {
+            Column(modifier = Modifier.padding(start = 20.dp, end = 16.dp, top = 16.dp)) {
+                Text(
+                    text = stringResource(R.string.field_alert_mode),
+                    style = MaterialTheme.typography.titleMedium,
+                )
+                Text(
+                    text = stringResource(R.string.field_alert_mode_hint),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(top = 3.dp),
+                )
+            }
+            Row(
+                modifier =
+                    Modifier
+                        .padding(start = 20.dp, end = 16.dp, top = 12.dp, bottom = 16.dp)
+                        .selectableGroup(),
+                horizontalArrangement = Arrangement.spacedBy(2.dp),
+            ) {
+                alertModeOptions.forEachIndexed { index, option ->
+                    AlertModeSegment(
+                        option = option,
+                        selected = current == option.mode,
+                        leading = index == 0,
+                        trailing = index == alertModeOptions.lastIndex,
+                        motionEnabled = motionEnabled,
+                        onClick = { onSelect(option.mode) },
+                    )
+                }
+            }
+        }
+    }
+}
+
+private fun <T> alertModeSpec(enabled: Boolean): FiniteAnimationSpec<T> =
+    if (enabled) spring(dampingRatio = 0.6f, stiffness = 800f) else tween(0)
+
+private fun alertModeSizeSpec(enabled: Boolean): FiniteAnimationSpec<IntSize> =
+    alertModeSpec(enabled)
+
+@Composable
+private fun RowScope.AlertModeSegment(
+    option: AlertModeOption,
+    selected: Boolean,
+    leading: Boolean,
+    trailing: Boolean,
+    motionEnabled: Boolean,
+    onClick: () -> Unit,
+) {
+    val segmentHeight = 48.dp
+    val outerCorner = segmentHeight / 2
+    val weight by animateFloatAsState(
+        targetValue = if (selected) 1.25f else 1f,
+        animationSpec = alertModeSpec(motionEnabled),
+        label = "alertModeWeight",
+    )
+    val innerCorner by animateDpAsState(
+        targetValue = if (selected) outerCorner else 8.dp,
+        animationSpec = alertModeSpec(motionEnabled),
+        label = "alertModeCorner",
+    )
+    val shape =
+        appShape(
+            topStart = if (leading) outerCorner else innerCorner,
+            bottomStart = if (leading) outerCorner else innerCorner,
+            topEnd = if (trailing) outerCorner else innerCorner,
+            bottomEnd = if (trailing) outerCorner else innerCorner,
+        )
+    val container: Color by animateColorAsState(
+        targetValue =
+            if (selected) {
+                MaterialTheme.colorScheme.primary
+            } else {
+                MaterialTheme.colorScheme.surfaceContainerHigh
+            },
+        animationSpec = alertModeSpec(motionEnabled),
+        label = "alertModeContainer",
+    )
+    val content: Color by animateColorAsState(
+        targetValue =
+            if (selected) {
+                MaterialTheme.colorScheme.onPrimary
+            } else {
+                MaterialTheme.colorScheme.onSurfaceVariant
+            },
+        animationSpec = alertModeSpec(motionEnabled),
+        label = "alertModeContent",
+    )
+    Box(
+        modifier =
+            Modifier
+                .weight(weight)
+                .height(segmentHeight)
+                .clip(shape)
+                .background(container)
+                .selectable(selected = selected, role = Role.RadioButton, onClick = onClick)
+                .padding(horizontal = 6.dp),
+        contentAlignment = Alignment.Center,
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            AnimatedVisibility(
+                visible = selected,
+                enter = expandHorizontally(alertModeSizeSpec(motionEnabled)) + fadeIn(alertModeSpec(motionEnabled)),
+                exit = shrinkHorizontally(alertModeSizeSpec(motionEnabled)) + fadeOut(alertModeSpec(motionEnabled)),
+            ) {
+                Row {
+                    Icon(
+                        imageVector = option.icon,
+                        contentDescription = null,
+                        tint = content,
+                        modifier = Modifier.size(18.dp),
+                    )
+                    Spacer(Modifier.width(6.dp))
+                }
+            }
+            Text(
+                text = stringResource(option.labelRes),
+                style = MaterialTheme.typography.titleSmall,
+                fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium,
+                color = content,
+                maxLines = 1,
+                softWrap = false,
+                overflow = TextOverflow.Ellipsis,
+            )
+        }
+    }
+}
+
+private tailrec fun Context.findActivity(): Activity? =
+    when (this) {
+        is Activity -> this
+        is ContextWrapper -> baseContext.findActivity()
+        else -> null
+    }
 
 @Composable
 private fun CampusSettings(

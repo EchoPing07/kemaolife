@@ -1,11 +1,15 @@
 package com.github.echoping07.kemaolife
 
+import android.Manifest
+import android.content.Intent
 import android.os.Build
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.BackHandler
+import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.viewModels
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.EnterTransition
@@ -43,6 +47,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
@@ -52,6 +57,7 @@ import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation3.runtime.NavEntry
 import androidx.navigation3.ui.NavDisplay
+import com.github.echoping07.kemaolife.data.ElectricityNotifier
 import com.github.echoping07.kemaolife.ui.AppBackStackOps
 import com.github.echoping07.kemaolife.ui.AppNavTransitions
 import com.github.echoping07.kemaolife.ui.AppOpenGate
@@ -77,9 +83,11 @@ import com.github.echoping07.kemaolife.ui.theme.KemaolifeTheme
 /** 单 Activity + Jetpack Navigation 3 返回栈；顶层三 Tab 与二级页共享整屏边到边与预测性返回。 */
 class MainActivity : ComponentActivity() {
     private val viewModel: AppViewModel by viewModels()
+    private val requestedTab = mutableStateOf<String?>(null)
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        handleNotificationIntent(intent)
         enableEdgeToEdge()
         // 小米 / 澎湃把只属于三键导航的白色对比度遮罩也画到手势提示线区域，
         // 无论悬浮底栏还是贴底导航栏都必须关掉遮罩，才能让页面内容或底栏色干净透出到底边（小米开发者平台 pId=1629）。
@@ -96,21 +104,70 @@ class MainActivity : ComponentActivity() {
                 amoled = state.amoled,
                 continuousCorners = state.continuousCorners,
             ) {
-                AppRoot(viewModel)
+                AppRoot(
+                    viewModel = viewModel,
+                    requestedTab = requestedTab.value,
+                    onConsumeRequestedTab = { requestedTab.value = null },
+                )
             }
         }
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        handleNotificationIntent(intent)
+    }
+
+    private fun handleNotificationIntent(intent: Intent?) {
+        val target = intent?.getStringExtra(ElectricityNotifier.EXTRA_OPEN_TAB) ?: return
+        requestedTab.value = target
+        intent.removeExtra(ElectricityNotifier.EXTRA_OPEN_TAB)
     }
 }
 
 private enum class Tab { TIMETABLE, MORE, SETTINGS }
 
 @Composable
-private fun AppRoot(viewModel: AppViewModel) {
+private fun AppRoot(
+    viewModel: AppViewModel,
+    requestedTab: String?,
+    onConsumeRequestedTab: () -> Unit,
+) {
     val state by viewModel.state.collectAsStateWithLifecycle()
     var tab by rememberSaveable { mutableStateOf(Tab.TIMETABLE) }
     val backStack = rememberAppBackStack()
     val snackbar = remember { SnackbarHostState() }
     val motionEnabled = animationsEnabled()
+    val context = LocalContext.current
+
+    // 点开低电费系统通知：回到主容器并定位到「更多」页（展示电费卡片）。
+    LaunchedEffect(requestedTab) {
+        if (requestedTab == ElectricityNotifier.TAB_MORE) {
+            while (backStack.size > 1) {
+                AppBackStackOps.pop(backStack)
+            }
+            tab = Tab.MORE
+            onConsumeRequestedTab()
+        }
+    }
+
+    // 默认开启低电费通知：Android 13+ 首次自动申请一次 POST_NOTIFICATIONS，避免反复打扰。
+    val notificationPermissionLauncher =
+        rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
+            if (granted) viewModel.onNotificationPermissionGranted()
+        }
+    LaunchedEffect(state.electricityAlertEnabled) {
+        if (
+            Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
+            state.electricityAlertEnabled &&
+            !ElectricityNotifier.hasPermission(context) &&
+            viewModel.shouldRequestNotificationPermissionOnLaunch()
+        ) {
+            viewModel.markNotificationPermissionAsked()
+            notificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+        }
+    }
 
     // 回到前台也算「每次打开」：首帧缓存由 ViewModel 构造函数同步给出，
     // 这里只负责触发那一轮无条件联网。注册 observer 时 Activity 可能已处于 RESUMED，
