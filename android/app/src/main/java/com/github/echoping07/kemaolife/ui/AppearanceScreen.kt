@@ -87,6 +87,17 @@ internal fun AppearanceScreen(state: AppState, viewModel: AppViewModel) {
             )
         }
         GroupGap()
+        GroupSurface(GroupPosition.MIDDLE, modifier = Modifier.fillMaxWidth()) {
+            AppearanceSwitchRow(
+                title = AppearanceText.FloatingBottomBar,
+                summary = if (state.floatingBottomBar) AppearanceText.FloatingBottomBarEnabledSummary
+                else AppearanceText.FloatingBottomBarDisabledSummary,
+                checked = state.floatingBottomBar,
+                enabled = true,
+                onCheckedChange = viewModel::setFloatingBottomBar,
+            )
+        }
+        GroupGap()
         GroupSurface(GroupPosition.LAST, modifier = Modifier.fillMaxWidth()) {
             AppearanceSwitchRow(
                 title = AppearanceText.BottomBarLabels,

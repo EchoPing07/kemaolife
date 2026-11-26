@@ -15,6 +15,7 @@ class ThemePreferences(context: Context) {
         dynamicColor = loadDynamicColor(),
         amoled = loadAmoled(),
         continuousCorners = loadContinuousCorners(),
+        floatingBottomBar = loadFloatingBottomBar(),
         showBottomBarLabels = loadShowBottomBarLabels(),
         predictiveBackEnabled = loadPredictiveBackEnabled(),
     )
@@ -32,7 +33,11 @@ class ThemePreferences(context: Context) {
     fun loadContinuousCorners(): Boolean =
         preferences.getBoolean(KEY_CONTINUOUS_CORNERS, DEFAULT_CONTINUOUS_CORNERS)
 
-    /** 悬浮底栏是否显示文字标签；未显式设置时默认显示。 */
+    /** 是否使用胶囊悬浮底栏；未显式设置时默认开启。 */
+    fun loadFloatingBottomBar(): Boolean =
+        preferences.getBoolean(KEY_FLOATING_BOTTOM_BAR, DEFAULT_FLOATING_BOTTOM_BAR)
+
+    /** 底栏是否显示文字标签；未显式设置时默认显示。 */
     fun loadShowBottomBarLabels(): Boolean =
         preferences.getBoolean(KEY_SHOW_BOTTOM_BAR_LABELS, DEFAULT_SHOW_BOTTOM_BAR_LABELS)
 
@@ -52,6 +57,7 @@ class ThemePreferences(context: Context) {
             .putBoolean(KEY_DYNAMIC_COLOR, settings.dynamicColor)
             .putBoolean(KEY_AMOLED, settings.amoled)
             .putBoolean(KEY_CONTINUOUS_CORNERS, settings.continuousCorners)
+            .putBoolean(KEY_FLOATING_BOTTOM_BAR, settings.floatingBottomBar)
             .putBoolean(KEY_SHOW_BOTTOM_BAR_LABELS, settings.showBottomBarLabels)
             .putBoolean(KEY_PREDICTIVE_BACK, settings.predictiveBackEnabled)
             .apply()
@@ -75,6 +81,10 @@ class ThemePreferences(context: Context) {
         preferences.edit().putBoolean(KEY_CONTINUOUS_CORNERS, enabled).apply()
     }
 
+    fun saveFloatingBottomBar(enabled: Boolean) {
+        preferences.edit().putBoolean(KEY_FLOATING_BOTTOM_BAR, enabled).apply()
+    }
+
     fun saveShowBottomBarLabels(enabled: Boolean) {
         preferences.edit().putBoolean(KEY_SHOW_BOTTOM_BAR_LABELS, enabled).apply()
     }
@@ -89,6 +99,7 @@ class ThemePreferences(context: Context) {
         const val KEY_DYNAMIC_COLOR = "dynamic_color"
         const val KEY_AMOLED = "amoled"
         const val KEY_CONTINUOUS_CORNERS = "continuous_corners"
+        const val KEY_FLOATING_BOTTOM_BAR = "floating_bottom_bar"
         const val KEY_SHOW_BOTTOM_BAR_LABELS = "show_bottom_bar_labels"
         const val KEY_PREDICTIVE_BACK = "predictive_back_enabled"
     }

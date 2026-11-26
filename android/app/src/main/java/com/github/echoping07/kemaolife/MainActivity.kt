@@ -19,9 +19,11 @@ import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.ime
 import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.padding
@@ -56,10 +58,13 @@ import com.github.echoping07.kemaolife.ui.AppOpenGate
 import com.github.echoping07.kemaolife.ui.AppRoute
 import com.github.echoping07.kemaolife.ui.AppState
 import com.github.echoping07.kemaolife.ui.AppViewModel
+import com.github.echoping07.kemaolife.ui.DockedNavBar
+import com.github.echoping07.kemaolife.ui.DockedNavBarMetrics
 import com.github.echoping07.kemaolife.ui.FloatingNavBar
 import com.github.echoping07.kemaolife.ui.FloatingNavBarMetrics
 import com.github.echoping07.kemaolife.ui.FloatingNavItemData
 import com.github.echoping07.kemaolife.ui.MoreScreen
+import com.github.echoping07.kemaolife.ui.PageBottomPadding
 import com.github.echoping07.kemaolife.ui.ProbeDialog
 import com.github.echoping07.kemaolife.ui.SettingsChildScreen
 import com.github.echoping07.kemaolife.ui.SettingsOverviewScreen
@@ -77,7 +82,7 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
         // 小米 / 澎湃把只属于三键导航的白色对比度遮罩也画到手势提示线区域，
-        // 悬浮底栏下必须关掉遮罩才能让页面内容干净透出到底边（小米开发者平台 pId=1629）。
+        // 无论悬浮底栏还是贴底导航栏都必须关掉遮罩，才能让页面内容或底栏色干净透出到底边（小米开发者平台 pId=1629）。
         // enableEdgeToEdge() 内部会把该开关置为 true，因此必须放在它之后。
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
             window.isNavigationBarContrastEnforced = false
@@ -156,10 +161,10 @@ private fun AppRoot(viewModel: AppViewModel) {
     val navScrollClearance = FloatingNavBarMetrics.scrollClearance(state.showBottomBarLabels) + navBottomInset
     val isOnHome = backStack.lastOrNull() == AppRoute.Home
     val snackbarBottomPadding =
-        if (isOnHome) {
-            FloatingNavBarMetrics.reservedHeight(state.showBottomBarLabels) + 8.dp
-        } else {
-            16.dp
+        when {
+            !isOnHome -> 16.dp
+            state.floatingBottomBar -> FloatingNavBarMetrics.reservedHeight(state.showBottomBarLabels) + 8.dp
+            else -> DockedNavBarMetrics.contentHeight(state.showBottomBarLabels) + 8.dp
         }
 
     Scaffold(
@@ -242,89 +247,114 @@ private fun HomeShell(
     onSelectTab: (Tab) -> Unit,
     onOpenSettingsChild: (AppRoute.SettingsChild) -> Unit,
 ) {
+    val navItems =
+        listOf(
+            FloatingNavItemData(
+                label = stringResource(R.string.tab_timetable),
+                icon = TabIcons.Timetable,
+                selectedIcon = TabIcons.TimetableFilled,
+                selected = tab == Tab.TIMETABLE,
+                onClick = { onSelectTab(Tab.TIMETABLE) },
+            ),
+            FloatingNavItemData(
+                label = stringResource(R.string.tab_more),
+                icon = TabIcons.More,
+                selectedIcon = TabIcons.MoreFilled,
+                selected = tab == Tab.MORE,
+                onClick = { onSelectTab(Tab.MORE) },
+            ),
+            FloatingNavItemData(
+                label = stringResource(R.string.tab_settings),
+                icon = TabIcons.Settings,
+                selectedIcon = TabIcons.SettingsFilled,
+                selected = tab == Tab.SETTINGS,
+                onClick = { onSelectTab(Tab.SETTINGS) },
+            ),
+        )
+    // 悬浮模式下内容滚至底栏后方，需要留出底栏与手势区高度；贴底模式下底栏独立占位，内容区按常规留白即可。
+    val timetableBottomPadding = if (state.floatingBottomBar) navScrollClearance else 16.dp
+    val pageBottomPadding = if (state.floatingBottomBar) navScrollClearance else PageBottomPadding
+
+    // 保持内容区在组合树中的位置恒定，切换底栏形态时不重建各 Tab 及其滚动状态。
     Box(
         modifier =
             Modifier
                 .fillMaxSize()
                 .background(MaterialTheme.colorScheme.surface),
     ) {
-        AnimatedContent(
-            targetState = tab,
-            transitionSpec = {
-                val direction = if (targetState.ordinal > initialState.ordinal) 1 else -1
-                if (motionEnabled) {
-                    // 平级 tab 要立刻响应：新旧页面同时进退，不等待淡出，也不叠加缩放。
-                    (
-                        fadeIn(tween(160)) +
-                            slideInHorizontally(tween(200, easing = FastOutSlowInEasing)) { direction * it / 18 }
-                    ) togetherWith
-                        (
-                            fadeOut(tween(160)) +
-                                slideOutHorizontally(tween(200, easing = FastOutSlowInEasing)) { -direction * it / 28 }
-                        )
-                } else {
-                    EnterTransition.None togetherWith ExitTransition.None
-                }
-            },
-            label = "tabTransition",
-        ) { currentTab ->
-            when (currentTab) {
-                Tab.TIMETABLE -> {
-                    TimetableScreen(
-                        state = state,
-                        viewModel = viewModel,
-                        bottomContentPadding = navScrollClearance,
-                    )
-                }
+        Column(modifier = Modifier.fillMaxSize()) {
+            Box(
+                modifier =
+                    Modifier
+                        .weight(1f)
+                        .fillMaxWidth(),
+            ) {
+                AnimatedContent(
+                    targetState = tab,
+                    transitionSpec = {
+                        val direction = if (targetState.ordinal > initialState.ordinal) 1 else -1
+                        if (motionEnabled) {
+                            // 平级 tab 要立刻响应：新旧页面同时进退，不等待淡出，也不叠加缩放。
+                            (
+                                fadeIn(tween(160)) +
+                                    slideInHorizontally(tween(200, easing = FastOutSlowInEasing)) { direction * it / 18 }
+                            ) togetherWith
+                                (
+                                    fadeOut(tween(160)) +
+                                        slideOutHorizontally(tween(200, easing = FastOutSlowInEasing)) { -direction * it / 28 }
+                                )
+                        } else {
+                            EnterTransition.None togetherWith ExitTransition.None
+                        }
+                    },
+                    label = "tabTransition",
+                ) { currentTab ->
+                    when (currentTab) {
+                        Tab.TIMETABLE -> {
+                            TimetableScreen(
+                                state = state,
+                                viewModel = viewModel,
+                                bottomContentPadding = timetableBottomPadding,
+                            )
+                        }
 
-                Tab.MORE -> {
-                    MoreScreen(
-                        state = state,
-                        viewModel = viewModel,
-                        onGoSettings = { onSelectTab(Tab.SETTINGS) },
-                        bottomContentPadding = navScrollClearance,
-                    )
-                }
+                        Tab.MORE -> {
+                            MoreScreen(
+                                state = state,
+                                viewModel = viewModel,
+                                onGoSettings = { onSelectTab(Tab.SETTINGS) },
+                                bottomContentPadding = pageBottomPadding,
+                            )
+                        }
 
-                Tab.SETTINGS -> {
-                    SettingsOverviewScreen(
-                        state = state,
-                        viewModel = viewModel,
-                        rootBottomPadding = navScrollClearance,
-                        onNavigate = onOpenSettingsChild,
-                    )
+                        Tab.SETTINGS -> {
+                            SettingsOverviewScreen(
+                                state = state,
+                                viewModel = viewModel,
+                                rootBottomPadding = pageBottomPadding,
+                                onNavigate = onOpenSettingsChild,
+                            )
+                        }
+                    }
                 }
+            }
+
+            if (!state.floatingBottomBar) {
+                DockedNavBar(
+                    items = navItems,
+                    showLabels = state.showBottomBarLabels,
+                    motionEnabled = motionEnabled,
+                )
             }
         }
 
-        FloatingNavBar(
-            items =
-                listOf(
-                    FloatingNavItemData(
-                        label = stringResource(R.string.tab_timetable),
-                        icon = TabIcons.Timetable,
-                        selectedIcon = TabIcons.TimetableFilled,
-                        selected = tab == Tab.TIMETABLE,
-                        onClick = { onSelectTab(Tab.TIMETABLE) },
-                    ),
-                    FloatingNavItemData(
-                        label = stringResource(R.string.tab_more),
-                        icon = TabIcons.More,
-                        selectedIcon = TabIcons.MoreFilled,
-                        selected = tab == Tab.MORE,
-                        onClick = { onSelectTab(Tab.MORE) },
-                    ),
-                    FloatingNavItemData(
-                        label = stringResource(R.string.tab_settings),
-                        icon = TabIcons.Settings,
-                        selectedIcon = TabIcons.SettingsFilled,
-                        selected = tab == Tab.SETTINGS,
-                        onClick = { onSelectTab(Tab.SETTINGS) },
-                    ),
-                ),
-            showLabels = state.showBottomBarLabels,
-            motionEnabled = motionEnabled,
-            modifier = Modifier.align(Alignment.BottomCenter),
-        )
+        if (state.floatingBottomBar) {
+            FloatingNavBar(
+                items = navItems,
+                showLabels = state.showBottomBarLabels,
+                motionEnabled = motionEnabled,
+                modifier = Modifier.align(Alignment.BottomCenter),
+            )
+        }
     }
 }

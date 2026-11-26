@@ -15,6 +15,7 @@ import com.github.echoping07.kemaolife.data.Credentials
 import com.github.echoping07.kemaolife.data.DaySchedule
 import com.github.echoping07.kemaolife.data.DEFAULT_CONTINUOUS_CORNERS
 import com.github.echoping07.kemaolife.data.DEFAULT_DYNAMIC_COLOR
+import com.github.echoping07.kemaolife.data.DEFAULT_FLOATING_BOTTOM_BAR
 import com.github.echoping07.kemaolife.data.DEFAULT_PREDICTIVE_BACK
 import com.github.echoping07.kemaolife.data.DEFAULT_SHOW_BOTTOM_BAR_LABELS
 import com.github.echoping07.kemaolife.data.ElectricityReport
@@ -163,6 +164,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                 dynamicColor = themePreferences.loadDynamicColor(),
                 amoled = themePreferences.loadAmoled(),
                 continuousCorners = themePreferences.loadContinuousCorners(),
+                floatingBottomBar = themePreferences.loadFloatingBottomBar(),
                 showBottomBarLabels = themePreferences.loadShowBottomBarLabels(),
                 predictiveBackEnabled = themePreferences.loadPredictiveBackEnabled(),
             )
@@ -974,6 +976,11 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         _state.update { it.copy(continuousCorners = value) }
     }
 
+    fun setFloatingBottomBar(value: Boolean) {
+        themePreferences.saveFloatingBottomBar(value)
+        _state.update { it.copy(floatingBottomBar = value) }
+    }
+
     fun setShowBottomBarLabels(value: Boolean) {
         themePreferences.saveShowBottomBarLabels(value)
         _state.update { it.copy(showBottomBarLabels = value) }
@@ -1136,6 +1143,7 @@ data class AppState(
     val dynamicColor: Boolean = DEFAULT_DYNAMIC_COLOR,
     val amoled: Boolean = false,
     val continuousCorners: Boolean = DEFAULT_CONTINUOUS_CORNERS,
+    val floatingBottomBar: Boolean = DEFAULT_FLOATING_BOTTOM_BAR,
     val showBottomBarLabels: Boolean = DEFAULT_SHOW_BOTTOM_BAR_LABELS,
     val predictiveBackEnabled: Boolean = DEFAULT_PREDICTIVE_BACK,
     val settingsSaved: Boolean = false,

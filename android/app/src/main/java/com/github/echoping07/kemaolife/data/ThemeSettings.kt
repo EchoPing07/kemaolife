@@ -16,7 +16,10 @@ const val DEFAULT_DYNAMIC_COLOR = true
  */
 const val DEFAULT_CONTINUOUS_CORNERS = false
 
-/** 悬浮底栏文字标签的唯一默认来源：默认显示图标 + 文字，可在「设置 → 外观」切到纯图标。 */
+/** 悬浮底栏的唯一默认来源：默认开启，可在「设置 → 外观」切回贴底导航栏。 */
+const val DEFAULT_FLOATING_BOTTOM_BAR = true
+
+/** 底栏文字标签的唯一默认来源：默认显示图标 + 文字，可在「设置 → 外观」切到纯图标。 */
 const val DEFAULT_SHOW_BOTTOM_BAR_LABELS = true
 
 /** 预测性返回手势的唯一默认来源：默认开启，可在设置「个性化」组关闭。 */
@@ -29,6 +32,7 @@ data class ThemeSettings(
     val dynamicColor: Boolean = DEFAULT_DYNAMIC_COLOR,
     val amoled: Boolean = false,
     val continuousCorners: Boolean = DEFAULT_CONTINUOUS_CORNERS,
+    val floatingBottomBar: Boolean = DEFAULT_FLOATING_BOTTOM_BAR,
     val showBottomBarLabels: Boolean = DEFAULT_SHOW_BOTTOM_BAR_LABELS,
     val predictiveBackEnabled: Boolean = DEFAULT_PREDICTIVE_BACK,
 )

@@ -16,11 +16,19 @@ class ThemeSettingsTest {
                 dynamicColor = true,
                 amoled = false,
                 continuousCorners = false,
+                floatingBottomBar = true,
                 showBottomBarLabels = true,
                 predictiveBackEnabled = true,
             ),
             ThemeSettings(),
         )
+    }
+
+    @Test
+    fun floatingBottomBarEnabledByDefaultAndCanBeDisabled() {
+        assertTrue(DEFAULT_FLOATING_BOTTOM_BAR)
+        assertTrue(ThemeSettings().floatingBottomBar)
+        assertFalse(ThemeSettings(floatingBottomBar = false).floatingBottomBar)
     }
 
     @Test
