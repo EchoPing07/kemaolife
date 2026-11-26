@@ -2,4 +2,4 @@
 package version
 
 // Version 是发布版本号；发版只改这一行，并在变更合并到 main 后打同名 tag（docs/contract.md §2）。
-const Version = "0.6.3"
+const Version = "0.6.4"
