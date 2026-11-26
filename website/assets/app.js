@@ -1,4 +1,4 @@
-const RELEASE_BASE = 'https://github.com/EchoPing07/kemaolife/releases/download/v0.6.3/';
+const RELEASE_BASE = 'https://github.com/EchoPing07/kemaolife/releases/download/v0.6.4/';
 
 const OS_CONFIG = {
   android: {
@@ -10,25 +10,25 @@ const OS_CONFIG = {
       {
         edition: 'Mobile · 移动端',
         arch: 'arm64-v8a', label: 'arm64-v8a（推荐）',
-        file: 'kemaolife_0.6.3_android_arm64-v8a.apk',
+        file: 'kemaolife_0.6.4_android_arm64-v8a.apk',
         btnText: 'Mobile 移动端'
       },
       {
         edition: 'Mobile · 移动端',
         arch: 'armeabi-v7a', label: 'armeabi-v7a（32位）',
-        file: 'kemaolife_0.6.3_android_armeabi-v7a.apk',
+        file: 'kemaolife_0.6.4_android_armeabi-v7a.apk',
         btnText: 'Mobile 移动端 (32位)'
       },
       {
         edition: 'Mobile · 移动端',
         arch: 'x86_64', label: 'x86_64（模拟器）',
-        file: 'kemaolife_0.6.3_android_x86_64.apk',
+        file: 'kemaolife_0.6.4_android_x86_64.apk',
         btnText: 'Mobile 模拟器 (x86_64)'
       },
       {
         edition: 'Mobile · 移动端',
         arch: 'x86', label: 'x86（模拟器）',
-        file: 'kemaolife_0.6.3_android_x86.apk',
+        file: 'kemaolife_0.6.4_android_x86.apk',
         btnText: 'Mobile 模拟器 (x86)'
       }
     ]
@@ -42,13 +42,13 @@ const OS_CONFIG = {
       {
         edition: 'Desktop · 桌面端',
         arch: 'amd64', label: 'amd64（推荐）',
-        file: 'kemaolife-desktop_0.6.3_windows_amd64.zip',
+        file: 'kemaolife-desktop_0.6.4_windows_amd64.zip',
         btnText: 'Desktop 桌面端'
       },
       {
         edition: 'Desktop · 桌面端',
         arch: 'arm64', label: 'arm64（ARM）',
-        file: 'kemaolife-desktop_0.6.3_windows_arm64.zip',
+        file: 'kemaolife-desktop_0.6.4_windows_arm64.zip',
         btnText: 'Desktop 桌面端 (ARM64)'
       }
     ]
@@ -62,19 +62,19 @@ const OS_CONFIG = {
       {
         edition: 'CLI · 命令行端',
         arch: 'arm64', label: 'arm64（M系列芯片）',
-        file: 'kemaolife_0.6.3_darwin_arm64.tar.gz',
+        file: 'kemaolife_0.6.4_darwin_arm64.tar.gz',
         btnText: 'CLI 命令行端'
       },
       {
         edition: 'CLI · 命令行端',
         arch: 'amd64', label: 'amd64（Intel）',
-        file: 'kemaolife_0.6.3_darwin_amd64.tar.gz',
+        file: 'kemaolife_0.6.4_darwin_amd64.tar.gz',
         btnText: 'CLI 命令行端'
       },
       {
         edition: 'CLI · AI Skill 扩展',
         arch: 'Skill', label: 'Agent Skill 包',
-        file: 'kemaolife-skill_0.6.3.zip',
+        file: 'kemaolife-skill_0.6.4.zip',
         btnText: 'CLI 技能包'
       }
     ]
@@ -88,25 +88,25 @@ const OS_CONFIG = {
       {
         edition: 'CLI · 命令行端',
         arch: 'amd64', label: 'amd64（推荐）',
-        file: 'kemaolife_0.6.3_linux_amd64.tar.gz',
+        file: 'kemaolife_0.6.4_linux_amd64.tar.gz',
         btnText: 'CLI 命令行端'
       },
       {
         edition: 'CLI · 命令行端',
         arch: 'arm64', label: 'arm64',
-        file: 'kemaolife_0.6.3_linux_arm64.tar.gz',
+        file: 'kemaolife_0.6.4_linux_arm64.tar.gz',
         btnText: 'CLI 命令行端'
       },
       {
         edition: 'CLI · 命令行端',
         arch: 'armv7', label: 'armv7',
-        file: 'kemaolife_0.6.3_linux_armv7.tar.gz',
+        file: 'kemaolife_0.6.4_linux_armv7.tar.gz',
         btnText: 'CLI 命令行端'
       },
       {
         edition: 'CLI · AI Skill 扩展',
         arch: 'Skill', label: 'Agent Skill 包',
-        file: 'kemaolife-skill_0.6.3.zip',
+        file: 'kemaolife-skill_0.6.4.zip',
         btnText: 'CLI 技能包'
       }
     ]
@@ -319,7 +319,7 @@ function renderAllPackagesModal() {
     { title: 'Desktop · Windows 桌面端（2 个包）', items: OS_CONFIG.windows.packages },
     { title: 'CLI · MacOS 命令行端（2 个包）', items: OS_CONFIG.macos.packages.slice(0, 2) },
     { title: 'CLI · Linux 命令行端（3 个包）', items: OS_CONFIG.linux.packages.slice(0, 3) },
-    { title: 'CLI · AI 助手技能扩展（1 个包）', items: [{ label: '[CLI Skill] 供 AI 助手调用的技能扩展包', file: 'kemaolife-skill_0.6.3.zip' }] }
+    { title: 'CLI · AI 助手技能扩展（1 个包）', items: [{ label: '[CLI Skill] 供 AI 助手调用的技能扩展包', file: 'kemaolife-skill_0.6.4.zip' }] }
   ];
 
   const container = document.getElementById('allPackagesContainer');
