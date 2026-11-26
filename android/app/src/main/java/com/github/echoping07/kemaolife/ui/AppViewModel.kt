@@ -14,10 +14,13 @@ import com.github.echoping07.kemaolife.data.CredentialStore
 import com.github.echoping07.kemaolife.data.Credentials
 import com.github.echoping07.kemaolife.data.DaySchedule
 import com.github.echoping07.kemaolife.data.DEFAULT_CONTINUOUS_CORNERS
+import com.github.echoping07.kemaolife.data.DEFAULT_CUSTOM_THEME_COLOR
 import com.github.echoping07.kemaolife.data.DEFAULT_DYNAMIC_COLOR
 import com.github.echoping07.kemaolife.data.DEFAULT_FLOATING_BOTTOM_BAR
 import com.github.echoping07.kemaolife.data.DEFAULT_PREDICTIVE_BACK
 import com.github.echoping07.kemaolife.data.DEFAULT_SHOW_BOTTOM_BAR_LABELS
+import com.github.echoping07.kemaolife.data.THEME_COLOR_CUSTOM
+import com.github.echoping07.kemaolife.data.normalizeCustomThemeColor
 import com.github.echoping07.kemaolife.data.ElectricityNotifier
 import com.github.echoping07.kemaolife.data.ElectricityReport
 import com.github.echoping07.kemaolife.data.LogEntry
@@ -165,6 +168,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
             it.copy(
                 credentials = credentials,
                 themeColor = themePreferences.load(),
+                customThemeColor = themePreferences.loadCustomThemeColor(),
                 themeMode = themePreferences.loadMode(),
                 dynamicColor = themePreferences.loadDynamicColor(),
                 amoled = themePreferences.loadAmoled(),
@@ -1044,6 +1048,23 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         _state.update { it.copy(themeColor = value) }
     }
 
+    /** 保存并启用自定义主题色；若当前开启了莫奈取色，按需一并关闭以便立即生效。 */
+    fun setCustomThemeColor(argb: Int, disableDynamicColor: Boolean = false) {
+        val normalized = normalizeCustomThemeColor(argb)
+        themePreferences.saveCustomThemeColor(normalized)
+        themePreferences.save(THEME_COLOR_CUSTOM)
+        if (disableDynamicColor) {
+            themePreferences.saveDynamicColor(false)
+        }
+        _state.update {
+            it.copy(
+                themeColor = THEME_COLOR_CUSTOM,
+                customThemeColor = normalized,
+                dynamicColor = if (disableDynamicColor) false else it.dynamicColor,
+            )
+        }
+    }
+
     fun setThemeMode(value: String) {
         themePreferences.saveMode(value)
         _state.update { it.copy(themeMode = themePreferences.loadMode()) }
@@ -1232,6 +1253,7 @@ data class AppState(
     val campusWifiOnly: Boolean = true,
 
     val themeColor: String = "BLUE",
+    val customThemeColor: Int = DEFAULT_CUSTOM_THEME_COLOR,
     val themeMode: String = "SYSTEM",
     val dynamicColor: Boolean = DEFAULT_DYNAMIC_COLOR,
     val amoled: Boolean = false,

@@ -34,7 +34,26 @@ internal object AppearanceText {
     const val PreviewBackground = "界面背景"
     const val PreviewAction = "主要按钮"
 
+    const val ThemeColors = "主题色"
     const val PresetThemes = "预设主题"
     const val PresetThemesSummary = "AOSP 基础色，点选后立即应用"
-    const val PresetThemesDynamicSummary = "莫奈取色已开启；所选预设将在关闭取色后应用"
+    const val PresetThemesDynamicSummary = "莫奈取色已开启；所选主题色将在关闭取色后应用"
+
+    const val CustomThemeColor = "自定义主题色"
+    const val CustomThemeColorIdleSummary = "自由选色或输入 Hex 色值"
+    const val CustomThemeSheetTitle = "自定义主题色"
+    const val CustomThemeHexLabel = "十六进制色值"
+    const val CustomThemeHexPlaceholder = "#26A69A"
+    const val CustomThemeHexError = "请输入 3 位或 6 位十六进制色值，如 #26A69A"
+    const val CustomThemeQuickPicks = "推荐色"
+    const val CustomThemeDynamicNotice = "应用自定义主题色将自动关闭莫奈取色"
+    const val CustomThemePreviewPrimary = "主色"
+    const val CustomThemePreviewContainer = "容器"
+    const val CustomThemePreviewSecondary = "次色"
+    const val CustomThemePreviewTertiary = "点缀"
+    const val CustomThemeCancel = "取消"
+    const val CustomThemeApply = "应用"
+
+    fun customThemeSelectedSummary(hex: String): String = "已启用 · $hex"
+    fun customThemePendingSummary(hex: String): String = "已选 $hex，关闭莫奈取色后生效"
 }

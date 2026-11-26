@@ -20,7 +20,9 @@ import androidx.compose.ui.unit.sp
 import androidx.core.graphics.ColorUtils
 import com.github.echoping07.kemaolife.ui.animationsEnabled
 import com.github.echoping07.kemaolife.data.DEFAULT_CONTINUOUS_CORNERS
+import com.github.echoping07.kemaolife.data.DEFAULT_CUSTOM_THEME_COLOR
 import com.github.echoping07.kemaolife.data.DEFAULT_DYNAMIC_COLOR
+import com.github.echoping07.kemaolife.data.THEME_COLOR_CUSTOM
 import com.github.echoping07.kemaolife.data.THEME_MODE_DARK
 import com.github.echoping07.kemaolife.data.THEME_MODE_LIGHT
 import com.github.echoping07.kemaolife.data.isDarkTheme
@@ -51,6 +53,34 @@ internal enum class AppThemeColor(
 /** 预览与实际主题共用生成逻辑，确保容器色和深色色阶一致。 */
 internal fun AppThemeColor.previewColorScheme(dark: Boolean, amoled: Boolean = false): ColorScheme =
     presetColorScheme(this, dark, amoled)
+
+/** 自定义主题色的色板生成入口，供预览与全局主题共用。 */
+internal fun customColorScheme(seedArgb: Int, dark: Boolean, amoled: Boolean = false): ColorScheme {
+    val palette = CustomThemePalette.generate(seedArgb, dark)
+    val base = baseColorScheme(
+        dark = dark,
+        surfaces = LightSurfaces(
+            page = Color(palette.surfacePage),
+            high = Color(palette.surfaceHigh),
+            highest = Color(palette.surfaceHighest),
+        ),
+    )
+    val colored = base.copy(
+        primary = Color(palette.primary),
+        onPrimary = Color(palette.onPrimary),
+        primaryContainer = Color(palette.primaryContainer),
+        onPrimaryContainer = Color(palette.onPrimaryContainer),
+        secondary = Color(palette.secondary),
+        onSecondary = Color(palette.onSecondary),
+        secondaryContainer = Color(palette.secondaryContainer),
+        onSecondaryContainer = Color(palette.onSecondaryContainer),
+        tertiary = Color(palette.tertiary),
+        onTertiary = Color(palette.onTertiary),
+        tertiaryContainer = Color(palette.tertiaryContainer),
+        onTertiaryContainer = Color(palette.onTertiaryContainer),
+    )
+    return if (dark && amoled) colored.withAmoledSurfaces() else colored
+}
 
 /** 浅色表面色阶：单色预设无可用色相，沿用既有冷中性。 */
 private fun AppThemeColor.lightSurface(lightness: Float): Color {
@@ -106,36 +136,7 @@ private fun presetColorScheme(theme: AppThemeColor, dark: Boolean, amoled: Boole
 
     // 浅色：页面底色、固定顶栏（surface）与底栏（surfaceContainer）共用同一色，
     // 卡片 / 分组项用最亮表面纯白，白卡成为唯一亮面；深色与 AMOLED 不参与。
-    val surfaces = theme.lightSurfaces()
-    val base = if (dark) {
-        darkColorScheme(
-            background = Color(0xFF0F1113),
-            surface = Color(0xFF0F1113),
-            surfaceContainerLowest = Color(0xFF090A0C),
-            surfaceContainerLow = Color(0xFF181B1E),
-            surfaceContainer = Color(0xFF202327),
-            surfaceContainerHigh = Color(0xFF282C30),
-            surfaceContainerHighest = Color(0xFF32363B),
-            onSurface = Color(0xFFE2E4E6),
-            onSurfaceVariant = Color(0xFFC2C7CB),
-            outline = Color(0xFF8C9296),
-            outlineVariant = Color(0xFF42484C),
-        )
-    } else {
-        lightColorScheme(
-            background = surfaces.page,
-            surface = surfaces.page,
-            surfaceContainerLowest = Color(0xFFFFFFFF),
-            surfaceContainerLow = Color(0xFFFFFFFF),
-            surfaceContainer = surfaces.page,
-            surfaceContainerHigh = surfaces.high,
-            surfaceContainerHighest = surfaces.highest,
-            onSurface = Color(0xFF191C1E),
-            onSurfaceVariant = Color(0xFF44474B),
-            outline = Color(0xFF74777B),
-            outlineVariant = Color(0xFFC4C7CC),
-        )
-    }
+    val base = baseColorScheme(dark = dark, surfaces = theme.lightSurfaces())
     val colored = base.copy(
         primary = Color(primary),
         onPrimary = if (dark) Color(0xFF101418) else Color.White,
@@ -150,6 +151,36 @@ private fun presetColorScheme(theme: AppThemeColor, dark: Boolean, amoled: Boole
         onTertiaryContainer = if (dark) Color(0xFFFFE9BD) else Color(tertiary).darken(0.38f),
     )
     return if (dark && amoled) colored.withAmoledSurfaces() else colored
+}
+
+private fun baseColorScheme(dark: Boolean, surfaces: LightSurfaces): ColorScheme = if (dark) {
+    darkColorScheme(
+        background = Color(0xFF0F1113),
+        surface = Color(0xFF0F1113),
+        surfaceContainerLowest = Color(0xFF090A0C),
+        surfaceContainerLow = Color(0xFF181B1E),
+        surfaceContainer = Color(0xFF202327),
+        surfaceContainerHigh = Color(0xFF282C30),
+        surfaceContainerHighest = Color(0xFF32363B),
+        onSurface = Color(0xFFE2E4E6),
+        onSurfaceVariant = Color(0xFFC2C7CB),
+        outline = Color(0xFF8C9296),
+        outlineVariant = Color(0xFF42484C),
+    )
+} else {
+    lightColorScheme(
+        background = surfaces.page,
+        surface = surfaces.page,
+        surfaceContainerLowest = Color(0xFFFFFFFF),
+        surfaceContainerLow = Color(0xFFFFFFFF),
+        surfaceContainer = surfaces.page,
+        surfaceContainerHigh = surfaces.high,
+        surfaceContainerHighest = surfaces.highest,
+        onSurface = Color(0xFF191C1E),
+        onSurfaceVariant = Color(0xFF44474B),
+        outline = Color(0xFF74777B),
+        outlineVariant = Color(0xFFC4C7CC),
+    )
 }
 
 /** 只覆盖深色背景与表面层级；动态主色、内容色和其它角色保持原样。 */
@@ -246,6 +277,7 @@ private val AppTypography = Typography().let { base ->
 @Composable
 fun KemaolifeTheme(
     themeColor: String = AppThemeColor.MONOCHROMATIC.name,
+    customThemeColor: Int = DEFAULT_CUSTOM_THEME_COLOR,
     /** 兼容旧调用；新的 themeMode 未显式传入时沿用这个有效深色值。 */
     darkTheme: Boolean = isSystemInDarkTheme(),
     themeMode: String = if (darkTheme) THEME_MODE_DARK else THEME_MODE_LIGHT,
@@ -255,7 +287,8 @@ fun KemaolifeTheme(
     content: @Composable () -> Unit,
 ) {
     val dark = isDarkTheme(themeMode, darkTheme)
-    val theme = AppThemeColor.entries.firstOrNull { it.name == normalizeThemeColor(themeColor) }
+    val normalizedTheme = normalizeThemeColor(themeColor)
+    val theme = AppThemeColor.entries.firstOrNull { it.name == normalizedTheme }
         ?: AppThemeColor.MONOCHROMATIC
     val context = LocalContext.current
     val target = when {
@@ -267,6 +300,7 @@ fun KemaolifeTheme(
                 else -> dynamic
             }
         }
+        normalizedTheme == THEME_COLOR_CUSTOM -> customColorScheme(customThemeColor, dark, amoled)
         else -> presetColorScheme(theme, dark, amoled)
     }
     // 形状入口 appShape 读 LocalCornerStyle，必须包住整个 content。

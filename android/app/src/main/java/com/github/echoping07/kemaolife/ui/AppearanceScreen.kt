@@ -13,15 +13,21 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.selection.toggleable
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Check
+import androidx.compose.material3.ColorScheme
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -31,12 +37,16 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import com.github.echoping07.kemaolife.data.THEME_COLOR_CUSTOM
+import com.github.echoping07.kemaolife.data.formatThemeColorHex
 import com.github.echoping07.kemaolife.data.isDarkTheme
 import com.github.echoping07.kemaolife.data.normalizeThemeColor
 import com.github.echoping07.kemaolife.ui.theme.AppThemeColor
-import com.github.echoping07.kemaolife.ui.theme.previewColorScheme
 import com.github.echoping07.kemaolife.ui.theme.appShape
+import com.github.echoping07.kemaolife.ui.theme.customColorScheme
+import com.github.echoping07.kemaolife.ui.theme.previewColorScheme
 import kotlin.math.min
 
 /** 外观页只提供内容；滚动由 CollapsingScreen 的单一 verticalScroll 负责。 */
@@ -44,6 +54,24 @@ import kotlin.math.min
 internal fun AppearanceScreen(state: AppState, viewModel: AppViewModel) {
     val dark = isDarkTheme(state.themeMode, isSystemInDarkTheme())
     val dynamicAvailable = Build.VERSION.SDK_INT >= Build.VERSION_CODES.S
+    val dynamicActive = state.dynamicColor && dynamicAvailable
+    val activeTheme = normalizeThemeColor(state.themeColor)
+    val customSelected = activeTheme == THEME_COLOR_CUSTOM
+    var showCustomColorSheet by rememberSaveable { mutableStateOf(false) }
+
+    if (showCustomColorSheet) {
+        CustomColorSheet(
+            initialColor = state.customThemeColor,
+            dark = dark,
+            amoled = state.amoled,
+            dynamicColorActive = dynamicActive,
+            onDismiss = { showCustomColorSheet = false },
+            onApply = { argb ->
+                viewModel.setCustomThemeColor(argb, disableDynamicColor = dynamicActive)
+                showCustomColorSheet = false
+            },
+        )
+    }
 
     // 颜色模式不在这里：它是设置总览「个性化」组的常驻分段控件（见 ThemeModeSelector）。
     Column(modifier = Modifier.fillMaxWidth()) {
@@ -109,11 +137,15 @@ internal fun AppearanceScreen(state: AppState, viewModel: AppViewModel) {
             )
         }
 
-        AppearanceSectionLabel(AppearanceText.PresetThemes)
-        GroupSurface(GroupPosition.ONLY, modifier = Modifier.fillMaxWidth()) {
+        AppearanceSectionLabel(AppearanceText.ThemeColors)
+        GroupSurface(GroupPosition.FIRST, modifier = Modifier.fillMaxWidth()) {
             Column(modifier = Modifier.padding(horizontal = 20.dp, vertical = 20.dp)) {
                 Text(
-                    text = AppearanceText.PresetThemesSummary,
+                    text = if (dynamicActive) {
+                        AppearanceText.PresetThemesDynamicSummary
+                    } else {
+                        AppearanceText.PresetThemesSummary
+                    },
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.padding(bottom = 18.dp),
@@ -124,7 +156,7 @@ internal fun AppearanceScreen(state: AppState, viewModel: AppViewModel) {
                         rowThemes.forEach { theme ->
                             ThemeDonutWheel(
                                 theme = theme,
-                                selected = normalizeThemeColor(state.themeColor) == theme.name,
+                                selected = activeTheme == theme.name,
                                 dark = dark,
                                 modifier = Modifier.weight(1f),
                                 onClick = { viewModel.setThemeColor(theme.name) },
@@ -133,6 +165,54 @@ internal fun AppearanceScreen(state: AppState, viewModel: AppViewModel) {
                         repeat(4 - rowThemes.size) { Spacer(Modifier.weight(1f)) }
                     }
                 }
+            }
+        }
+        GroupGap()
+        val customHex = formatThemeColorHex(state.customThemeColor)
+        GroupSurface(
+            position = GroupPosition.LAST,
+            modifier = Modifier.fillMaxWidth(),
+            onClick = { showCustomColorSheet = true },
+        ) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(start = 20.dp, end = 16.dp, top = 14.dp, bottom = 14.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                ThemePaletteDonut(
+                    scheme = customColorScheme(state.customThemeColor, dark),
+                    selected = customSelected,
+                    dark = dark,
+                    size = 44.dp,
+                    checkSize = 16.dp,
+                )
+                Spacer(Modifier.width(16.dp))
+                Column(modifier = Modifier.weight(1f).padding(end = 8.dp)) {
+                    Text(
+                        text = AppearanceText.CustomThemeColor,
+                        style = MaterialTheme.typography.titleMedium,
+                        color = if (customSelected) MaterialTheme.colorScheme.primary
+                        else MaterialTheme.colorScheme.onSurface,
+                        fontWeight = if (customSelected) FontWeight.SemiBold else FontWeight.Normal,
+                    )
+                    Text(
+                        text = when {
+                            customSelected && dynamicActive -> AppearanceText.customThemePendingSummary(customHex)
+                            customSelected -> AppearanceText.customThemeSelectedSummary(customHex)
+                            else -> AppearanceText.CustomThemeColorIdleSummary
+                        },
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(top = 3.dp),
+                    )
+                }
+                Icon(
+                    imageVector = TabIcons.ChevronRight,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.size(20.dp),
+                )
             }
         }
     }
@@ -184,6 +264,51 @@ private fun AppearanceSwitchRow(
 
 /** 四个色阶环绕主色；选中勾位于主色中心，选中态不靠额外彩色底板。 */
 @Composable
+internal fun ThemePaletteDonut(
+    scheme: ColorScheme,
+    selected: Boolean,
+    dark: Boolean,
+    size: Dp = 64.dp,
+    checkSize: Dp = 18.dp,
+) {
+    Box(modifier = Modifier.size(size + 4.dp), contentAlignment = Alignment.Center) {
+        Canvas(modifier = Modifier.size(size)) {
+            val outerRadius = min(this.size.width, this.size.height) / 2f
+            val innerRadius = outerRadius * 0.44f
+            val strokeWidth = outerRadius - innerRadius
+            val arcSize = Size(outerRadius * 2 - strokeWidth, outerRadius * 2 - strokeWidth)
+            val topLeft = Offset(strokeWidth / 2f, strokeWidth / 2f)
+            val colors = listOf(
+                scheme.primary,
+                scheme.primaryContainer,
+                scheme.secondaryContainer,
+                scheme.tertiaryContainer,
+            )
+            colors.forEachIndexed { index, color ->
+                drawArc(
+                    color = color,
+                    startAngle = -90f + index * 90f,
+                    sweepAngle = 90f,
+                    useCenter = false,
+                    style = Stroke(width = strokeWidth),
+                    size = arcSize,
+                    topLeft = topLeft,
+                )
+            }
+            drawCircle(color = scheme.primary, radius = innerRadius * 0.88f)
+        }
+        if (selected) {
+            Icon(
+                imageVector = Icons.Rounded.Check,
+                contentDescription = null,
+                tint = if (dark) Color(0xFF17191C) else Color.White,
+                modifier = Modifier.size(checkSize),
+            )
+        }
+    }
+}
+
+@Composable
 private fun ThemeDonutWheel(
     theme: AppThemeColor,
     selected: Boolean,
@@ -199,41 +324,11 @@ private fun ThemeDonutWheel(
             .selectable(selected = selected, onClick = onClick, role = Role.RadioButton)
             .padding(vertical = 8.dp),
     ) {
-        Box(modifier = Modifier.size(68.dp), contentAlignment = Alignment.Center) {
-            Canvas(modifier = Modifier.size(64.dp)) {
-                val outerRadius = min(size.width, size.height) / 2f
-                val innerRadius = outerRadius * 0.44f
-                val strokeWidth = outerRadius - innerRadius
-                val arcSize = Size(outerRadius * 2 - strokeWidth, outerRadius * 2 - strokeWidth)
-                val topLeft = Offset(strokeWidth / 2f, strokeWidth / 2f)
-                val colors = listOf(
-                    preview.primary,
-                    preview.primaryContainer,
-                    preview.secondaryContainer,
-                    preview.tertiaryContainer,
-                )
-                colors.forEachIndexed { index, color ->
-                    drawArc(
-                        color = color,
-                        startAngle = -90f + index * 90f,
-                        sweepAngle = 90f,
-                        useCenter = false,
-                        style = Stroke(width = strokeWidth),
-                        size = arcSize,
-                        topLeft = topLeft,
-                    )
-                }
-                drawCircle(color = preview.primary, radius = innerRadius * 0.88f)
-            }
-            if (selected) {
-                Icon(
-                    imageVector = Icons.Rounded.Check,
-                    contentDescription = null,
-                    tint = if (dark) Color(0xFF17191C) else Color.White,
-                    modifier = Modifier.size(18.dp),
-                )
-            }
-        }
+        ThemePaletteDonut(
+            scheme = preview,
+            selected = selected,
+            dark = dark,
+        )
         Text(
             text = theme.label,
             style = MaterialTheme.typography.labelMedium,

@@ -18,7 +18,11 @@ class ThemePreferences(context: Context) {
         floatingBottomBar = loadFloatingBottomBar(),
         showBottomBarLabels = loadShowBottomBarLabels(),
         predictiveBackEnabled = loadPredictiveBackEnabled(),
+        customThemeColor = loadCustomThemeColor(),
     )
+
+    fun loadCustomThemeColor(): Int =
+        normalizeCustomThemeColor(preferences.getInt(KEY_CUSTOM_THEME_COLOR, DEFAULT_CUSTOM_THEME_COLOR))
 
     fun loadMode(): String = normalizeThemeMode(
         preferences.getString(KEY_THEME_MODE, THEME_MODE_SYSTEM),
@@ -53,6 +57,7 @@ class ThemePreferences(context: Context) {
     fun save(settings: ThemeSettings) {
         preferences.edit()
             .putString(KEY_THEME, normalizeThemeColor(settings.themeColor))
+            .putInt(KEY_CUSTOM_THEME_COLOR, normalizeCustomThemeColor(settings.customThemeColor))
             .putString(KEY_THEME_MODE, normalizeThemeMode(settings.themeMode))
             .putBoolean(KEY_DYNAMIC_COLOR, settings.dynamicColor)
             .putBoolean(KEY_AMOLED, settings.amoled)
@@ -61,6 +66,10 @@ class ThemePreferences(context: Context) {
             .putBoolean(KEY_SHOW_BOTTOM_BAR_LABELS, settings.showBottomBarLabels)
             .putBoolean(KEY_PREDICTIVE_BACK, settings.predictiveBackEnabled)
             .apply()
+    }
+
+    fun saveCustomThemeColor(argb: Int) {
+        preferences.edit().putInt(KEY_CUSTOM_THEME_COLOR, normalizeCustomThemeColor(argb)).apply()
     }
 
     fun saveThemeMode(value: String) {
@@ -95,6 +104,7 @@ class ThemePreferences(context: Context) {
 
     private companion object {
         const val KEY_THEME = "theme_color"
+        const val KEY_CUSTOM_THEME_COLOR = "custom_theme_color"
         const val KEY_THEME_MODE = "theme_mode"
         const val KEY_DYNAMIC_COLOR = "dynamic_color"
         const val KEY_AMOLED = "amoled"

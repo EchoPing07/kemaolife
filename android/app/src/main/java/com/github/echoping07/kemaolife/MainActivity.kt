@@ -99,6 +99,7 @@ class MainActivity : ComponentActivity() {
             val state by viewModel.state.collectAsStateWithLifecycle()
             KemaolifeTheme(
                 themeColor = state.themeColor,
+                customThemeColor = state.customThemeColor,
                 themeMode = state.themeMode,
                 dynamicColor = state.dynamicColor,
                 amoled = state.amoled,

@@ -1,9 +1,15 @@
 package com.github.echoping07.kemaolife.data
 
+import java.util.Locale
+
 const val THEME_MODE_SYSTEM = "SYSTEM"
 const val THEME_MODE_LIGHT = "LIGHT"
 const val THEME_MODE_DARK = "DARK"
 const val DEFAULT_THEME_COLOR = "MONOCHROMATIC"
+const val THEME_COLOR_CUSTOM = "CUSTOM"
+
+/** 自定义主题色的默认种子色（青绿），与 8 个 AOSP 预设区分明显；始终为不透明 ARGB。 */
+const val DEFAULT_CUSTOM_THEME_COLOR: Int = 0xFF26A69A.toInt()
 
 /** 莫奈取色的唯一默认来源；偏好里已显式存过 false 时仍以本机值为准。 */
 const val DEFAULT_DYNAMIC_COLOR = true
@@ -35,10 +41,11 @@ data class ThemeSettings(
     val floatingBottomBar: Boolean = DEFAULT_FLOATING_BOTTOM_BAR,
     val showBottomBarLabels: Boolean = DEFAULT_SHOW_BOTTOM_BAR_LABELS,
     val predictiveBackEnabled: Boolean = DEFAULT_PREDICTIVE_BACK,
+    val customThemeColor: Int = DEFAULT_CUSTOM_THEME_COLOR,
 )
 
 private val supportedThemeColors = setOf(
-    // AOSP ThemePicker/ThemesStub 的 8 个基础色；旧值通过 legacyThemeColorAliases 迁移。
+    // AOSP ThemePicker/ThemesStub 的 8 个基础色 + 用户自定义色；旧值通过 legacyThemeColorAliases 迁移。
     "MONOCHROMATIC",
     "RED",
     "ORANGE",
@@ -47,6 +54,7 @@ private val supportedThemeColors = setOf(
     "BLUE",
     "PURPLE",
     "MAGENTA",
+    THEME_COLOR_CUSTOM,
 )
 
 private val legacyThemeColorAliases = mapOf(
@@ -75,3 +83,35 @@ fun isDarkTheme(themeMode: String, systemDark: Boolean): Boolean = when (normali
     THEME_MODE_DARK -> true
     else -> systemDark
 }
+
+/** 自定义主题色强制为不透明 ARGB，避免透明通道污染色板派生。 */
+fun normalizeCustomThemeColor(argb: Int): Int = (argb and 0x00FFFFFF) or (0xFF shl 24)
+
+/** 将自定义主题色格式化为大写 `#RRGGBB` 文本，固定使用 `Locale.US`。 */
+fun formatThemeColorHex(argb: Int): String =
+    String.format(Locale.US, "#%06X", argb and 0x00FFFFFF)
+
+/**
+ * 解析用户输入或粘贴的十六进制颜色（支持 `#RRGGBB`、`RRGGBB`、`#RGB`、`RGB`）。
+ * 非法长度、非十六进制字符或空白返回 null，不抛异常。
+ */
+fun parseThemeColorHex(input: String?): Int? {
+    val raw = input?.trim()?.removePrefix("#") ?: return null
+    val hex = when (raw.length) {
+        3 -> buildString(6) {
+            raw.forEach { ch ->
+                if (!ch.isAsciiHexDigit()) return null
+                append(ch).append(ch)
+            }
+        }
+        6 -> {
+            if (!raw.all { it.isAsciiHexDigit() }) return null
+            raw
+        }
+        else -> return null
+    }
+    return normalizeCustomThemeColor(hex.toInt(16))
+}
+
+private fun Char.isAsciiHexDigit(): Boolean =
+    this in '0'..'9' || this in 'a'..'f' || this in 'A'..'F'

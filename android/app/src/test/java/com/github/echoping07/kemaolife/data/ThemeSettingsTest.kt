@@ -2,6 +2,7 @@ package com.github.echoping07.kemaolife.data
 
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -19,6 +20,7 @@ class ThemeSettingsTest {
                 floatingBottomBar = true,
                 showBottomBarLabels = true,
                 predictiveBackEnabled = true,
+                customThemeColor = DEFAULT_CUSTOM_THEME_COLOR,
             ),
             ThemeSettings(),
         )
@@ -111,5 +113,34 @@ class ThemeSettingsTest {
         assertTrue(isDarkTheme(THEME_MODE_DARK, systemDark = true))
         assertTrue(isDarkTheme(THEME_MODE_SYSTEM, systemDark = true))
         assertFalse(isDarkTheme(THEME_MODE_SYSTEM, systemDark = false))
+    }
+
+    @Test
+    fun customThemeColorSurvivesNormalization() {
+        assertEquals(THEME_COLOR_CUSTOM, normalizeThemeColor("CUSTOM"))
+        assertEquals(THEME_COLOR_CUSTOM, normalizeThemeColor(" custom "))
+    }
+
+    @Test
+    fun normalizeCustomThemeColorAlwaysForcesOpaqueAlpha() {
+        assertEquals(0xFF26A69A.toInt(), normalizeCustomThemeColor(0x0026A69A))
+        assertEquals(0xFF123456.toInt(), normalizeCustomThemeColor(0x40123456))
+        assertEquals(0xFF000000.toInt(), normalizeCustomThemeColor(0x00000000))
+    }
+
+    @Test
+    fun formatAndParseThemeColorHexRoundTrip() {
+        assertEquals("#26A69A", formatThemeColorHex(0xFF26A69A.toInt()))
+        assertEquals("#00050A", formatThemeColorHex(0x1200050A))
+        assertEquals(0xFF26A69A.toInt(), parseThemeColorHex("#26A69A"))
+        assertEquals(0xFF26A69A.toInt(), parseThemeColorHex("  26a69a "))
+        assertEquals(0xFFAABBCC.toInt(), parseThemeColorHex("#abc"))
+        assertEquals(0xFFFF0088.toInt(), parseThemeColorHex("f08"))
+    }
+
+    @Test
+    fun parseThemeColorHexRejectsInvalidInputs() {
+        listOf(null, "", "   ", "#", "#12", "#1234", "#12345", "#1234567", "#FF26A69A", "#GGGGGG", "xyz")
+            .forEach { assertNull("expected null for <$it>", parseThemeColorHex(it)) }
     }
 }
