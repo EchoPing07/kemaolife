@@ -8,6 +8,9 @@ import androidx.compose.animation.ExitTransition
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.animateDpAsState
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -15,6 +18,8 @@ import androidx.compose.animation.scaleIn
 import androidx.compose.animation.scaleOut
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
@@ -50,6 +55,7 @@ import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
@@ -879,7 +885,7 @@ private fun CampusSettings(
     }
 }
 
-/** 教务 / 电费 / 校园网右下角纯图标悬浮保存按钮；保存成功后短暂切换为完成态图标。 */
+/** 教务 / 电费 / 校园网右下角纯图标悬浮保存按钮；具备入场弹跳、按压形变、保存后圆角与图标弹性切换动效。 */
 @Composable
 private fun SaveFab(
     saved: Boolean,
@@ -887,12 +893,71 @@ private fun SaveFab(
     onSave: () -> Unit,
 ) {
     val motionEnabled = animationsEnabled()
-    LaunchedEffect(saved) {
-        if (saved) {
-            kotlinx.coroutines.delay(1800)
-            onSavedShown()
+    val interactionSource = remember { MutableInteractionSource() }
+    val pressed by interactionSource.collectIsPressedAsState()
+    var tapCount by remember { mutableIntStateOf(0) }
+    val latestSaved by rememberUpdatedState(saved)
+    val latestOnSavedShown by rememberUpdatedState(onSavedShown)
+
+    // 离页时若仍处在「已保存」短暂态，先消费掉避免切入另一个二级页时误闪完成图标。
+    DisposableEffect(Unit) {
+        onDispose {
+            if (latestSaved) latestOnSavedShown()
         }
     }
+
+    // 入场弹性显现：随二级页滑入轻快弹出，关闭动画时直接满尺寸呈现。
+    val enterScale = remember { Animatable(if (motionEnabled) 0.72f else 1f) }
+    val enterAlpha = remember { Animatable(if (motionEnabled) 0f else 1f) }
+    LaunchedEffect(motionEnabled) {
+        if (motionEnabled) {
+            kotlinx.coroutines.delay(60)
+            kotlinx.coroutines.coroutineScope {
+                launch {
+                    enterScale.animateTo(1f, spring(dampingRatio = 0.58f, stiffness = 460f))
+                }
+                launch {
+                    enterAlpha.animateTo(1f, tween(180))
+                }
+            }
+        } else {
+            enterScale.snapTo(1f)
+            enterAlpha.snapTo(1f)
+        }
+    }
+
+    // 保存成功后的确认弹跳脉冲；重复点击保存时同样给出即时回弹并重置展示计时。
+    val pulseScale = remember { Animatable(1f) }
+    LaunchedEffect(saved, tapCount) {
+        if (saved) {
+            if (motionEnabled) {
+                pulseScale.animateTo(1.10f, tween(95, easing = FastOutSlowInEasing))
+                pulseScale.animateTo(1f, spring(dampingRatio = 0.48f, stiffness = 460f))
+            } else {
+                pulseScale.snapTo(1f)
+            }
+            kotlinx.coroutines.delay(1800)
+            latestOnSavedShown()
+        }
+    }
+
+    val pressScale by animateFloatAsState(
+        targetValue = if (pressed) 0.90f else 1f,
+        animationSpec = if (motionEnabled) spring(dampingRatio = 0.58f, stiffness = 780f) else tween(0),
+        label = "saveFabPressScale",
+    )
+    // 圆角随状态形变：待保存 16dp 圆角方、按压收紧到 12dp、保存成功后弹性变身为 28dp 完整圆形。
+    val cornerRadius by animateDpAsState(
+        targetValue =
+            when {
+                saved && pressed -> 22.dp
+                saved -> 28.dp
+                pressed -> 12.dp
+                else -> 16.dp
+            },
+        animationSpec = if (motionEnabled) spring(dampingRatio = 0.58f, stiffness = 560f) else tween(0),
+        label = "saveFabCorner",
+    )
     val containerColor by animateColorAsState(
         targetValue =
             if (saved) {
@@ -900,7 +965,7 @@ private fun SaveFab(
             } else {
                 MaterialTheme.colorScheme.primary
             },
-        animationSpec = if (motionEnabled) tween(200) else tween(0),
+        animationSpec = if (motionEnabled) spring(dampingRatio = 0.80f, stiffness = 420f) else tween(0),
         label = "saveFabContainer",
     )
     val contentColor by animateColorAsState(
@@ -910,21 +975,42 @@ private fun SaveFab(
             } else {
                 MaterialTheme.colorScheme.onPrimary
             },
-        animationSpec = if (motionEnabled) tween(200) else tween(0),
+        animationSpec = if (motionEnabled) spring(dampingRatio = 0.80f, stiffness = 420f) else tween(0),
         label = "saveFabContent",
     )
+    val totalScale = enterScale.value * pressScale * pulseScale.value
+
     FloatingActionButton(
-        onClick = onSave,
-        shape = appShape(16.dp),
+        onClick = {
+            tapCount++
+            onSave()
+        },
+        interactionSource = interactionSource,
+        shape = appShape(cornerRadius),
         containerColor = containerColor,
         contentColor = contentColor,
+        modifier =
+            Modifier.graphicsLayer {
+                scaleX = totalScale
+                scaleY = totalScale
+                alpha = enterAlpha.value
+            },
     ) {
         AnimatedContent(
             targetState = saved,
             transitionSpec = {
                 if (motionEnabled) {
-                    (fadeIn(tween(180)) + scaleIn(tween(180), initialScale = 0.78f)) togetherWith
-                        (fadeOut(tween(120)) + scaleOut(tween(120), targetScale = 0.78f))
+                    (
+                        fadeIn(tween(180)) +
+                            scaleIn(
+                                animationSpec = spring(dampingRatio = 0.54f, stiffness = 520f),
+                                initialScale = 0.55f,
+                            )
+                    ) togetherWith
+                        (
+                            fadeOut(tween(110)) +
+                                scaleOut(tween(110), targetScale = 0.65f)
+                        )
                 } else {
                     EnterTransition.None togetherWith ExitTransition.None
                 }
@@ -932,7 +1018,7 @@ private fun SaveFab(
             label = "saveFabIcon",
         ) { isSaved ->
             Icon(
-                imageVector = if (isSaved) TabIcons.CircleCheck else TabIcons.Check,
+                imageVector = if (isSaved) TabIcons.Check else TabIcons.Save,
                 contentDescription = stringResource(if (isSaved) R.string.save_done else R.string.action_save),
                 modifier = Modifier.size(24.dp),
             )

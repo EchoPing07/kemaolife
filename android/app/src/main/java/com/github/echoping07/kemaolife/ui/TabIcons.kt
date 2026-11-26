@@ -171,6 +171,13 @@ internal object TabIcons {
         "M4 13a8.1 8.1 0 0 0 15.5 2m.5 4v-4h-4",
     ))
 
+    // Tabler `device-floppy`：设置二级页右下角悬浮保存按钮。
+    val Save = icon("DeviceFloppy", listOf(
+        "M6 4h10l4 4v10a2 2 0 0 1 -2 2h-12a2 2 0 0 1 -2 -2v-12a2 2 0 0 1 2 -2",
+        "M10 14a2 2 0 1 0 4 0a2 2 0 1 0 -4 0",
+        "M14 4l0 4l-6 0l0 -4",
+    ))
+
     val Check = icon("Check", listOf("M5 12l5 5l10 -10"))
     val CircleCheck = icon("CircleCheck", listOf(
         "M3 12a9 9 0 1 0 18 0a9 9 0 1 0 -18 0",
