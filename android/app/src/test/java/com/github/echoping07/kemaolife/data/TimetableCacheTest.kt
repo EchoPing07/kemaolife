@@ -29,7 +29,8 @@ class TimetableCacheTest {
                         periods = "1-4",
                         time = "08:00~09:40",
                         teacher = "<教师>",
-                        location = "<校区>_<楼栋>_<楼层>_<房间>",
+                        location = "6号楼-219植保实训室（华南园艺植物协同创新中心）",
+                        shortLocation = "6号楼-219",
                         weeksText = "1-16",
                     ),
                 ),
@@ -50,6 +51,7 @@ class TimetableCacheTest {
         // 冷启动镜像必须保留完整节次与教师，否则周视图会退回 1-2 且丢教师。
         assertEquals("1-4", entry.periods)
         assertEquals("<教师>", entry.teacher)
+        assertEquals("6号楼-219", entry.shortLocation)
         assertEquals("2026-11-08T09:00:00+08:00", cached.syncedAt)
         assertTrue(TimetableCache.encode(week, "2026-11-08T09:00:00+08:00").contains("\"version\":${TimetableCache.VERSION}"))
     }

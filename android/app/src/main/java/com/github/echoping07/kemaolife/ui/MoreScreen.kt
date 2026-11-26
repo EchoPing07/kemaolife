@@ -144,7 +144,7 @@ private fun TodayOverview(state: AppState, viewModel: AppViewModel) {
             day.entries.isEmpty() -> PlaceholderRow(stringResource(R.string.timetable_no_class))
 
             else -> day.entries.forEach { entry ->
-                EntryRow(entry)
+                EntryRow(entry, optimizeLocation = state.optimizeLocationDisplay)
             }
         }
     }

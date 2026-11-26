@@ -60,10 +60,23 @@ type wakeUpRow struct {
 	line     string
 }
 
-// ExportWakeUpCSV 把快照里的整学期课节导出为 WakeUp 课程表可导入的 CSV。
+// ExportOptions 控制导出 CSV 的可选呈现口径（默认全部关闭，保留上游原文）。
+type ExportOptions struct {
+	// OptimizeLocation 为 true 时，CSV 的「地点」列写入 ShortenLocation 精简后的课室名。
+	OptimizeLocation bool
+}
+
+// ExportWakeUpCSV 把快照里的整学期课节导出为 WakeUp 课程表可导入的 CSV（保留原始地点）。
 //
 // 纯函数：不发请求、不读时钟、不写文件（AGENTS §6）。
 func ExportWakeUpCSV(snap *Snapshot) (string, error) {
+	return ExportWakeUpCSVWithOptions(snap, ExportOptions{})
+}
+
+// ExportWakeUpCSVWithOptions 按可选参数把快照里的整学期课节导出为 WakeUp 课程表 CSV。
+//
+// 纯函数：不发请求、不读时钟、不写文件（AGENTS §6）。
+func ExportWakeUpCSVWithOptions(snap *Snapshot, opts ExportOptions) (string, error) {
 	if snap == nil {
 		return "", model.NewError(model.CodeSnapshotMissing, "本地课表没有课程可导出，请先同步一次")
 	}
@@ -78,6 +91,10 @@ func ExportWakeUpCSV(snap *Snapshot) (string, error) {
 		if weeks == "" {
 			continue
 		}
+		location := lesson.Location
+		if opts.OptimizeLocation {
+			location = ShortenLocation(location)
+		}
 		// 「第 1、3 节」这种不连续节次不能压成 1-3（会凭空多出第 2 节），
 		// 拆成多行，每行一个连续区间。
 		for _, group := range contiguousPeriods(ExpandPeriods(lesson.Periods)) {
@@ -86,7 +103,7 @@ func ExportWakeUpCSV(snap *Snapshot) (string, error) {
 				start:    group[0],
 				end:      group[1],
 				name:     lesson.Name,
-				location: lesson.Location,
+				location: location,
 			}
 			row.line = strings.Join([]string{
 				csvCell(lesson.Name),
@@ -94,7 +111,7 @@ func ExportWakeUpCSV(snap *Snapshot) (string, error) {
 				strconv.Itoa(row.start),
 				strconv.Itoa(row.end),
 				csvCellOrNone(lesson.Teacher),
-				csvCellOrNone(lesson.Location),
+				csvCellOrNone(location),
 				weeks,
 			}, ",")
 			// 上游同一门课可能因多时段 / 重复行给出完全相同的课节，去重后不重复占格。

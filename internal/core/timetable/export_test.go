@@ -155,6 +155,43 @@ func TestExportFilename(t *testing.T) {
 	}
 }
 
+func TestExportWakeUpCSVOptimizeLocationOption(t *testing.T) {
+	snap := &Snapshot{
+		Version:     SnapshotVersion,
+		SyncedAt:    time.Date(2026, 11, 9, 21, 10, 2, 0, time.Local),
+		Week1Monday: model.Date{Year: 2026, Month: 8, Day: 31},
+		SlotTimes:   []string{"08:30~10:00"},
+		LastWeek:    16,
+		Lessons: []Lesson{
+			{
+				Name:      "植物保护",
+				Periods:   "1-2",
+				Weekday:   1,
+				Weeks:     seq(1, 5),
+				Teacher:   "教师甲",
+				Location:  "6号楼-219植保实训室（华南园艺植物协同创新中心）",
+				WeeksText: "1-5周",
+			},
+		},
+	}
+
+	rawCSV, err := ExportWakeUpCSVWithOptions(snap, ExportOptions{OptimizeLocation: false})
+	if err != nil {
+		t.Fatalf("ExportWakeUpCSVWithOptions(false): %v", err)
+	}
+	if !strings.Contains(rawCSV, "植物保护,1,1,2,教师甲,6号楼-219植保实训室（华南园艺植物协同创新中心）,1-5") {
+		t.Errorf("关闭优化时应保留原始地点:\n%s", rawCSV)
+	}
+
+	optCSV, err := ExportWakeUpCSVWithOptions(snap, ExportOptions{OptimizeLocation: true})
+	if err != nil {
+		t.Fatalf("ExportWakeUpCSVWithOptions(true): %v", err)
+	}
+	if !strings.Contains(optCSV, "植物保护,1,1,2,教师甲,6号楼-219,1-5") {
+		t.Errorf("开启优化时应写入精简地点:\n%s", optCSV)
+	}
+}
+
 func firstLine(s string) string {
 	if i := strings.Index(s, "\r\n"); i >= 0 {
 		return s[:i]

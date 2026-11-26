@@ -517,6 +517,66 @@ func TestTimetableExportReturnsCSVAndDataTime(t *testing.T) {
 	}
 }
 
+func TestTimetableShortLocationAndExportOptimizeOption(t *testing.T) {
+	s := testSession(t, initConfig{})
+	syncedAt := time.Date(2026, 11, 9, 21, 10, 2, 0, time.Local)
+	snap := &timetable.Snapshot{
+		Version:     timetable.SnapshotVersion,
+		SyncedAt:    syncedAt,
+		Week1Monday: model.Date{Year: 2026, Month: 8, Day: 31},
+		SlotTimes:   []string{"08:30~10:00"},
+		LastWeek:    16,
+		Lessons: []timetable.Lesson{
+			{
+				Name:      "植物保护",
+				Periods:   "1-2",
+				Weekday:   1,
+				Weeks:     []int{1},
+				Teacher:   "教师甲",
+				Location:  "6号楼-219植保实训室（华南园艺植物协同创新中心）",
+				WeeksText: "1周",
+			},
+		},
+	}
+	if err := timetable.SaveSnapshot(s.deps.Store, snap); err != nil {
+		t.Fatal(err)
+	}
+
+	weekEnv := decode(t, Call(`{"op":"timetable.week","week":1}`))
+	if weekEnv["ok"] != true {
+		t.Fatalf("timetable.week 失败: %v", weekEnv)
+	}
+	weekData := weekEnv["data"].(map[string]any)
+	days := weekData["days"].([]any)
+	mon := days[0].(map[string]any)
+	entries := mon["entries"].([]any)
+	first := entries[0].(map[string]any)
+	if first["location"] != "6号楼-219植保实训室（华南园艺植物协同创新中心）" {
+		t.Errorf("location 应保留原文，got %v", first["location"])
+	}
+	if first["shortLocation"] != "6号楼-219" {
+		t.Errorf("shortLocation = %v, want 6号楼-219", first["shortLocation"])
+	}
+
+	defaultExport := decode(t, Call(`{"op":"timetable.export"}`))
+	if defaultExport["ok"] != true {
+		t.Fatalf("默认导出失败: %v", defaultExport)
+	}
+	rawCSV := defaultExport["data"].(map[string]any)["csv"].(string)
+	if !strings.Contains(rawCSV, "植物保护,1,1,2,教师甲,6号楼-219植保实训室（华南园艺植物协同创新中心）,1") {
+		t.Errorf("默认导出应保留原始地点:\n%s", rawCSV)
+	}
+
+	optExport := decode(t, Call(`{"op":"timetable.export","optimizeLocation":true}`))
+	if optExport["ok"] != true {
+		t.Fatalf("优化导出失败: %v", optExport)
+	}
+	optCSV := optExport["data"].(map[string]any)["csv"].(string)
+	if !strings.Contains(optCSV, "植物保护,1,1,2,教师甲,6号楼-219,1") {
+		t.Errorf("开启 optimizeLocation 时应导出精简地点:\n%s", optCSV)
+	}
+}
+
 // 没有快照时导出回 3001（与课表查询同口径），不返回空 CSV 骗「导出成功」。
 func TestTimetableExportWithoutSnapshotReturns3001(t *testing.T) {
 	testSession(t, initConfig{})

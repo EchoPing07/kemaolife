@@ -242,8 +242,9 @@ internal fun ExpressiveLoadingIndicator(
 
 /** 今日课表条目（「更多」页用）。 */
 @Composable
-internal fun EntryRow(entry: Entry) {
+internal fun EntryRow(entry: Entry, optimizeLocation: Boolean = true) {
     val palette = coursePalette(entry.name)
+    val shownLocation = entry.displayLocation(optimizeLocation)
     Row(
         modifier =
             Modifier
@@ -269,7 +270,7 @@ internal fun EntryRow(entry: Entry) {
                 overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
             )
             val second =
-                listOf(entry.location, entry.teacher)
+                listOf(shownLocation, entry.teacher)
                     .filter { it.isNotBlank() }
                     .joinToString(" · ")
             if (second.isNotBlank()) {

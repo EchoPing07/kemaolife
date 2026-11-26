@@ -22,12 +22,15 @@ type ExportResult struct {
 	LessonCount int `json:"lessonCount"`
 }
 
+// ExportOptions 控制课表导出的可选行为；零值保留原始课室名。
+type ExportOptions = timetable.ExportOptions
+
 // ExportTimetableCSV 把本地快照导出成 WakeUp 课程表可导入的 CSV。
 //
 // 只读缓存（CacheOnly，0 请求）：导出是「把这台机器上已有的课表带走」，
 // 不是一次查询；联网刷新仍由独立的 timetable.sync 承担（docs/android.md）。
 // 因此这里与课表查询一样不要求 HTTP 端口，也不需要 ctx / cfg。
-func ExportTimetableCSV(_ context.Context, d Deps, _ model.Config) (ExportResult, error) {
+func ExportTimetableCSV(_ context.Context, d Deps, _ model.Config, opts ...ExportOptions) (ExportResult, error) {
 	if err := ensureDeps(d, false, true); err != nil {
 		return ExportResult{}, err
 	}
@@ -38,7 +41,11 @@ func ExportTimetableCSV(_ context.Context, d Deps, _ model.Config) (ExportResult
 		return ExportResult{}, cacheMiss(CacheOnly, err)
 	}
 
-	csvText, err := timetable.ExportWakeUpCSV(snap)
+	var opt ExportOptions
+	if len(opts) > 0 {
+		opt = opts[0]
+	}
+	csvText, err := timetable.ExportWakeUpCSVWithOptions(snap, opt)
 	if err != nil {
 		return ExportResult{}, err
 	}

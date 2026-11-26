@@ -411,7 +411,7 @@ private fun EducationSettings(
         }
 
         SettingsGroupLabel(stringResource(R.string.settings_group_advanced))
-        SettingsFormCard {
+        SettingsFormCard(position = GroupPosition.FIRST) {
             IntervalField(
                 value = interval,
                 onValueChange = { interval = it },
@@ -422,6 +422,25 @@ private fun EducationSettings(
                         AppPreferences.MIN_TIMETABLE_INTERVAL,
                     ),
                 minimum = AppPreferences.MIN_TIMETABLE_INTERVAL,
+            )
+        }
+        GroupGap()
+        GroupSurface(position = GroupPosition.MIDDLE, modifier = Modifier.fillMaxWidth()) {
+            // 开关即改即生效，不必等「保存」：它不影响凭据，只控制课表紧凑位的展示口径。
+            SettingsSwitchRow(
+                title = stringResource(R.string.field_optimize_location_display),
+                supporting = stringResource(R.string.field_optimize_location_display_hint),
+                checked = state.optimizeLocationDisplay,
+                onCheckedChange = viewModel::setOptimizeLocationDisplay,
+            )
+        }
+        GroupGap()
+        GroupSurface(position = GroupPosition.LAST, modifier = Modifier.fillMaxWidth()) {
+            SettingsSwitchRow(
+                title = stringResource(R.string.field_optimize_location_export),
+                supporting = stringResource(R.string.field_optimize_location_export_hint),
+                checked = state.optimizeLocationExport,
+                onCheckedChange = viewModel::setOptimizeLocationExport,
             )
         }
     }

@@ -46,12 +46,13 @@ func Query(snap *Snapshot, date model.Date) model.DaySchedule {
 			continue
 		}
 		entries = append(entries, model.Entry{
-			Name:      lesson.Name,
-			Periods:   lesson.Periods,
-			Time:      slotTimeOf(lesson.Periods),
-			Teacher:   lesson.Teacher,
-			Location:  lesson.Location,
-			WeeksText: lesson.WeeksText,
+			Name:          lesson.Name,
+			Periods:       lesson.Periods,
+			Time:          slotTimeOf(lesson.Periods),
+			Teacher:       lesson.Teacher,
+			Location:      lesson.Location,
+			ShortLocation: ShortenLocation(lesson.Location),
+			WeeksText:     lesson.WeeksText,
 		})
 	}
 

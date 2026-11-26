@@ -200,7 +200,7 @@ func Call(reqJSON string) string { /* ... */ }
 | `timetable.week` | `week`（可选，省略 = 当周） | `kemaolife timetable week [N]` | `CacheOnly` |
 | `timetable.date` | `date`（`YYYY-MM-DD`） | `kemaolife timetable date` | `CacheOnly` |
 | `timetable.probe` | — | — | 设置页「教务」详情页「测试」 |
-| `timetable.export` | — | — | 课表页「导出课表」（WakeUp CSV，见 §7.2） |
+| `timetable.export` | `optimizeLocation`（可选 bool，缺省 `false`） | — | 课表页「导出课表」（WakeUp CSV，见 §7.2） |
 | `electricity.report` | `month`（`YYYY-MM`，可选） | `kemaolife electricity` | |
 | `electricity.probe` | `month`（可选） | — | 设置页「电费」详情页「测试」 |
 | `campusnet.status` | — | — | |
@@ -277,6 +277,7 @@ Windows 端不暴露 CLI / JSON 信封，五页主窗口、托盘菜单、悬浮
       "time": "<上课时间>",
       "teacher": "<教师>",
       "location": "<地点>",
+      "shortLocation": "<精简地点，可选>",
       "weeksText": "<周次文本>"
     }
   ]
@@ -292,7 +293,7 @@ Windows 端不暴露 CLI / JSON 信封，五页主窗口、托盘菜单、悬浮
 | `inSemester` | 是否在本学期范围 |
 | `entries[]` | 当天课节；空数组 = 当天没课 |
 
-`entries[].time` 覆盖 `periods` 的全部小节：取起始小节所在大节的开始时间与结束小节所在大节的结束时间，连上多个大节时自动跨越（如 `5-8` → `14:00~16:50`）；不连续节次取首尾小节的覆盖区间，节次超出作息表时为空串。`entries[]` 按 `periods` 起始节次升序；同一节次多门课按课程名排序，保证输出稳定可 diff。`entries[].location` 是该课节所属时段的真实地点，不是整门课所有地点的汇总；多个时段的同地点重复项不得跨时段去重。`entries[].weeksText` 同样按所属时段生成。上游时间与地点片段无法可靠配对时，同步按 `4002` 报错，不返回地点不可信的快照。
+`entries[].time` 覆盖 `periods` 的全部小节：取起始小节所在大节的开始时间与结束小节所在大节的结束时间，连上多个大节时自动跨越（如 `5-8` → `14:00~16:50`）；不连续节次取首尾小节的覆盖区间，节次超出作息表时为空串。`entries[]` 按 `periods` 起始节次升序；同一节次多门课按课程名排序，保证输出稳定可 diff。`entries[].location` 是该课节所属时段的真实地点，不是整门课所有地点的汇总；多个时段的同地点重复项不得跨时段去重。`entries[].shortLocation` 是可选字段，由 `core` 按课室命名规则由 `location` 纯函数精简得出（如去掉括号挂牌名与房号后的实训室后缀；无法精简时等于 `location`，原始地点为空时省略），供紧凑网格视图按需展示，不修改快照原文、不升快照 `Version`，老客户端忽略即可。`entries[].weeksText` 同样按所属时段生成。上游时间与地点片段无法可靠配对时，同步按 `4002` 报错，不返回地点不可信的快照。
 
 快照结构：
 
@@ -309,7 +310,7 @@ Windows 端不暴露 CLI / JSON 信封，五页主窗口、托盘菜单、悬浮
 
 ### 7.2 课表导出（WakeUp 课程表 CSV）
 
-`timetable.export`（Android 门面，无 CLI 对应）把本地快照里的**整学期**课节导出为 WakeUp 课程表可导入的 CSV；只读缓存（`CacheOnly`，0 请求），不联网、不触发刷新。
+`timetable.export`（Android 门面，无 CLI 对应）把本地快照里的**整学期**课节导出为 WakeUp 课程表可导入的 CSV；只读缓存（`CacheOnly`，0 请求），不联网、不触发刷新。支持可选参数 `optimizeLocation`（bool，缺省 `false`）：为 `true` 时「地点」列写入 `core` 精简后的课室名，排序与去重随之按写入地点计算；为 `false`（或缺省）时保留原始地点。
 
 格式以 WakeUp 官方文档为准（<https://wakeup.fun/doc/import_from_csv.html> 「五、课表正确填写示范」）：
 
