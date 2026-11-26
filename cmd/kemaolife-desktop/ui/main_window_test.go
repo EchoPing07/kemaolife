@@ -281,3 +281,67 @@ func TestElectricityChartSwitchesBetweenBarAndLine(t *testing.T) {
 		t.Fatal("折线图渲染失败")
 	}
 }
+
+func TestMainEntryLocationDisplayOptions(t *testing.T) {
+	entry := model.Entry{
+		Location:      "10-302软件实训室",
+		ShortLocation: "10-302",
+	}
+	if got := mainEntryLocation(entry, timetableDisplayOptions{optimizeLocation: true, prefixLocationAt: true}); got != "@10-302" {
+		t.Fatalf("默认优化+@ = %q, want @10-302", got)
+	}
+	if got := mainEntryLocation(entry, timetableDisplayOptions{optimizeLocation: true, prefixLocationAt: false}); got != "10-302" {
+		t.Fatalf("仅优化 = %q, want 10-302", got)
+	}
+	if got := mainEntryLocation(entry, timetableDisplayOptions{optimizeLocation: false, prefixLocationAt: true}); got != "@10-302软件实训室" {
+		t.Fatalf("仅@ = %q, want @10-302软件实训室", got)
+	}
+	if got := mainEntryLocation(model.Entry{Location: "@A-101"}, timetableDisplayOptions{optimizeLocation: true, prefixLocationAt: true}); got != "@A-101" {
+		t.Fatalf("已有@不应重复添加: got %q", got)
+	}
+	if got := mainEntryLocation(model.Entry{}, timetableDisplayOptions{optimizeLocation: true, prefixLocationAt: true}); got != "" {
+		t.Fatalf("空地点不应输出@: got %q", got)
+	}
+}
+
+func TestTimetableAndTodayRespectLocationDisplaySettings(t *testing.T) {
+	entry := model.Entry{
+		Name:          "示例课程",
+		Periods:       "1-2",
+		Time:          "08:30~10:00",
+		Location:      "10-302软件实训室",
+		ShortLocation: "10-302",
+		Teacher:       "示例教师",
+	}
+
+	// 默认：课室显示优化=开、课室前显示@=开、过长隐藏=关。
+	for _, page := range []int{mainPageToday, mainPageTimetable} {
+		w := testMainWindow(page)
+		w.state.Today.Entries = []model.Entry{entry}
+		w.state.Days[0].Entries = []model.Entry{entry}
+		tt := myui.NewTester(w.view, 1180, 760)
+		if !tt.HasText("@10-302") {
+			t.Errorf("page=%d 默认应展示精简带@课室；当前文本：%q", page, tt.Texts())
+		}
+		// 课程详情弹窗始终显示原始完整地点，不加 @。
+		w.openCourseDetail(w.state.Today, entry)
+		ttDetail := myui.NewTester(w.view, 1180, 760)
+		if !ttDetail.HasText("10-302软件实训室") {
+			t.Errorf("page=%d 课程详情弹窗应展示原始完整地点；当前文本：%q", page, ttDetail.Texts())
+		}
+	}
+
+	// 关闭优化与 @，开启过长隐藏：展示原始地点且不带 @。
+	for _, page := range []int{mainPageToday, mainPageTimetable} {
+		w := testMainWindow(page)
+		w.state.Today.Entries = []model.Entry{entry}
+		w.state.Days[0].Entries = []model.Entry{entry}
+		w.state.SettingsForm.OptimizeLocationDisplay = false
+		w.state.SettingsForm.PrefixLocationAt = false
+		w.state.SettingsForm.HideTimetableOverflow = true
+		tt := myui.NewTester(w.view, 1180, 760)
+		if !tt.HasText("10-302软件实训室") || tt.HasText("@10-302") {
+			t.Errorf("page=%d 关闭优化与@后应展示原始地点；当前文本：%q", page, tt.Texts())
+		}
+	}
+}

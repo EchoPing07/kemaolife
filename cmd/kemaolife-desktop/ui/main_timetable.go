@@ -227,6 +227,7 @@ func (w *mainWindow) timetableGrid(c *myui.Context) {
 						FontSize(11).TextColor(dateColor).FontFeatures("tnum")
 				}
 
+				displayOpt := w.timetableDisplay()
 				for blockIndex, block := range w.courseBlocks() {
 					block := block
 					columnW := dayW / float32(block.columns)
@@ -234,8 +235,10 @@ func (w *mainWindow) timetableGrid(c *myui.Context) {
 					y := headerH + float32(block.from-1)*rowH + 3
 					width := columnW - 8
 					height := float32(block.to-block.from+1)*rowH - 6
+					spanRows := block.to - block.from + 1
 					cc := courseColorFor(block.entry.Name, t.Dark)
 					detail := mainDetailText(w.state.Days[block.day], block.entry)
+					shownLocation := mainEntryLocation(block.entry, displayOpt)
 					course := myui.ButtonBase(c.Key(struct{ day, from, column, index int }{
 						block.day, block.from, block.column, blockIndex,
 					})).Absolute().
@@ -250,13 +253,30 @@ func (w *mainWindow) timetableGrid(c *myui.Context) {
 						course.Background(cc.fill)
 					}
 					course.Children(func() {
-						myui.Text(c, mainTextOr(block.entry.Name, "未命名课程")).FontSize(12).Bold().
-							TextColor(cc.text).MaxLines(2)
+						nameText := myui.Text(c, mainTextOr(block.entry.Name, "未命名课程")).FontSize(12).Bold().
+							TextColor(cc.text)
+						if displayOpt.hideOverflow {
+							switch {
+							case spanRows < 2:
+								nameText.MaxLines(1)
+							case spanRows >= 4:
+								nameText.MaxLines(4)
+							default:
+								nameText.MaxLines(2)
+							}
+						}
 						myui.Text(c, mainTextOr(block.entry.Periods, "—")+" 节").FontSize(10).
 							TextColor(cc.text.Alpha(0.76)).FontFeatures("tnum")
-						if height >= 70 && block.entry.Location != "" {
-							myui.Text(c, block.entry.Location).FontSize(10).
-								TextColor(cc.text.Alpha(0.72)).MaxLines(2)
+						if height >= 70 && shownLocation != "" {
+							locText := myui.Text(c, shownLocation).FontSize(10).
+								TextColor(cc.text.Alpha(0.72))
+							if displayOpt.hideOverflow {
+								if spanRows >= 4 {
+									locText.MaxLines(2)
+								} else {
+									locText.MaxLines(1)
+								}
+							}
 						}
 					})
 					if course.Clicked() {

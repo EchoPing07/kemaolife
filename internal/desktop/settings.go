@@ -58,6 +58,13 @@ type Settings struct {
 	// AutoUpdateCheck 开启后每次启动后台检查一次新版本（docs/windows.md §3.5）。
 	// 默认 false；老配置无此字段，升级后行为不变。
 	AutoUpdateCheck bool `json:"autoUpdateCheck,omitempty"`
+
+	// 课表显示选项（docs/windows.md §3.2 / §3.5）。
+	// 不加 omitempty：前两项默认 true，关闭时必须显式写入 false 才能覆盖
+	// Load() 的默认值；老配置缺字段时反序列化自动保持默认值。
+	OptimizeLocationDisplay bool `json:"optimizeLocationDisplay"`
+	PrefixLocationAt        bool `json:"prefixLocationAt"`
+	HideTimetableOverflow   bool `json:"hideTimetableOverflow"`
 }
 
 // 校园网状态探测间隔的默认值与下限（docs/windows.md）。
@@ -73,15 +80,18 @@ const (
 // DefaultSettings 返回首次启动的默认值（轮询 4 小时、阈值 10 度 / 3 天、静默 23–07）。
 func DefaultSettings() Settings {
 	return Settings{
-		AutoMode:         false, // 默认手动
-		AutoStart:        true,  // 登录时自启一次
-		AutoUpdateCheck:  false, // 默认不自动检查更新
-		PollSeconds:      int(alert.DefaultPollInterval / time.Second),
-		CampusProbeSecs:  DefaultCampusProbeSeconds,
-		BalanceThreshold: alert.DefaultBalanceThreshold,
-		DaysThreshold:    alert.DefaultDaysThreshold,
-		QuietStartHour:   alert.DefaultQuietStartHour,
-		QuietEndHour:     alert.DefaultQuietEndHour,
+		AutoMode:                false, // 默认手动
+		AutoStart:               true,  // 登录时自启一次
+		AutoUpdateCheck:         false, // 默认不自动检查更新
+		OptimizeLocationDisplay: true,  // 默认开启课室显示优化
+		PrefixLocationAt:        true,  // 默认课室前显示 @
+		HideTimetableOverflow:   false, // 默认完整换行，不截断
+		PollSeconds:             int(alert.DefaultPollInterval / time.Second),
+		CampusProbeSecs:         DefaultCampusProbeSeconds,
+		BalanceThreshold:        alert.DefaultBalanceThreshold,
+		DaysThreshold:           alert.DefaultDaysThreshold,
+		QuietStartHour:          alert.DefaultQuietStartHour,
+		QuietEndHour:            alert.DefaultQuietEndHour,
 	}
 }
 

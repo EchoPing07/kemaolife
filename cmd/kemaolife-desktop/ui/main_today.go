@@ -62,10 +62,11 @@ func (w *mainWindow) paintToday(c *myui.Context) {
 					mainEmpty(c, "今天没有课", "好好安排今天的时间")
 					myui.Spacer(c)
 				default:
+					displayOpt := w.timetableDisplay()
 					myui.Scroll(c.Key("today-lessons")).Grow(1).Gap(8).Children(func() {
 						for i, entry := range w.state.Today.Entries {
 							entry := entry
-							mainLessonRow(c, i, entry, func() {
+							mainLessonRow(c, i, entry, displayOpt, func() {
 								w.openCourseDetail(w.state.Today, entry)
 							})
 						}

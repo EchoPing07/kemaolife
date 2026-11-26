@@ -37,20 +37,23 @@ func FormatStatus(s Status) string {
 // 两类密码恒为空：留空即「保留已保存密码」，表单不回显明文凭据（P5）。
 func ToSettingsForm(s Settings) SettingsForm {
 	return SettingsForm{
-		StudentID:         s.StudentID,
-		CustomerCode:      s.CustomerCode,
-		CampusUser:        s.CampusUser,
-		CampusFingerprint: s.CampusFingerprint,
-		AutoMode:          s.AutoMode,
-		WiredOnly:         s.CampusWiredOnly,
-		AutoStart:         s.AutoStart,
-		AutoUpdateCheck:   s.AutoUpdateCheck,
-		PollSeconds:       s.PollSeconds,
-		CampusProbeSecs:   s.CampusProbeSecs,
-		BalanceThreshold:  strconv.FormatFloat(s.BalanceThreshold, 'f', -1, 64),
-		DaysThreshold:     s.DaysThreshold,
-		QuietFrom:         s.QuietStartHour,
-		QuietTo:           s.QuietEndHour,
+		StudentID:               s.StudentID,
+		CustomerCode:            s.CustomerCode,
+		CampusUser:              s.CampusUser,
+		CampusFingerprint:       s.CampusFingerprint,
+		AutoMode:                s.AutoMode,
+		WiredOnly:               s.CampusWiredOnly,
+		AutoStart:               s.AutoStart,
+		AutoUpdateCheck:         s.AutoUpdateCheck,
+		OptimizeLocationDisplay: s.OptimizeLocationDisplay,
+		PrefixLocationAt:        s.PrefixLocationAt,
+		HideTimetableOverflow:   s.HideTimetableOverflow,
+		PollSeconds:             s.PollSeconds,
+		CampusProbeSecs:         s.CampusProbeSecs,
+		BalanceThreshold:        strconv.FormatFloat(s.BalanceThreshold, 'f', -1, 64),
+		DaysThreshold:           s.DaysThreshold,
+		QuietFrom:               s.QuietStartHour,
+		QuietTo:                 s.QuietEndHour,
 	}
 }
 
@@ -76,6 +79,9 @@ func ParseSettingsResult(res SettingsResult, base Settings) (Settings, error) {
 	next.CampusWiredOnly = res.WiredOnly
 	next.AutoStart = res.AutoStart
 	next.AutoUpdateCheck = res.AutoUpdateCheck
+	next.OptimizeLocationDisplay = res.OptimizeLocationDisplay
+	next.PrefixLocationAt = res.PrefixLocationAt
+	next.HideTimetableOverflow = res.HideTimetableOverflow
 
 	poll, err := strconv.Atoi(strings.TrimSpace(res.PollSeconds))
 	if err != nil || poll <= 0 {
@@ -143,40 +149,46 @@ func secondsDuration(secs int) time.Duration {
 // SettingsForm 是设置窗口的初始值（与 internal/desktop.Settings 同构，
 // 数值以字符串传，便于窗口控件直接填充）。
 type SettingsForm struct {
-	StudentID         string
-	CustomerCode      string
-	EduPassword       string
-	CampusUser        string
-	CampusPassword    string
-	CampusFingerprint string
-	AutoMode          bool
-	WiredOnly         bool
-	AutoStart         bool
-	AutoUpdateCheck   bool
-	PollSeconds       int
-	CampusProbeSecs   int
-	BalanceThreshold  string
-	DaysThreshold     int
-	QuietFrom         int
-	QuietTo           int
+	StudentID               string
+	CustomerCode            string
+	EduPassword             string
+	CampusUser              string
+	CampusPassword          string
+	CampusFingerprint       string
+	AutoMode                bool
+	WiredOnly               bool
+	AutoStart               bool
+	AutoUpdateCheck         bool
+	OptimizeLocationDisplay bool
+	PrefixLocationAt        bool
+	HideTimetableOverflow   bool
+	PollSeconds             int
+	CampusProbeSecs         int
+	BalanceThreshold        string
+	DaysThreshold           int
+	QuietFrom               int
+	QuietTo                 int
 }
 
 // SettingsResult 是设置窗口保存时回传的原文，校验由 ParseSettingsResult 负责。
 type SettingsResult struct {
-	StudentID         string
-	CustomerCode      string
-	EduPassword       string
-	CampusUser        string
-	CampusPassword    string
-	CampusFingerprint string
-	AutoMode          bool
-	WiredOnly         bool
-	AutoStart         bool
-	AutoUpdateCheck   bool
-	PollSeconds       string
-	CampusProbeSecs   string
-	BalanceThreshold  string
-	DaysThreshold     string
-	QuietFrom         string
-	QuietTo           string
+	StudentID               string
+	CustomerCode            string
+	EduPassword             string
+	CampusUser              string
+	CampusPassword          string
+	CampusFingerprint       string
+	AutoMode                bool
+	WiredOnly               bool
+	AutoStart               bool
+	AutoUpdateCheck         bool
+	OptimizeLocationDisplay bool
+	PrefixLocationAt        bool
+	HideTimetableOverflow   bool
+	PollSeconds             string
+	CampusProbeSecs         string
+	BalanceThreshold        string
+	DaysThreshold           string
+	QuietFrom               string
+	QuietTo                 string
 }

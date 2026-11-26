@@ -13,20 +13,23 @@ import (
 func (w *mainWindow) setSettingsForm(form desktop.SettingsForm) {
 	w.settingsBase = form
 	w.settings = desktop.SettingsResult{
-		StudentID:         form.StudentID,
-		CustomerCode:      form.CustomerCode,
-		CampusUser:        form.CampusUser,
-		CampusFingerprint: form.CampusFingerprint,
-		AutoMode:          form.AutoMode,
-		WiredOnly:         form.WiredOnly,
-		AutoStart:         form.AutoStart,
-		AutoUpdateCheck:   form.AutoUpdateCheck,
-		PollSeconds:       strconv.Itoa(form.PollSeconds),
-		CampusProbeSecs:   strconv.Itoa(form.CampusProbeSecs),
-		BalanceThreshold:  form.BalanceThreshold,
-		DaysThreshold:     strconv.Itoa(form.DaysThreshold),
-		QuietFrom:         strconv.Itoa(form.QuietFrom),
-		QuietTo:           strconv.Itoa(form.QuietTo),
+		StudentID:               form.StudentID,
+		CustomerCode:            form.CustomerCode,
+		CampusUser:              form.CampusUser,
+		CampusFingerprint:       form.CampusFingerprint,
+		AutoMode:                form.AutoMode,
+		WiredOnly:               form.WiredOnly,
+		AutoStart:               form.AutoStart,
+		AutoUpdateCheck:         form.AutoUpdateCheck,
+		OptimizeLocationDisplay: form.OptimizeLocationDisplay,
+		PrefixLocationAt:        form.PrefixLocationAt,
+		HideTimetableOverflow:   form.HideTimetableOverflow,
+		PollSeconds:             strconv.Itoa(form.PollSeconds),
+		CampusProbeSecs:         strconv.Itoa(form.CampusProbeSecs),
+		BalanceThreshold:        form.BalanceThreshold,
+		DaysThreshold:           strconv.Itoa(form.DaysThreshold),
+		QuietFrom:               strconv.Itoa(form.QuietFrom),
+		QuietTo:                 strconv.Itoa(form.QuietTo),
 	}
 	// 密码始终为空：留空表示保留已保存凭据。
 	w.settings.EduPassword = ""
@@ -50,6 +53,12 @@ func (w *mainWindow) paintSettings(c *myui.Context) {
 					w.settingsInputRow(c, "student-id", "学号", "用于电费与课表查询", &w.settings.StudentID, "请输入学号", false, 240)
 					w.settingsInputRow(c, "edu-password", "教务密码", "仅用于课表同步，留空保持已保存密码不变", &w.settings.EduPassword, "留空保持不变", true, 240)
 					w.settingsInputRow(c, "customer-code", "学校代码", "留空使用内置默认 3126", &w.settings.CustomerCode, "默认 3126", false, 240)
+				})
+
+				settingsGroup(c, "课表显示", func() {
+					w.settingsSwitchRow(c, "optimize-location-display", "课室显示优化", "在课表网格与今日课节精简冗长的课室名称，课程详情仍显示完整地点", &w.settings.OptimizeLocationDisplay)
+					w.settingsSwitchRow(c, "prefix-location-at", "课室前显示@", "在课表网格与今日课节的课室名称前加上 @ 符号，方便与课程名和教师区分", &w.settings.PrefixLocationAt)
+					w.settingsSwitchRow(c, "hide-timetable-overflow", "过长隐藏", "开启后课表网格与今日课节按行数截断过长文本；关闭时完整换行展示", &w.settings.HideTimetableOverflow)
 				})
 
 				settingsGroup(c, "校园网认证", func() {

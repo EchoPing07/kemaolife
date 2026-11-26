@@ -123,6 +123,48 @@ func TestSettingsStoreEduPasswordCompatibility(t *testing.T) {
 	}
 }
 
+func TestSettingsStoreTimetableDisplayCompatibilityAndRoundTrip(t *testing.T) {
+	inner := porttest.NewMemStore()
+	// 老配置不含课表显示三项字段时，应沿用默认值（优化开、@ 开、过长隐藏关）。
+	if err := inner.Put(desktop.ConfigStoreKey, []byte(`{"studentId":"<学号>"}`)); err != nil {
+		t.Fatal(err)
+	}
+	store := desktop.NewSettingsStore(inner)
+	loaded, err := store.Load()
+	if err != nil {
+		t.Fatalf("读取老配置: %v", err)
+	}
+	if !loaded.OptimizeLocationDisplay || !loaded.PrefixLocationAt || loaded.HideTimetableOverflow {
+		t.Fatalf("老配置课表显示默认值异常: opt=%v at=%v hide=%v",
+			loaded.OptimizeLocationDisplay, loaded.PrefixLocationAt, loaded.HideTimetableOverflow)
+	}
+
+	// 显式反转全部三项后保存，再次读取不得回退到默认值。
+	res := validSettingsResult()
+	res.OptimizeLocationDisplay = false
+	res.PrefixLocationAt = false
+	res.HideTimetableOverflow = true
+	next, err := desktop.ParseSettingsResult(res, loaded)
+	if err != nil {
+		t.Fatalf("ParseSettingsResult: %v", err)
+	}
+	if _, err := store.Save(next); err != nil {
+		t.Fatalf("保存课表显示配置: %v", err)
+	}
+	reloaded, err := store.Load()
+	if err != nil {
+		t.Fatalf("重读课表显示配置: %v", err)
+	}
+	if reloaded.OptimizeLocationDisplay || reloaded.PrefixLocationAt || !reloaded.HideTimetableOverflow {
+		t.Fatalf("课表显示开关往返异常: opt=%v at=%v hide=%v",
+			reloaded.OptimizeLocationDisplay, reloaded.PrefixLocationAt, reloaded.HideTimetableOverflow)
+	}
+	form := desktop.ToSettingsForm(reloaded)
+	if form.OptimizeLocationDisplay || form.PrefixLocationAt || !form.HideTimetableOverflow {
+		t.Fatalf("ToSettingsForm 未映射课表显示开关: %+v", form)
+	}
+}
+
 func TestPollKeepsFullElectricityReport(t *testing.T) {
 	campus := newFakeCampus(model.CampusOnline)
 	srv := electricityServer(t, 35.99, 2)

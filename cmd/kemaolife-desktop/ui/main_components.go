@@ -110,10 +110,42 @@ func mainSubtleLink(c *myui.Context, key, label string) bool {
 	return btn.Clicked()
 }
 
-func mainLessonRow(c *myui.Context, key any, entry model.Entry, onClick func()) {
+type timetableDisplayOptions struct {
+	optimizeLocation bool
+	prefixLocationAt bool
+	hideOverflow     bool
+}
+
+func (w *mainWindow) timetableDisplay() timetableDisplayOptions {
+	return timetableDisplayOptions{
+		optimizeLocation: w.state.SettingsForm.OptimizeLocationDisplay,
+		prefixLocationAt: w.state.SettingsForm.PrefixLocationAt,
+		hideOverflow:     w.state.SettingsForm.HideTimetableOverflow,
+	}
+}
+
+// mainEntryLocation 返回课表网格与今日课节展示用的课室名：
+// 开启优化且 core 提供了 ShortLocation 时使用精简名，否则回退原始地点（AGENTS A3）；
+// 开启 prefixAt 时在非空课室前加 @，已有 @ 前缀不重复加。
+func mainEntryLocation(entry model.Entry, opt timetableDisplayOptions) string {
+	raw := strings.TrimSpace(entry.Location)
+	if opt.optimizeLocation && strings.TrimSpace(entry.ShortLocation) != "" {
+		raw = strings.TrimSpace(entry.ShortLocation)
+	}
+	if raw == "" {
+		return ""
+	}
+	if opt.prefixLocationAt && !strings.HasPrefix(raw, "@") {
+		return "@" + raw
+	}
+	return raw
+}
+
+func mainLessonRow(c *myui.Context, key any, entry model.Entry, opt timetableDisplayOptions, onClick func()) {
 	p := mainPalette(c)
 	t := c.Theme()
 	cc := courseColorFor(entry.Name, t.Dark)
+	shownLocation := mainEntryLocation(entry, opt)
 	row := myui.ButtonBase(c.Key(key)).Padding(10, 12).Gap(14).Radius(6).
 		Background(p.cardSubtle).AlignItems(myui.Center).Justify(myui.Start)
 	if row.Pressed() {
@@ -131,16 +163,22 @@ func mainLessonRow(c *myui.Context, key any, entry model.Entry, onClick func()) 
 			}
 		})
 		myui.Column(c).Grow(1).Gap(4).Children(func() {
-			myui.Text(c, mainTextOr(entry.Name, "未命名课程")).FontSize(14).Bold()
+			nameText := myui.Text(c, mainTextOr(entry.Name, "未命名课程")).FontSize(14).Bold()
+			if opt.hideOverflow {
+				nameText.MaxLines(1)
+			}
 			details := make([]string, 0, 2)
-			if entry.Location != "" {
-				details = append(details, entry.Location)
+			if shownLocation != "" {
+				details = append(details, shownLocation)
 			}
 			if entry.Teacher != "" {
 				details = append(details, entry.Teacher)
 			}
 			if len(details) > 0 {
-				myui.Text(c, strings.Join(details, " · ")).FontSize(12).TextColor(t.TextMuted)
+				detailText := myui.Text(c, strings.Join(details, " · ")).FontSize(12).TextColor(t.TextMuted)
+				if opt.hideOverflow {
+					detailText.MaxLines(1)
+				}
 			}
 		})
 		if onClick != nil {
