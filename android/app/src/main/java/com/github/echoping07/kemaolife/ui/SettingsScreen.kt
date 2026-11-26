@@ -435,6 +435,24 @@ private fun EducationSettings(
             )
         }
         GroupGap()
+        GroupSurface(position = GroupPosition.MIDDLE, modifier = Modifier.fillMaxWidth()) {
+            SettingsSwitchRow(
+                title = stringResource(R.string.field_prefix_location_at),
+                supporting = stringResource(R.string.field_prefix_location_at_hint),
+                checked = state.prefixLocationAt,
+                onCheckedChange = viewModel::setPrefixLocationAt,
+            )
+        }
+        GroupGap()
+        GroupSurface(position = GroupPosition.MIDDLE, modifier = Modifier.fillMaxWidth()) {
+            SettingsSwitchRow(
+                title = stringResource(R.string.field_hide_timetable_overflow),
+                supporting = stringResource(R.string.field_hide_timetable_overflow_hint),
+                checked = state.hideTimetableOverflow,
+                onCheckedChange = viewModel::setHideTimetableOverflow,
+            )
+        }
+        GroupGap()
         GroupSurface(position = GroupPosition.LAST, modifier = Modifier.fillMaxWidth()) {
             SettingsSwitchRow(
                 title = stringResource(R.string.field_optimize_location_export),

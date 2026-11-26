@@ -38,9 +38,15 @@ data class Entry(
     val shortLocation: String = "",
     val weeksText: String,
 ) {
-    /** 紧凑视图用：开启优化且 Go 核心给出了精简课室名时展示简称，否则回退原始地点（AGENTS A3）。 */
-    fun displayLocation(optimize: Boolean): String =
-        if (optimize && shortLocation.isNotBlank()) shortLocation else location
+    /**
+     * 紧凑视图用：开启优化且 Go 核心给出了精简课室名时展示简称，否则回退原始地点（AGENTS A3）；
+     * 开启 `prefixAt` 时在非空课室前加 `@` 便于与课程名、教师区分。
+     */
+    fun displayLocation(optimize: Boolean, prefixAt: Boolean = false): String {
+        val raw = if (optimize && shortLocation.isNotBlank()) shortLocation else location
+        if (raw.isBlank()) return ""
+        return if (prefixAt && !raw.startsWith("@")) "@$raw" else raw
+    }
 
     companion object {
         fun from(obj: JSONObject): Entry = Entry(

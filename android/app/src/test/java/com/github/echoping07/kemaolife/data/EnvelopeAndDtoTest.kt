@@ -174,7 +174,9 @@ class EnvelopeAndDtoTest {
         )
         assertEquals("6号楼-219", full.shortLocation)
         assertEquals("6号楼-219", full.displayLocation(optimize = true))
+        assertEquals("@6号楼-219", full.displayLocation(optimize = true, prefixAt = true))
         assertEquals("6号楼-219植保实训室（华南园艺植物协同创新中心）", full.displayLocation(optimize = false))
+        assertEquals("@6号楼-219植保实训室（华南园艺植物协同创新中心）", full.displayLocation(optimize = false, prefixAt = true))
 
         // 老缓存 / 老版本缺少 shortLocation 时，开启优化也安全回退到原始 location。
         val legacy = Entry.from(
@@ -185,7 +187,17 @@ class EnvelopeAndDtoTest {
         )
         assertEquals("", legacy.shortLocation)
         assertEquals("3号楼-101", legacy.displayLocation(optimize = true))
+        assertEquals("@3号楼-101", legacy.displayLocation(optimize = true, prefixAt = true))
+
+        // 空课室不加 @；已有 @ 前缀不重复拼接。
+        val emptyLoc = legacy.copy(location = "")
+        assertEquals("", emptyLoc.displayLocation(optimize = true, prefixAt = true))
+        val prefixed = legacy.copy(location = "@3号楼-101")
+        assertEquals("@3号楼-101", prefixed.displayLocation(optimize = false, prefixAt = true))
+
         assertTrue(AppState().optimizeLocationDisplay)
+        assertTrue(AppState().prefixLocationAt)
+        assertFalse(AppState().hideTimetableOverflow)
         assertFalse(AppState().optimizeLocationExport)
     }
 

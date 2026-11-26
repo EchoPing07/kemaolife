@@ -48,6 +48,16 @@ class AppPreferences(context: Context) {
         get() = prefs.getBoolean(KEY_OPTIMIZE_LOCATION_DISPLAY, DEFAULT_OPTIMIZE_LOCATION_DISPLAY)
         set(value) = prefs.editCommit { putBoolean(KEY_OPTIMIZE_LOCATION_DISPLAY, value) }
 
+    /** 教务高级：「课室前显示@」开关（默认开启，docs/android.md）。 */
+    var prefixLocationAt: Boolean
+        get() = prefs.getBoolean(KEY_PREFIX_LOCATION_AT, DEFAULT_PREFIX_LOCATION_AT)
+        set(value) = prefs.editCommit { putBoolean(KEY_PREFIX_LOCATION_AT, value) }
+
+    /** 教务高级：「过长隐藏」开关（默认关闭，docs/android.md）。 */
+    var hideTimetableOverflow: Boolean
+        get() = prefs.getBoolean(KEY_HIDE_TIMETABLE_OVERFLOW, DEFAULT_HIDE_TIMETABLE_OVERFLOW)
+        set(value) = prefs.editCommit { putBoolean(KEY_HIDE_TIMETABLE_OVERFLOW, value) }
+
     /** 教务高级：「导出优化课室」开关（默认关闭，docs/android.md）。 */
     var optimizeLocationExport: Boolean
         get() = prefs.getBoolean(KEY_OPTIMIZE_LOCATION_EXPORT, DEFAULT_OPTIMIZE_LOCATION_EXPORT)
@@ -139,6 +149,8 @@ class AppPreferences(context: Context) {
         const val INTERVAL_UNIT = "分钟"
 
         const val DEFAULT_OPTIMIZE_LOCATION_DISPLAY = true
+        const val DEFAULT_PREFIX_LOCATION_AT = true
+        const val DEFAULT_HIDE_TIMETABLE_OVERFLOW = false
         const val DEFAULT_OPTIMIZE_LOCATION_EXPORT = false
 
         /**
@@ -170,6 +182,8 @@ class AppPreferences(context: Context) {
         private const val KEY_TIMETABLE_INTERVAL = "timetable_interval_minutes"
         private const val KEY_ELECTRICITY_INTERVAL = "electricity_interval_minutes"
         private const val KEY_OPTIMIZE_LOCATION_DISPLAY = "optimize_location_display"
+        private const val KEY_PREFIX_LOCATION_AT = "prefix_location_at"
+        private const val KEY_HIDE_TIMETABLE_OVERFLOW = "hide_timetable_overflow"
         private const val KEY_OPTIMIZE_LOCATION_EXPORT = "optimize_location_export"
         private const val KEY_CAMPUS_WIFI_ONLY = "campus_wifi_only"
         private const val KEY_REQUEST_LOG = "request_log_enabled"

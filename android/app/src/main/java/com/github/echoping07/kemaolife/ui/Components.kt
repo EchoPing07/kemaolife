@@ -242,9 +242,20 @@ internal fun ExpressiveLoadingIndicator(
 
 /** 今日课表条目（「更多」页用）。 */
 @Composable
-internal fun EntryRow(entry: Entry, optimizeLocation: Boolean = true) {
+internal fun EntryRow(
+    entry: Entry,
+    optimizeLocation: Boolean = true,
+    prefixLocationAt: Boolean = true,
+    hideOverflow: Boolean = false,
+) {
     val palette = coursePalette(entry.name)
-    val shownLocation = entry.displayLocation(optimizeLocation)
+    val shownLocation = entry.displayLocation(optimizeLocation, prefixLocationAt)
+    val overflow =
+        if (hideOverflow) {
+            androidx.compose.ui.text.style.TextOverflow.Ellipsis
+        } else {
+            androidx.compose.ui.text.style.TextOverflow.Clip
+        }
     Row(
         modifier =
             Modifier
@@ -266,8 +277,8 @@ internal fun EntryRow(entry: Entry, optimizeLocation: Boolean = true) {
                 text = entry.name,
                 style = MaterialTheme.typography.titleSmall,
                 fontWeight = FontWeight.SemiBold,
-                maxLines = 1,
-                overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+                maxLines = if (hideOverflow) 1 else Int.MAX_VALUE,
+                overflow = overflow,
             )
             val second =
                 listOf(shownLocation, entry.teacher)
@@ -278,8 +289,8 @@ internal fun EntryRow(entry: Entry, optimizeLocation: Boolean = true) {
                     text = second,
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    maxLines = 1,
-                    overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+                    maxLines = if (hideOverflow) 1 else Int.MAX_VALUE,
+                    overflow = overflow,
                 )
             }
         }

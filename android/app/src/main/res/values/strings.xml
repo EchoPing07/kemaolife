@@ -179,6 +179,10 @@
     <string name="field_min_interval">最小查询间隔</string>
     <string name="field_optimize_location_display">课室显示优化</string>
     <string name="field_optimize_location_display_hint">在课表网格与今日概览精简冗长的课室名称，点击课程详情仍显示完整地点。</string>
+    <string name="field_prefix_location_at">课室前显示@</string>
+    <string name="field_prefix_location_at_hint">在课表网格与今日概览的课室名称前加上 @ 符号，方便与课程名和教师区分。</string>
+    <string name="field_hide_timetable_overflow">过长隐藏</string>
+    <string name="field_hide_timetable_overflow_hint">开启后课表网格与今日概览按行数截断过长文本并显示省略号；关闭时完整换行展示。</string>
     <string name="field_optimize_location_export">导出优化课室</string>
     <string name="field_optimize_location_export_hint">导出 WakeUp 课表 CSV 时写入精简后的课室名称，关闭时保留原始地点。</string>
     <string name="field_campus_wifi_only">仅在 WiFi 下探测</string>

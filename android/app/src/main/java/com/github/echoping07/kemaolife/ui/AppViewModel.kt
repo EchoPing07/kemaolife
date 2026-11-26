@@ -142,6 +142,8 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
             timetableInterval = preferences.timetableIntervalMinutes,
             electricityInterval = preferences.electricityIntervalMinutes,
             optimizeLocationDisplay = preferences.optimizeLocationDisplay,
+            prefixLocationAt = preferences.prefixLocationAt,
+            hideTimetableOverflow = preferences.hideTimetableOverflow,
             optimizeLocationExport = preferences.optimizeLocationExport,
             campusWifiOnly = preferences.campusWifiOnly,
             requestLogEnabled = preferences.requestLogEnabled,
@@ -923,6 +925,16 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         _state.update { it.copy(optimizeLocationDisplay = enabled) }
     }
 
+    fun setPrefixLocationAt(enabled: Boolean) {
+        preferences.prefixLocationAt = enabled
+        _state.update { it.copy(prefixLocationAt = enabled) }
+    }
+
+    fun setHideTimetableOverflow(enabled: Boolean) {
+        preferences.hideTimetableOverflow = enabled
+        _state.update { it.copy(hideTimetableOverflow = enabled) }
+    }
+
     fun setOptimizeLocationExport(enabled: Boolean) {
         preferences.optimizeLocationExport = enabled
         _state.update { it.copy(optimizeLocationExport = enabled) }
@@ -1098,8 +1110,10 @@ data class AppState(
     /** 两项自动查询的最小间隔（分钟），来自本地偏好；默认均为 5 分钟、下限 1 分钟。 */
     val timetableInterval: Int = AppPreferences.DEFAULT_TIMETABLE_INTERVAL,
     val electricityInterval: Int = AppPreferences.DEFAULT_ELECTRICITY_INTERVAL,
-    /** 教务高级开关：课室显示优化默认开启，导出优化课室默认关闭（docs/android.md）。 */
+    /** 教务高级开关：课室显示优化、课室前显示@ 默认开启，过长隐藏、导出优化课室默认关闭（docs/android.md）。 */
     val optimizeLocationDisplay: Boolean = AppPreferences.DEFAULT_OPTIMIZE_LOCATION_DISPLAY,
+    val prefixLocationAt: Boolean = AppPreferences.DEFAULT_PREFIX_LOCATION_AT,
+    val hideTimetableOverflow: Boolean = AppPreferences.DEFAULT_HIDE_TIMETABLE_OVERFLOW,
     val optimizeLocationExport: Boolean = AppPreferences.DEFAULT_OPTIMIZE_LOCATION_EXPORT,
     val campusWifiOnly: Boolean = true,
 
