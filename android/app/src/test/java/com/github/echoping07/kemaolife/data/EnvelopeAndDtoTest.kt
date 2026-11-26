@@ -164,6 +164,44 @@ class EnvelopeAndDtoTest {
     }
 
     @Test
+    fun `课节投影 shortLocation 并按开关回退原始地点`() {
+        val full = Entry.from(
+            JSONObject(
+                """{"name":"植物保护","periods":"1-2","time":"08:30~10:00","teacher":"教师甲",
+                   "location":"6号楼-219植保实训室（华南园艺植物协同创新中心）",
+                   "shortLocation":"6号楼-219","weeksText":"1-16周"}""",
+            ),
+        )
+        assertEquals("6号楼-219", full.shortLocation)
+        assertEquals("6号楼-219", full.displayLocation(optimize = true))
+        assertEquals("@6号楼-219", full.displayLocation(optimize = true, prefixAt = true))
+        assertEquals("6号楼-219植保实训室（华南园艺植物协同创新中心）", full.displayLocation(optimize = false))
+        assertEquals("@6号楼-219植保实训室（华南园艺植物协同创新中心）", full.displayLocation(optimize = false, prefixAt = true))
+
+        // 老缓存 / 老版本缺少 shortLocation 时，开启优化也安全回退到原始 location。
+        val legacy = Entry.from(
+            JSONObject(
+                """{"name":"高等数学","periods":"3-4","time":"10:20~11:50","teacher":"教师乙",
+                   "location":"3号楼-101","weeksText":"1-16周"}""",
+            ),
+        )
+        assertEquals("", legacy.shortLocation)
+        assertEquals("3号楼-101", legacy.displayLocation(optimize = true))
+        assertEquals("@3号楼-101", legacy.displayLocation(optimize = true, prefixAt = true))
+
+        // 空课室不加 @；已有 @ 前缀不重复拼接。
+        val emptyLoc = legacy.copy(location = "")
+        assertEquals("", emptyLoc.displayLocation(optimize = true, prefixAt = true))
+        val prefixed = legacy.copy(location = "@3号楼-101")
+        assertEquals("@3号楼-101", prefixed.displayLocation(optimize = false, prefixAt = true))
+
+        assertTrue(AppState().optimizeLocationDisplay)
+        assertTrue(AppState().prefixLocationAt)
+        assertFalse(AppState().hideTimetableOverflow)
+        assertFalse(AppState().optimizeLocationExport)
+    }
+
+    @Test
     fun `导出信封投影出 csv 与数据时间`() {
         // 导出 op 的 data：csv 正文逐字透传，文件名与数据时间由 Go 侧给出，
         // Kotlin 只做字段投影，不重排、不重拼（AGENTS A3）。

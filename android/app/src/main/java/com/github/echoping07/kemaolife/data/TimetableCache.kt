@@ -73,5 +73,6 @@ object TimetableCache {
         .put("time", time)
         .put("teacher", teacher)
         .put("location", location)
+        .put("shortLocation", shortLocation)
         .put("weeksText", weeksText)
 }

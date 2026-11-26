@@ -54,8 +54,9 @@ class Repository(private val bridge: Bridge) {
      * 只读本地快照（0 请求），与 [week] 同一条链路：导出的是本机已有的课表，
      * 不联网、不触发刷新；数据时间由返回的 `syncedAt` 给出。
      */
-    fun exportTimetable(): Result<TimetableExport> =
-        bridge.call("timetable.export").toResult { TimetableExport.from(it) }
+    fun exportTimetable(optimizeLocation: Boolean = false): Result<TimetableExport> =
+        bridge.call("timetable.export", "optimizeLocation" to optimizeLocation)
+            .toResult { TimetableExport.from(it) }
 
     // ---- 电费 -------------------------------------------------------------
 

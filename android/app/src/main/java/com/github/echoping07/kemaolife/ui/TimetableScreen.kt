@@ -188,6 +188,9 @@ internal fun TimetableScreen(state: AppState, viewModel: AppViewModel) {
                         loading = state.weekLoading,
                         error = state.timetableError,
                         todayDate = state.todayDate,
+                        optimizeLocation = state.optimizeLocationDisplay,
+                        prefixLocationAt = state.prefixLocationAt,
+                        hideOverflow = state.hideTimetableOverflow,
                         scrollState = gridScroll,
                         onSync = { viewModel.syncTimetable() },
                         onCourseClick = { day, entry -> detail = CourseTarget(day, entry) },
@@ -200,6 +203,9 @@ internal fun TimetableScreen(state: AppState, viewModel: AppViewModel) {
                     loading = state.weekLoading,
                     error = state.timetableError,
                     todayDate = state.todayDate,
+                    optimizeLocation = state.optimizeLocationDisplay,
+                    prefixLocationAt = state.prefixLocationAt,
+                    hideOverflow = state.hideTimetableOverflow,
                     scrollState = gridScroll,
                     onSync = { viewModel.syncTimetable() },
                     onCourseClick = { day, entry -> detail = CourseTarget(day, entry) },
@@ -261,6 +267,9 @@ private fun PageContent(
     loading: Boolean,
     error: String?,
     todayDate: String,
+    optimizeLocation: Boolean,
+    prefixLocationAt: Boolean,
+    hideOverflow: Boolean,
     scrollState: ScrollState,
     onSync: () -> Unit,
     onCourseClick: (DaySchedule, Entry) -> Unit,
@@ -278,6 +287,9 @@ private fun PageContent(
             WeekStrip(days = days, todayDate = todayDate)
             WeekGrid(
                 days = days,
+                optimizeLocation = optimizeLocation,
+                prefixLocationAt = prefixLocationAt,
+                hideOverflow = hideOverflow,
                 scrollState = scrollState,
                 onCourseClick = onCourseClick,
             )
@@ -580,6 +592,9 @@ private fun WeekStrip(
 @Composable
 private fun WeekGrid(
     days: List<DaySchedule>,
+    optimizeLocation: Boolean,
+    prefixLocationAt: Boolean,
+    hideOverflow: Boolean,
     scrollState: ScrollState,
     onCourseClick: (DaySchedule, Entry) -> Unit,
 ) {
@@ -614,7 +629,15 @@ private fun WeekGrid(
                 // 网格不画行间横线：12 行背景横线在课程块之间反复穿插，视觉噪音大于引导，
                 // 行列定位改由左侧节次数字与星期条承担（docs/android.md tab1）。
                 val blocks = remember(day?.date, day?.entries) { layoutCourseBlocks(day?.entries.orEmpty()) }
-                DayColumn(day = day, blocks = blocks, rowHeight = RowHeight, onCourseClick = onCourseClick)
+                DayColumn(
+                    day = day,
+                    blocks = blocks,
+                    rowHeight = RowHeight,
+                    optimizeLocation = optimizeLocation,
+                    prefixLocationAt = prefixLocationAt,
+                    hideOverflow = hideOverflow,
+                    onCourseClick = onCourseClick,
+                )
             }
         }
     }
@@ -626,6 +649,9 @@ private fun DayColumn(
     day: DaySchedule?,
     blocks: List<CourseBlock>,
     rowHeight: Dp,
+    optimizeLocation: Boolean,
+    prefixLocationAt: Boolean,
+    hideOverflow: Boolean,
     onCourseClick: (DaySchedule, Entry) -> Unit,
 ) {
     Layout(
@@ -641,7 +667,16 @@ private fun DayColumn(
                         .background(palette.container)
                         .clickable(role = Role.Button) { day?.let { onCourseClick(it, block.entry) } }
                         .padding(horizontal = 4.dp, vertical = 4.dp),
-                ) { CourseCell(block.entry, palette.onContainer, block.spanRows) }
+                ) {
+                    CourseCell(
+                        entry = block.entry,
+                        textColor = palette.onContainer,
+                        spanRows = block.spanRows,
+                        optimizeLocation = optimizeLocation,
+                        prefixLocationAt = prefixLocationAt,
+                        hideOverflow = hideOverflow,
+                    )
+                }
             }
         },
     ) { measurables, constraints ->
@@ -670,11 +705,21 @@ private fun DayColumn(
 }
 
 @Composable
-private fun CourseCell(entry: Entry, textColor: Color, spanRows: Int) {
+private fun CourseCell(
+    entry: Entry,
+    textColor: Color,
+    spanRows: Int,
+    optimizeLocation: Boolean,
+    prefixLocationAt: Boolean,
+    hideOverflow: Boolean,
+) {
     // 单小节只保留课名与一行次要信息；两小节起展示完整的时间 / 地点 / 教师。
-    // 文本行数按课长分配，但块高始终由 DayColumn 的 spanRows 决定，不随内容收缩。
+    // 关闭「过长隐藏」（默认）时允许文本完整换行，由外层固定块高自然裁切；
+    // 开启「过长隐藏」时按课长限制行数并显示省略号。
     val compact = spanRows < 2
     val extended = spanRows >= 4
+    val shownLocation = entry.displayLocation(optimizeLocation, prefixLocationAt)
+    val overflow = if (hideOverflow) TextOverflow.Ellipsis else TextOverflow.Clip
     Column(
         modifier = Modifier.fillMaxSize(),
         verticalArrangement = Arrangement.spacedBy(1.dp),
@@ -697,34 +742,58 @@ private fun CourseCell(entry: Entry, textColor: Color, spanRows: Int) {
             lineHeight = 12.sp,
             fontWeight = FontWeight.SemiBold,
             color = textColor,
-            maxLines = when {
-                compact -> 1
-                extended -> 4
-                else -> 2
+            maxLines = if (!hideOverflow) {
+                Int.MAX_VALUE
+            } else {
+                when {
+                    compact -> 1
+                    extended -> 4
+                    else -> 2
+                }
             },
-            overflow = TextOverflow.Ellipsis,
+            overflow = overflow,
         )
         if (compact) {
             // 单小节空间只够一行：地点与教师合并，两者都空时不占位。
-            val secondary = listOf(entry.location, entry.teacher)
+            val secondary = listOf(shownLocation, entry.teacher)
                 .filter { it.isNotBlank() }
                 .joinToString(" · ")
             if (secondary.isNotBlank()) {
-                CourseMetaText(secondary, textColor, maxLines = 1)
+                CourseMetaText(
+                    text = secondary,
+                    textColor = textColor,
+                    maxLines = if (hideOverflow) 1 else Int.MAX_VALUE,
+                    overflow = overflow,
+                )
             }
         } else {
-            if (entry.location.isNotBlank()) {
-                CourseMetaText(entry.location, textColor, maxLines = if (extended) 2 else 1)
+            if (shownLocation.isNotBlank()) {
+                CourseMetaText(
+                    text = shownLocation,
+                    textColor = textColor,
+                    maxLines = if (!hideOverflow) Int.MAX_VALUE else if (extended) 2 else 1,
+                    overflow = overflow,
+                )
             }
             if (entry.teacher.isNotBlank()) {
-                CourseMetaText(entry.teacher, textColor, maxLines = if (extended) 2 else 1)
+                CourseMetaText(
+                    text = entry.teacher,
+                    textColor = textColor,
+                    maxLines = if (!hideOverflow) Int.MAX_VALUE else if (extended) 2 else 1,
+                    overflow = overflow,
+                )
             }
         }
     }
 }
 
 @Composable
-private fun CourseMetaText(text: String, textColor: Color, maxLines: Int) {
+private fun CourseMetaText(
+    text: String,
+    textColor: Color,
+    maxLines: Int,
+    overflow: TextOverflow,
+) {
     Text(
         text = text,
         style = MaterialTheme.typography.labelSmall,
@@ -732,7 +801,7 @@ private fun CourseMetaText(text: String, textColor: Color, maxLines: Int) {
         lineHeight = 11.sp,
         color = textColor.copy(alpha = 0.82f),
         maxLines = maxLines,
-        overflow = TextOverflow.Ellipsis,
+        overflow = overflow,
     )
 }
 

@@ -4,12 +4,13 @@ package model
 
 // Entry 是某一天的一节课。
 type Entry struct {
-	Name      string `json:"name"`
-	Periods   string `json:"periods"` // 如 "1-2"
-	Time      string `json:"time"`    // 如 "08:30~10:00"
-	Teacher   string `json:"teacher"`
-	Location  string `json:"location"`
-	WeeksText string `json:"weeksText"` // 如 "1-16周"
+	Name          string `json:"name"`
+	Periods       string `json:"periods"` // 如 "1-2"
+	Time          string `json:"time"`    // 如 "08:30~10:00"
+	Teacher       string `json:"teacher"`
+	Location      string `json:"location"`
+	ShortLocation string `json:"shortLocation,omitempty"`
+	WeeksText     string `json:"weeksText"` // 如 "1-16周"
 }
 
 // DaySchedule 是某一天的课表。

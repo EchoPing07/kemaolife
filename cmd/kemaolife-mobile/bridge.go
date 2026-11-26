@@ -271,6 +271,8 @@ type callRequest struct {
 	// Limit / Enabled 分别给 `log.list` 与 `log.enable` 用；其余 op 忽略。
 	Limit   int  `json:"limit"`
 	Enabled bool `json:"enabled"`
+	// OptimizeLocation 给 `timetable.export` 用，缺省 false（导出原始课室名）。
+	OptimizeLocation bool `json:"optimizeLocation"`
 }
 
 // Call takes a request JSON and returns a response JSON. Unknown op yields
@@ -309,7 +311,7 @@ func Call(reqJSON string) string {
 		return s.timetableWeek(req.Week)
 	case "timetable.export":
 		// 导出整学期课表（WakeUp 课程表 CSV）：只读缓存，0 请求（docs/contract.md §6）。
-		return s.timetableExport()
+		return s.timetableExport(req.OptimizeLocation)
 	case "timetable.probe":
 		// 设置页测试按钮：同步一次并回报耗时与课时数（docs/android.md）。
 		return s.timetableProbe()
@@ -394,8 +396,10 @@ func (s *session) timetableWeek(week int) string {
 // 与 timetable.week 同属 CacheOnly：导出的是「本机已有的课表」，不联网；
 // 数据时间由信封 syncedAt 给出，UI 必须一并展示——不能让用户误以为
 // 导出的是刚从教务拉下来的数据（docs/android.md）。
-func (s *session) timetableExport() string {
-	result, err := app.ExportTimetableCSV(s.ctx, s.deps, s.cfg)
+func (s *session) timetableExport(optimizeLocation bool) string {
+	result, err := app.ExportTimetableCSV(s.ctx, s.deps, s.cfg, app.ExportOptions{
+		OptimizeLocation: optimizeLocation,
+	})
 	if err != nil {
 		return failure(err)
 	}
