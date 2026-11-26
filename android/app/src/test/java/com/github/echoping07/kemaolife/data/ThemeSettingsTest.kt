@@ -17,6 +17,7 @@ class ThemeSettingsTest {
                 amoled = false,
                 continuousCorners = false,
                 showBottomBarLabels = true,
+                predictiveBackEnabled = true,
             ),
             ThemeSettings(),
         )
@@ -27,6 +28,13 @@ class ThemeSettingsTest {
         assertTrue(DEFAULT_SHOW_BOTTOM_BAR_LABELS)
         assertTrue(ThemeSettings().showBottomBarLabels)
         assertFalse(ThemeSettings(showBottomBarLabels = false).showBottomBarLabels)
+    }
+
+    @Test
+    fun predictiveBackEnabledByDefaultAndCanBeDisabled() {
+        assertTrue(DEFAULT_PREDICTIVE_BACK)
+        assertTrue(ThemeSettings().predictiveBackEnabled)
+        assertFalse(ThemeSettings(predictiveBackEnabled = false).predictiveBackEnabled)
     }
 
     @Test

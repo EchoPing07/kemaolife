@@ -6,7 +6,7 @@ plugins {
 
 android {
     namespace = "com.github.echoping07.kemaolife"
-    compileSdk = 34
+    compileSdk = 36
 
     defaultConfig {
         applicationId = "com.github.echoping07.kemaolife"
@@ -93,12 +93,20 @@ dependencies {
     // 重新生成：gomobile bind -target=android -androidapi 24 -javapkg ...（见 android/README.md §2）。
     implementation(files("libs/kemaolife.aar"))
 
-    implementation("androidx.core:core-ktx:1.13.1")
-    implementation("androidx.activity:activity-compose:1.9.3")
-    implementation("androidx.lifecycle:lifecycle-runtime-ktx:2.8.7")
-    implementation("androidx.lifecycle:lifecycle-viewmodel-compose:2.8.7")
-    implementation("androidx.compose.material3:material3:1.3.1")
-    implementation("androidx.compose.ui:ui:1.7.6")
+    implementation("androidx.core:core-ktx:1.16.0")
+    implementation("androidx.activity:activity-compose:1.12.0")
+    implementation("androidx.lifecycle:lifecycle-runtime-ktx:2.10.0")
+    implementation("androidx.lifecycle:lifecycle-viewmodel-compose:2.10.0")
+
+    implementation(platform("androidx.compose:compose-bom:2026.03.01"))
+    implementation("androidx.compose.ui:ui")
+    implementation("androidx.compose.material3:material3")
+    // Material 3 1.4 起不再传递导出 material-icons-core，更多 / 外观页用到的圆角图标需显式声明。
+    implementation("androidx.compose.material:material-icons-core")
+
+    // Jetpack Navigation 3：统一管理页面返回栈与预测性返回转场（替代手写 PredictiveBackHandler）。
+    implementation("androidx.navigation3:navigation3-runtime:1.2.2")
+    implementation("androidx.navigation3:navigation3-ui:1.2.2")
 
     // 单元测试只碰「信封 → DTO 投影」这一段（不涉 Android framework）。
     // org.json 在 JVM 上需要单独的实现包（Android 里是系统自带）。

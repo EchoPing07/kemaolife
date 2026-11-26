@@ -156,23 +156,18 @@ internal object FloatingNavIndicatorMath {
  *
  * - 选中背景是共享滑动胶囊，由左右双弹簧在绘制阶段驱动，切 tab（含跨 tab）平滑滑过并带弹性拉伸。
  * - `showLabels` 由「设置 → 外观」的独立开关控制，开启显示图标 + 文字，关闭切为紧凑纯图标胶囊。
- * - `reveal` ∈ [0, 1] 与设置二级页及预测性返回联动：进入二级页时下滑淡出，
- *   完全隐藏后移出布局树避免拦截底部触控。
+ * - 归属 [AppRoute.Home] 根场景：推入或预测性返回二级页时随根场景整体退场与回归。
  */
 @Composable
 internal fun FloatingNavBar(
     items: List<FloatingNavItemData>,
     showLabels: Boolean,
-    reveal: Float,
     motionEnabled: Boolean,
     modifier: Modifier = Modifier,
 ) {
-    val clampedReveal = reveal.coerceIn(0f, 1f)
-    if (clampedReveal <= 0.005f || items.isEmpty()) return
+    if (items.isEmpty()) return
 
     val density = LocalDensity.current
-    val hideOffsetPx = with(density) { (FloatingNavBarMetrics.BarHeightWithLabel + 24.dp).toPx() }
-    val scale = 0.92f + 0.08f * clampedReveal
 
     val selectedIndex = items.indexOfFirst { it.selected }.coerceAtLeast(0)
     val leftSlot = remember { Animatable(selectedIndex.toFloat()) }
@@ -219,13 +214,7 @@ internal fun FloatingNavBar(
         modifier =
             modifier
                 .navigationBarsPadding()
-                .padding(horizontal = 20.dp, vertical = FloatingNavBarMetrics.BottomMargin)
-                .graphicsLayer {
-                    alpha = clampedReveal
-                    translationY = (1f - clampedReveal) * hideOffsetPx
-                    scaleX = scale
-                    scaleY = scale
-                },
+                .padding(horizontal = 20.dp, vertical = FloatingNavBarMetrics.BottomMargin),
         contentAlignment = Alignment.Center,
     ) {
         Surface(

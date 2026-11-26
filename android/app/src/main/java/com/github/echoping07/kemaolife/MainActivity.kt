@@ -3,10 +3,13 @@ package com.github.echoping07.kemaolife
 import android.os.Build
 import android.os.Bundle
 import androidx.activity.ComponentActivity
+import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.viewModels
 import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.EnterTransition
+import androidx.compose.animation.ExitTransition
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
@@ -14,6 +17,7 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.togetherWith
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.asPaddingValues
@@ -21,9 +25,9 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.ime
 import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.union
 import androidx.compose.foundation.layout.windowInsetsPadding
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
@@ -31,7 +35,6 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -39,25 +42,34 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.navigation3.runtime.NavEntry
+import androidx.navigation3.ui.NavDisplay
+import com.github.echoping07.kemaolife.ui.AppBackStackOps
+import com.github.echoping07.kemaolife.ui.AppNavTransitions
 import com.github.echoping07.kemaolife.ui.AppOpenGate
+import com.github.echoping07.kemaolife.ui.AppRoute
+import com.github.echoping07.kemaolife.ui.AppState
 import com.github.echoping07.kemaolife.ui.AppViewModel
 import com.github.echoping07.kemaolife.ui.FloatingNavBar
 import com.github.echoping07.kemaolife.ui.FloatingNavBarMetrics
 import com.github.echoping07.kemaolife.ui.FloatingNavItemData
 import com.github.echoping07.kemaolife.ui.MoreScreen
 import com.github.echoping07.kemaolife.ui.ProbeDialog
-import com.github.echoping07.kemaolife.ui.SettingsScreen
+import com.github.echoping07.kemaolife.ui.SettingsChildScreen
+import com.github.echoping07.kemaolife.ui.SettingsOverviewScreen
 import com.github.echoping07.kemaolife.ui.TabIcons
 import com.github.echoping07.kemaolife.ui.TimetableScreen
 import com.github.echoping07.kemaolife.ui.animationsEnabled
+import com.github.echoping07.kemaolife.ui.rememberAppBackStack
 import com.github.echoping07.kemaolife.ui.theme.KemaolifeTheme
 
-/** 单 Activity + 三 tab；设置页内部维护自己的二级导航与预测性返回。 */
+/** 单 Activity + Jetpack Navigation 3 返回栈；顶层三 Tab 与二级页共享整屏边到边与预测性返回。 */
 class MainActivity : ComponentActivity() {
     private val viewModel: AppViewModel by viewModels()
 
@@ -91,7 +103,7 @@ private enum class Tab { TIMETABLE, MORE, SETTINGS }
 private fun AppRoot(viewModel: AppViewModel) {
     val state by viewModel.state.collectAsStateWithLifecycle()
     var tab by rememberSaveable { mutableStateOf(Tab.TIMETABLE) }
-    var settingsBottomBarReveal by remember { mutableFloatStateOf(1f) }
+    val backStack = rememberAppBackStack()
     val snackbar = remember { SnackbarHostState() }
     val motionEnabled = animationsEnabled()
 
@@ -142,17 +154,16 @@ private fun AppRoot(viewModel: AppViewModel) {
 
     val navBottomInset = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
     val navScrollClearance = FloatingNavBarMetrics.scrollClearance(state.showBottomBarLabels) + navBottomInset
-    val bottomBarReveal = if (tab == Tab.SETTINGS) settingsBottomBarReveal else 1f
+    val isOnHome = backStack.lastOrNull() == AppRoute.Home
     val snackbarBottomPadding =
-        if (bottomBarReveal > 0.01f) {
+        if (isOnHome) {
             FloatingNavBarMetrics.reservedHeight(state.showBottomBarLabels) + 8.dp
         } else {
             16.dp
         }
 
     Scaffold(
-        // 顶部状态栏由内容区单独消费，底边开放给内容透出悬浮底栏；
-        // 各滚动容器通过 bottomContentPadding 留出底栏 / FAB 避让空间。
+        // 状态栏与导航栏 inset 由各页面自身消费，确保 NavDisplay 整屏转场与预测性返回不出现顶部横切线。
         contentWindowInsets = WindowInsets(0, 0, 0, 0),
         snackbarHost = {
             SnackbarHost(
@@ -164,98 +175,156 @@ private fun AppRoot(viewModel: AppViewModel) {
             )
         },
     ) { _ ->
-        Box(modifier = Modifier.fillMaxSize()) {
-            Box(
-                modifier =
-                    Modifier
-                        .fillMaxSize()
-                        .statusBarsPadding(),
-            ) {
-                AnimatedContent(
-                    targetState = tab,
-                    transitionSpec = {
-                        val direction = if (targetState.ordinal > initialState.ordinal) 1 else -1
-                        if (motionEnabled) {
-                            // 平级 tab 要立刻响应：新旧页面同时进退，不等待淡出，也不叠加缩放。
-                            (
-                                fadeIn(tween(160)) +
-                                    slideInHorizontally(tween(200, easing = FastOutSlowInEasing)) { direction * it / 18 }
-                            ) togetherWith
-                                (
-                                    fadeOut(tween(160)) +
-                                        slideOutHorizontally(tween(200, easing = FastOutSlowInEasing)) { -direction * it / 28 }
+        // 外层铺底色：视差缩放转场露出边缘时与主题底色一致，避免闪黑或闪白。
+        Box(
+            modifier =
+                Modifier
+                    .fillMaxSize()
+                    .background(MaterialTheme.colorScheme.surface),
+        ) {
+            NavDisplay(
+                backStack = backStack,
+                onBack = { AppBackStackOps.pop(backStack) },
+                transitionSpec = { AppNavTransitions.push(motionEnabled) },
+                popTransitionSpec = { AppNavTransitions.pop(motionEnabled) },
+                predictivePopTransitionSpec = { _ -> AppNavTransitions.pop(motionEnabled) },
+                entryProvider = { route ->
+                    NavEntry(key = route, contentKey = route.routeId) { key ->
+                        when (key) {
+                            AppRoute.Home -> {
+                                HomeShell(
+                                    tab = tab,
+                                    state = state,
+                                    viewModel = viewModel,
+                                    navScrollClearance = navScrollClearance,
+                                    motionEnabled = motionEnabled,
+                                    onSelectTab = { next ->
+                                        tab = next
+                                        if (next == Tab.TIMETABLE) {
+                                            // 切回课表时按最小间隔补一次同步（打开 App 本身是特殊自动，不受限）。
+                                            viewModel.maybeAutoSync()
+                                        }
+                                    },
+                                    onOpenSettingsChild = { child -> AppBackStackOps.push(backStack, child) },
                                 )
-                        } else {
-                            androidx.compose.animation.EnterTransition.None togetherWith
-                                androidx.compose.animation.ExitTransition.None
-                        }
-                    },
-                    label = "tabTransition",
-                ) { currentTab ->
-                    when (currentTab) {
-                        Tab.TIMETABLE -> {
-                            TimetableScreen(
-                                state = state,
-                                viewModel = viewModel,
-                                bottomContentPadding = navScrollClearance,
-                            )
-                        }
+                            }
 
-                        Tab.MORE -> {
-                            MoreScreen(
-                                state = state,
-                                viewModel = viewModel,
-                                onGoSettings = { tab = Tab.SETTINGS },
-                                bottomContentPadding = navScrollClearance,
-                            )
-                        }
-
-                        Tab.SETTINGS -> {
-                            SettingsScreen(
-                                state = state,
-                                viewModel = viewModel,
-                                rootBottomPadding = navScrollClearance,
-                                onBottomBarRevealChange = { settingsBottomBarReveal = it },
-                            )
+                            is AppRoute.SettingsChild -> {
+                                SettingsChildScreen(
+                                    route = key,
+                                    state = state,
+                                    viewModel = viewModel,
+                                    onBack = { AppBackStackOps.pop(backStack) },
+                                )
+                            }
                         }
                     }
+                },
+                modifier = Modifier.fillMaxSize(),
+            )
+
+            // 关闭「预测性返回手势」时由后注册的 BackHandler 接管系统返回：
+            // 侧滑过程中不驱动 NavDisplay 跟手预览，松手确认后仍走常规 popTransitionSpec 退场。
+            BackHandler(enabled = !state.predictiveBackEnabled && backStack.size > 1) {
+                AppBackStackOps.pop(backStack)
+            }
+        }
+    }
+}
+
+@Composable
+private fun HomeShell(
+    tab: Tab,
+    state: AppState,
+    viewModel: AppViewModel,
+    navScrollClearance: Dp,
+    motionEnabled: Boolean,
+    onSelectTab: (Tab) -> Unit,
+    onOpenSettingsChild: (AppRoute.SettingsChild) -> Unit,
+) {
+    Box(
+        modifier =
+            Modifier
+                .fillMaxSize()
+                .background(MaterialTheme.colorScheme.surface),
+    ) {
+        AnimatedContent(
+            targetState = tab,
+            transitionSpec = {
+                val direction = if (targetState.ordinal > initialState.ordinal) 1 else -1
+                if (motionEnabled) {
+                    // 平级 tab 要立刻响应：新旧页面同时进退，不等待淡出，也不叠加缩放。
+                    (
+                        fadeIn(tween(160)) +
+                            slideInHorizontally(tween(200, easing = FastOutSlowInEasing)) { direction * it / 18 }
+                    ) togetherWith
+                        (
+                            fadeOut(tween(160)) +
+                                slideOutHorizontally(tween(200, easing = FastOutSlowInEasing)) { -direction * it / 28 }
+                        )
+                } else {
+                    EnterTransition.None togetherWith ExitTransition.None
+                }
+            },
+            label = "tabTransition",
+        ) { currentTab ->
+            when (currentTab) {
+                Tab.TIMETABLE -> {
+                    TimetableScreen(
+                        state = state,
+                        viewModel = viewModel,
+                        bottomContentPadding = navScrollClearance,
+                    )
+                }
+
+                Tab.MORE -> {
+                    MoreScreen(
+                        state = state,
+                        viewModel = viewModel,
+                        onGoSettings = { onSelectTab(Tab.SETTINGS) },
+                        bottomContentPadding = navScrollClearance,
+                    )
+                }
+
+                Tab.SETTINGS -> {
+                    SettingsOverviewScreen(
+                        state = state,
+                        viewModel = viewModel,
+                        rootBottomPadding = navScrollClearance,
+                        onNavigate = onOpenSettingsChild,
+                    )
                 }
             }
-
-            FloatingNavBar(
-                items =
-                    listOf(
-                        FloatingNavItemData(
-                            label = stringResource(R.string.tab_timetable),
-                            icon = TabIcons.Timetable,
-                            selectedIcon = TabIcons.TimetableFilled,
-                            selected = tab == Tab.TIMETABLE,
-                            onClick = {
-                                tab = Tab.TIMETABLE
-                                // 切回课表时按最小间隔补一次同步（打开 App 本身是特殊自动，不受限）。
-                                viewModel.maybeAutoSync()
-                            },
-                        ),
-                        FloatingNavItemData(
-                            label = stringResource(R.string.tab_more),
-                            icon = TabIcons.More,
-                            selectedIcon = TabIcons.MoreFilled,
-                            selected = tab == Tab.MORE,
-                            onClick = { tab = Tab.MORE },
-                        ),
-                        FloatingNavItemData(
-                            label = stringResource(R.string.tab_settings),
-                            icon = TabIcons.Settings,
-                            selectedIcon = TabIcons.SettingsFilled,
-                            selected = tab == Tab.SETTINGS,
-                            onClick = { tab = Tab.SETTINGS },
-                        ),
-                    ),
-                showLabels = state.showBottomBarLabels,
-                reveal = bottomBarReveal,
-                motionEnabled = motionEnabled,
-                modifier = Modifier.align(Alignment.BottomCenter),
-            )
         }
+
+        FloatingNavBar(
+            items =
+                listOf(
+                    FloatingNavItemData(
+                        label = stringResource(R.string.tab_timetable),
+                        icon = TabIcons.Timetable,
+                        selectedIcon = TabIcons.TimetableFilled,
+                        selected = tab == Tab.TIMETABLE,
+                        onClick = { onSelectTab(Tab.TIMETABLE) },
+                    ),
+                    FloatingNavItemData(
+                        label = stringResource(R.string.tab_more),
+                        icon = TabIcons.More,
+                        selectedIcon = TabIcons.MoreFilled,
+                        selected = tab == Tab.MORE,
+                        onClick = { onSelectTab(Tab.MORE) },
+                    ),
+                    FloatingNavItemData(
+                        label = stringResource(R.string.tab_settings),
+                        icon = TabIcons.Settings,
+                        selectedIcon = TabIcons.SettingsFilled,
+                        selected = tab == Tab.SETTINGS,
+                        onClick = { onSelectTab(Tab.SETTINGS) },
+                    ),
+                ),
+            showLabels = state.showBottomBarLabels,
+            motionEnabled = motionEnabled,
+            modifier = Modifier.align(Alignment.BottomCenter),
+        )
     }
 }

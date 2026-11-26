@@ -1,7 +1,5 @@
 package com.github.echoping07.kemaolife.ui
 
-import androidx.activity.BackEventCompat
-import androidx.activity.compose.PredictiveBackHandler
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.EnterTransition
 import androidx.compose.animation.ExitTransition
@@ -17,11 +15,8 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.animation.scaleIn
 import androidx.compose.animation.scaleOut
 import androidx.compose.animation.togetherWith
-import androidx.compose.foundation.background
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsPressedAsState
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
@@ -35,9 +30,7 @@ import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.selection.toggleable
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
@@ -50,22 +43,17 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
-import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontWeight
@@ -79,233 +67,52 @@ import com.github.echoping07.kemaolife.R
 import com.github.echoping07.kemaolife.data.AppPreferences
 import com.github.echoping07.kemaolife.data.Credentials
 import com.github.echoping07.kemaolife.ui.theme.appShape
-import kotlinx.coroutines.CancellationException
-import kotlinx.coroutines.Job
-import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.launch
-
-private enum class SettingsPage { ROOT, EDUCATION, ELECTRICITY, CAMPUS, APPEARANCE, ABOUT, LOGS }
 
 /** 带右下角悬浮保存钮的二级页尾部留白（56dp FAB + 20dp 外距 + 20dp 呼吸空隙，不含导航栏 inset）。 */
 private val FabBottomClearance = 96.dp
 
-/** 设置总览只承担导航；凭据表单放进各自页面，二级页支持预测性返回并自动隐藏主悬浮底栏。 */
+/** 设置总览（位于 [AppRoute.Home] 的设置 Tab 内）；二级页路由与预测性返回由外层 NavDisplay 统一管理。 */
 @Composable
-internal fun SettingsScreen(
+internal fun SettingsOverviewScreen(
     state: AppState,
     viewModel: AppViewModel,
     rootBottomPadding: Dp = PageBottomPadding,
-    onBottomBarRevealChange: (Float) -> Unit = {},
+    onNavigate: (AppRoute.SettingsChild) -> Unit,
 ) {
-    var pageName by rememberSaveable { mutableStateOf(SettingsPage.ROOT.name) }
-    val page = SettingsPage.valueOf(pageName)
-    val motionEnabled = animationsEnabled()
-    val uiScope = rememberCoroutineScope()
-    val rootScrollState = rememberScrollState()
-
-    var renderedChild by remember { mutableStateOf(page.takeIf { it != SettingsPage.ROOT }) }
-    val transitionProgress = remember { Animatable(if (page == SettingsPage.ROOT) 0f else 1f) }
-    var isPredictiveBackActive by remember { mutableStateOf(false) }
-    val backGestureProgress = remember { Animatable(0f) }
-    var backSwipeEdge by remember { mutableIntStateOf(BackEventCompat.EDGE_LEFT) }
-    var backSettleJob by remember { mutableStateOf<Job?>(null) }
-
-    LaunchedEffect(page, motionEnabled) {
-        if (page != SettingsPage.ROOT) {
-            backSettleJob?.cancel()
-            isPredictiveBackActive = false
-            backGestureProgress.snapTo(0f)
-            renderedChild = page
-            if (motionEnabled) {
-                transitionProgress.animateTo(1f, tween(280, easing = FastOutSlowInEasing))
-            } else {
-                transitionProgress.snapTo(1f)
-            }
-        } else if (!isPredictiveBackActive) {
-            if (motionEnabled) {
-                transitionProgress.animateTo(0f, tween(240, easing = FastOutSlowInEasing))
-            } else {
-                transitionProgress.snapTo(0f)
-            }
-            renderedChild = null
-        }
-    }
-
-    // 与主界面的悬浮底栏联动：二级页隐藏底栏，预测性返回拖拽时随手势进度平滑恢复。
-    LaunchedEffect(Unit) {
-        snapshotFlow {
-            PredictiveBackMath.bottomBarReveal(
-                hasChild = renderedChild != null,
-                transitionProgress = transitionProgress.value,
-                predictiveBackActive = isPredictiveBackActive,
-                predictiveBackProgress = backGestureProgress.value,
-            )
-        }.collect(onBottomBarRevealChange)
-    }
-    DisposableEffect(Unit) {
-        onDispose { onBottomBarRevealChange(1f) }
-    }
-
-    PredictiveBackHandler(enabled = page != SettingsPage.ROOT) { events: Flow<BackEventCompat> ->
-        backSettleJob?.cancel()
-        var receivedProgress = false
-        try {
-            events.collect { event ->
-                receivedProgress = true
-                isPredictiveBackActive = true
-                backSwipeEdge = event.swipeEdge
-                if (motionEnabled) {
-                    backGestureProgress.snapTo(event.progress.coerceIn(0f, 1f))
-                }
-            }
-            if (receivedProgress && motionEnabled) {
-                pageName = SettingsPage.ROOT.name
-                backSettleJob =
-                    uiScope.launch {
-                        backGestureProgress.animateTo(1f, tween(180, easing = FastOutSlowInEasing))
-                        transitionProgress.snapTo(0f)
-                        backGestureProgress.snapTo(0f)
-                        isPredictiveBackActive = false
-                        renderedChild = null
-                    }
-            } else {
-                // 三键返回或关闭动画时没有手势进度流，回落普通退出转场。
-                isPredictiveBackActive = false
-                backGestureProgress.snapTo(0f)
-                pageName = SettingsPage.ROOT.name
-            }
-        } catch (e: CancellationException) {
-            // PredictiveBackHandler 取消手势时会同时取消当前协程，回弹动画需挂到外层 uiScope。
-            if (page != SettingsPage.ROOT) {
-                backSettleJob =
-                    uiScope.launch {
-                        if (motionEnabled) {
-                            backGestureProgress.animateTo(0f, tween(200, easing = FastOutSlowInEasing))
-                        } else {
-                            backGestureProgress.snapTo(0f)
-                        }
-                        isPredictiveBackActive = false
-                    }
-            }
-            throw e
-        }
-    }
-
-    val navBottom = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
-    val childSimpleBottomPadding = navBottom + PageBottomPadding
-    val childFabBottomPadding = navBottom + FabBottomClearance
-    val density = LocalDensity.current
-
-    BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
-        val viewportWidthPx = constraints.maxWidth.toFloat()
-        val hasChild = renderedChild != null
-        val transform =
-            if (!motionEnabled) {
-                null
-            } else if (isPredictiveBackActive) {
-                PredictiveBackMath.predictiveBack(
-                    progress = backGestureProgress.value,
-                    swipeEdge = backSwipeEdge,
-                    viewportWidthPx = viewportWidthPx,
-                )
-            } else {
-                PredictiveBackMath.slideTransition(
-                    childProgress = transitionProgress.value,
-                    viewportWidthPx = viewportWidthPx,
-                )
-            }
-
-        // 仅在总览可见或转场 / 预测性返回露底期间组合总览页；滚动位置由 rootScrollState 跨进退保留。
-        val showRoot = !hasChild || isPredictiveBackActive || transitionProgress.value < 0.999f
-        if (showRoot) {
-            Box(
-                modifier =
-                    Modifier
-                        .fillMaxSize()
-                        .graphicsLayer {
-                            if (hasChild && transform != null) {
-                                translationX = transform.rootTranslationX
-                                scaleX = transform.rootScale
-                                scaleY = transform.rootScale
-                            }
-                        }.background(MaterialTheme.colorScheme.surface),
-            ) {
-                CollapsingScreen(
-                    title = stringResource(R.string.tab_settings),
-                    scrollState = rootScrollState,
-                    bottomContentPadding = rootBottomPadding,
-                    modifier = Modifier.fillMaxSize(),
-                ) {
-                    SettingsOverview(
-                        state = state,
-                        onThemeMode = viewModel::setThemeMode,
-                        onEducation = { pageName = SettingsPage.EDUCATION.name },
-                        onElectricity = { pageName = SettingsPage.ELECTRICITY.name },
-                        onCampus = { pageName = SettingsPage.CAMPUS.name },
-                        onAppearance = { pageName = SettingsPage.APPEARANCE.name },
-                        onAbout = { pageName = SettingsPage.ABOUT.name },
-                        onLogs = { pageName = SettingsPage.LOGS.name },
-                    )
-                }
-                if (hasChild && transform != null && transform.rootScrimAlpha > 0.001f) {
-                    Box(
-                        modifier =
-                            Modifier
-                                .fillMaxSize()
-                                .background(Color.Black.copy(alpha = transform.rootScrimAlpha)),
-                    )
-                }
-            }
-        }
-
-        val child = renderedChild
-        if (child != null) {
-            key(child) {
-                val cornerDp = transform?.childCornerDp ?: 0f
-                val shadowPx = with(density) { 12.dp.toPx() }
-                Box(
-                    modifier =
-                        Modifier
-                            .fillMaxSize()
-                            .graphicsLayer {
-                                if (transform != null) {
-                                    translationX = transform.childTranslationX
-                                    scaleX = transform.childScale
-                                    scaleY = transform.childScale
-                                    alpha = transform.childAlpha
-                                }
-                                if (cornerDp > 0.5f) {
-                                    shape = RoundedCornerShape(cornerDp.dp)
-                                    clip = true
-                                    shadowElevation = shadowPx
-                                }
-                            }.background(MaterialTheme.colorScheme.surface),
-                ) {
-                    SettingsChildPage(
-                        page = child,
-                        state = state,
-                        viewModel = viewModel,
-                        onBack = { pageName = SettingsPage.ROOT.name },
-                        fabBottomPadding = childFabBottomPadding,
-                        simpleBottomPadding = childSimpleBottomPadding,
-                    )
-                }
-            }
-        }
+    CollapsingScreen(
+        title = stringResource(R.string.tab_settings),
+        bottomContentPadding = rootBottomPadding,
+        modifier = Modifier.fillMaxSize(),
+    ) {
+        SettingsOverview(
+            state = state,
+            onThemeMode = viewModel::setThemeMode,
+            onPredictiveBackEnabled = viewModel::setPredictiveBackEnabled,
+            onEducation = { onNavigate(AppRoute.SettingsChild.Education) },
+            onElectricity = { onNavigate(AppRoute.SettingsChild.Electricity) },
+            onCampus = { onNavigate(AppRoute.SettingsChild.Campus) },
+            onAppearance = { onNavigate(AppRoute.SettingsChild.Appearance) },
+            onAbout = { onNavigate(AppRoute.SettingsChild.About) },
+            onLogs = { onNavigate(AppRoute.SettingsChild.Logs) },
+        )
     }
 }
 
+/** 设置二级页分发入口：由 NavDisplay 的 `entryProvider` 按路由渲染。 */
 @Composable
-private fun SettingsChildPage(
-    page: SettingsPage,
+internal fun SettingsChildScreen(
+    route: AppRoute.SettingsChild,
     state: AppState,
     viewModel: AppViewModel,
     onBack: () -> Unit,
-    fabBottomPadding: Dp,
-    simpleBottomPadding: Dp,
 ) {
-    when (page) {
-        SettingsPage.EDUCATION -> {
+    val navBottom = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
+    val simpleBottomPadding = navBottom + PageBottomPadding
+    val fabBottomPadding = navBottom + FabBottomClearance
+
+    when (route) {
+        AppRoute.SettingsChild.Education -> {
             EducationSettings(
                 state = state,
                 viewModel = viewModel,
@@ -314,7 +121,7 @@ private fun SettingsChildPage(
             )
         }
 
-        SettingsPage.ELECTRICITY -> {
+        AppRoute.SettingsChild.Electricity -> {
             ElectricitySettings(
                 state = state,
                 viewModel = viewModel,
@@ -323,7 +130,7 @@ private fun SettingsChildPage(
             )
         }
 
-        SettingsPage.CAMPUS -> {
+        AppRoute.SettingsChild.Campus -> {
             CampusSettings(
                 state = state,
                 viewModel = viewModel,
@@ -332,7 +139,7 @@ private fun SettingsChildPage(
             )
         }
 
-        SettingsPage.APPEARANCE -> {
+        AppRoute.SettingsChild.Appearance -> {
             CollapsingScreen(
                 title = stringResource(R.string.settings_appearance),
                 onBack = onBack,
@@ -343,7 +150,7 @@ private fun SettingsChildPage(
             }
         }
 
-        SettingsPage.ABOUT -> {
+        AppRoute.SettingsChild.About -> {
             CollapsingScreen(
                 title = stringResource(R.string.settings_about),
                 onBack = onBack,
@@ -354,7 +161,7 @@ private fun SettingsChildPage(
             }
         }
 
-        SettingsPage.LOGS -> {
+        AppRoute.SettingsChild.Logs -> {
             CollapsingScreen(
                 title = stringResource(R.string.settings_logs),
                 onBack = onBack,
@@ -370,10 +177,6 @@ private fun SettingsChildPage(
             ) {
                 LogsScreen(state, viewModel)
             }
-        }
-
-        SettingsPage.ROOT -> {
-            Unit
         }
     }
 }
@@ -394,6 +197,7 @@ private fun ProbeTestAction(onClick: () -> Unit) {
 private fun SettingsOverview(
     state: AppState,
     onThemeMode: (String) -> Unit,
+    onPredictiveBackEnabled: (Boolean) -> Unit,
     onEducation: () -> Unit,
     onElectricity: () -> Unit,
     onCampus: () -> Unit,
@@ -454,6 +258,15 @@ private fun SettingsOverview(
             title = stringResource(R.string.settings_appearance),
             supporting = stringResource(R.string.settings_theme_hint),
             onClick = onAppearance,
+            position = GroupPosition.MIDDLE,
+        )
+        GroupGap()
+        SettingsSwitchDestination(
+            icon = TabIcons.HandMove,
+            title = stringResource(R.string.settings_predictive_back),
+            supporting = stringResource(R.string.settings_predictive_back_hint),
+            checked = state.predictiveBackEnabled,
+            onCheckedChange = onPredictiveBackEnabled,
             position = GroupPosition.LAST,
         )
 
@@ -572,6 +385,49 @@ internal fun SettingsDestination(
                 tint = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.size(21.dp),
             )
+        }
+    }
+}
+
+/** 设置总览内的开关条目：与 [SettingsDestination] 共用左侧图标与文字基线。 */
+@Composable
+private fun SettingsSwitchDestination(
+    icon: ImageVector,
+    title: String,
+    supporting: String,
+    checked: Boolean,
+    onCheckedChange: (Boolean) -> Unit,
+    position: GroupPosition = GroupPosition.ONLY,
+) {
+    GroupSurface(position = position, modifier = Modifier.fillMaxWidth()) {
+        Row(
+            modifier =
+                Modifier
+                    .fillMaxWidth()
+                    .toggleable(
+                        value = checked,
+                        role = Role.Switch,
+                        onValueChange = onCheckedChange,
+                    ).padding(start = 20.dp, end = 16.dp, top = 15.dp, bottom = 15.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Icon(
+                imageVector = icon,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.size(25.dp),
+            )
+            Spacer(Modifier.width(18.dp))
+            Column(modifier = Modifier.weight(1f).padding(end = 12.dp)) {
+                Text(text = title, style = MaterialTheme.typography.titleMedium)
+                Text(
+                    text = supporting,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(top = 3.dp),
+                )
+            }
+            Switch(checked = checked, onCheckedChange = null)
         }
     }
 }

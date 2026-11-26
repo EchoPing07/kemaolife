@@ -15,6 +15,7 @@ import com.github.echoping07.kemaolife.data.Credentials
 import com.github.echoping07.kemaolife.data.DaySchedule
 import com.github.echoping07.kemaolife.data.DEFAULT_CONTINUOUS_CORNERS
 import com.github.echoping07.kemaolife.data.DEFAULT_DYNAMIC_COLOR
+import com.github.echoping07.kemaolife.data.DEFAULT_PREDICTIVE_BACK
 import com.github.echoping07.kemaolife.data.DEFAULT_SHOW_BOTTOM_BAR_LABELS
 import com.github.echoping07.kemaolife.data.ElectricityReport
 import com.github.echoping07.kemaolife.data.LogEntry
@@ -163,6 +164,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                 amoled = themePreferences.loadAmoled(),
                 continuousCorners = themePreferences.loadContinuousCorners(),
                 showBottomBarLabels = themePreferences.loadShowBottomBarLabels(),
+                predictiveBackEnabled = themePreferences.loadPredictiveBackEnabled(),
             )
         }
         // 老版本用 wall-clock 存时间戳，升到单调时钟后那些值全部失效，重查一次即可。
@@ -977,6 +979,11 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         _state.update { it.copy(showBottomBarLabels = value) }
     }
 
+    fun setPredictiveBackEnabled(value: Boolean) {
+        themePreferences.savePredictiveBackEnabled(value)
+        _state.update { it.copy(predictiveBackEnabled = value) }
+    }
+
     fun consumeSettingsSaved() = _state.update { it.copy(settingsSaved = false) }
 
     fun consumeError() = _state.update { it.copy(error = null) }
@@ -1130,6 +1137,7 @@ data class AppState(
     val amoled: Boolean = false,
     val continuousCorners: Boolean = DEFAULT_CONTINUOUS_CORNERS,
     val showBottomBarLabels: Boolean = DEFAULT_SHOW_BOTTOM_BAR_LABELS,
+    val predictiveBackEnabled: Boolean = DEFAULT_PREDICTIVE_BACK,
     val settingsSaved: Boolean = false,
     val error: String? = null,
 

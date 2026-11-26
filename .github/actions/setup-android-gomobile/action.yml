@@ -2,7 +2,7 @@ name: Setup Android + gomobile
 description: 安装 JDK 17 / Android SDK / NDK，生成 gomobile AAR；工具链版本取自 android/README.md 基线
 
 # NDK / gomobile 工具链版本与 android/README.md 保持一致。
-# 版本与 android/README.md §1 保持一致：compileSdk 34 / build-tools 34.0.0 / NDK r27c。
+# 版本与 android/README.md §1 保持一致：compileSdk 36 / build-tools 35.0.0 / NDK r27c。
 
 runs:
   using: composite
@@ -29,7 +29,7 @@ runs:
         fi
         yes | "$SDKMANAGER" --sdk_root="$SDK" --licenses > /dev/null 2>&1 || true
         "$SDKMANAGER" --sdk_root="$SDK" --install \
-          "platform-tools" "platforms;android-34" "build-tools;34.0.0" \
+          "platform-tools" "platforms;android-36" "build-tools;35.0.0" \
           "ndk;27.2.12479018" > /dev/null
 
         export ANDROID_HOME="$SDK"
@@ -52,7 +52,7 @@ runs:
           echo "ANDROID_HOME=$SDK"
           echo "ANDROID_SDK_ROOT=$SDK"
           echo "ANDROID_NDK_HOME=$SDK/ndk/27.2.12479018"
-          echo "KEMAOLIFE_BUILD_TOOLS=$SDK/build-tools/34.0.0"
+          echo "KEMAOLIFE_BUILD_TOOLS=$SDK/build-tools/35.0.0"
         } >> "$GITHUB_ENV"
         # AGP 从 ANDROID_HOME 也能定位 SDK，写 local.properties 只是避免镜像差异。
         echo "sdk.dir=$SDK" > android/local.properties

@@ -16,6 +16,7 @@ class ThemePreferences(context: Context) {
         amoled = loadAmoled(),
         continuousCorners = loadContinuousCorners(),
         showBottomBarLabels = loadShowBottomBarLabels(),
+        predictiveBackEnabled = loadPredictiveBackEnabled(),
     )
 
     fun loadMode(): String = normalizeThemeMode(
@@ -35,6 +36,10 @@ class ThemePreferences(context: Context) {
     fun loadShowBottomBarLabels(): Boolean =
         preferences.getBoolean(KEY_SHOW_BOTTOM_BAR_LABELS, DEFAULT_SHOW_BOTTOM_BAR_LABELS)
 
+    /** 二级页是否启用预测性返回跟手预览；未显式设置时默认开启。 */
+    fun loadPredictiveBackEnabled(): Boolean =
+        preferences.getBoolean(KEY_PREDICTIVE_BACK, DEFAULT_PREDICTIVE_BACK)
+
     /** 兼容旧的主题色保存接口。 */
     fun save(theme: String) {
         preferences.edit().putString(KEY_THEME, normalizeThemeColor(theme)).apply()
@@ -48,6 +53,7 @@ class ThemePreferences(context: Context) {
             .putBoolean(KEY_AMOLED, settings.amoled)
             .putBoolean(KEY_CONTINUOUS_CORNERS, settings.continuousCorners)
             .putBoolean(KEY_SHOW_BOTTOM_BAR_LABELS, settings.showBottomBarLabels)
+            .putBoolean(KEY_PREDICTIVE_BACK, settings.predictiveBackEnabled)
             .apply()
     }
 
@@ -73,6 +79,10 @@ class ThemePreferences(context: Context) {
         preferences.edit().putBoolean(KEY_SHOW_BOTTOM_BAR_LABELS, enabled).apply()
     }
 
+    fun savePredictiveBackEnabled(enabled: Boolean) {
+        preferences.edit().putBoolean(KEY_PREDICTIVE_BACK, enabled).apply()
+    }
+
     private companion object {
         const val KEY_THEME = "theme_color"
         const val KEY_THEME_MODE = "theme_mode"
@@ -80,5 +90,6 @@ class ThemePreferences(context: Context) {
         const val KEY_AMOLED = "amoled"
         const val KEY_CONTINUOUS_CORNERS = "continuous_corners"
         const val KEY_SHOW_BOTTOM_BAR_LABELS = "show_bottom_bar_labels"
+        const val KEY_PREDICTIVE_BACK = "predictive_back_enabled"
     }
 }

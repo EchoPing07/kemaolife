@@ -19,6 +19,9 @@ const val DEFAULT_CONTINUOUS_CORNERS = false
 /** 悬浮底栏文字标签的唯一默认来源：默认显示图标 + 文字，可在「设置 → 外观」切到纯图标。 */
 const val DEFAULT_SHOW_BOTTOM_BAR_LABELS = true
 
+/** 预测性返回手势的唯一默认来源：默认开启，可在设置「个性化」组关闭。 */
+const val DEFAULT_PREDICTIVE_BACK = true
+
 /** 本机外观偏好；字段与 AppState 的展示字段保持一一对应。 */
 data class ThemeSettings(
     val themeColor: String = DEFAULT_THEME_COLOR,
@@ -27,6 +30,7 @@ data class ThemeSettings(
     val amoled: Boolean = false,
     val continuousCorners: Boolean = DEFAULT_CONTINUOUS_CORNERS,
     val showBottomBarLabels: Boolean = DEFAULT_SHOW_BOTTOM_BAR_LABELS,
+    val predictiveBackEnabled: Boolean = DEFAULT_PREDICTIVE_BACK,
 )
 
 private val supportedThemeColors = setOf(

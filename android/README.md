@@ -8,9 +8,9 @@
 
 | 组件 | 版本 | 说明 |
 |---|---|---|
-| JDK | **17** | AGP 8.7 要求 17；JDK 21+ 不保证可直接用 |
-| Android SDK Platform | `android-34` | `compileSdk = 34` |
-| Android Build-Tools | `34.0.0` | `apksigner` 也来自这里 |
+| JDK | **17** | AGP 8.10 要求 17；JDK 21+ 不保证可直接用 |
+| Android SDK Platform | `android-36` | `compileSdk = 36` |
+| Android Build-Tools | `35.0.0` | AGP 8.10 默认版本，`apksigner` 也来自这里 |
 | Android NDK | **r27c**（`27.2.12479018`） | `gomobile bind` 编译 `libgojni.so` 用 |
 | Go | 1.24+ | 与 `../go.mod` 一致 |
 | `gomobile` / `gobind` | 与 `go.mod` 里的 `golang.org/x/mobile` 同版本 | 见下 |
@@ -99,7 +99,7 @@ adb shell am start -n com.github.echoping07.kemaolife/.MainActivity
 | 启动即闪退 `ClassNotFoundException: ...MainActivity` | Kotlin 文件的 `package` 与所在目录不一致（`MainActivity.kt` 在根包目录却写了 `.ui` 包） | Kotlin 的 `package` 必须与目录一致：`MainActivity.kt` 在 `.../kemaolife/` 下就得是 `package com.github.echoping07.kemaolife` |
 | 所有时间戳都带 `Z`、比实际差 8 小时 | Go 在 Android 上找不到 zoneinfo，`time.Local` 退化为 UTC | 见 §6 |
 | 把工程放在中文路径下构建 | Windows + AGP 对非 ASCII 路径仍有零散问题 | 建一个 ASCII junction：`mklink /J C:\kmbuild D:\<中文路径>` |
-| `apksigner verify` 在 PowerShell 里找不到 | 用的是 `apksigner.bat` 而非 Linux 版脚本 | CI 在 `ubuntu-latest` 上用 `$ANDROID_HOME/build-tools/34.0.0/apksigner`；Windows 本地用 `.bat` |
+| `apksigner verify` 在 PowerShell 里找不到 | 用的是 `apksigner.bat` 而非 Linux 版脚本 | CI 在 `ubuntu-latest` 上用 `$ANDROID_HOME/build-tools/35.0.0/apksigner`；Windows 本地用 `.bat` |
 
 ## 6. 时区必须由 Kotlin 传给 Go
 

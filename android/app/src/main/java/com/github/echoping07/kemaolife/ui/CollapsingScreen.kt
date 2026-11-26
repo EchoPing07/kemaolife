@@ -19,6 +19,8 @@ import androidx.compose.foundation.layout.ime
 import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.statusBars
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.union
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.windowInsetsPadding
@@ -74,8 +76,8 @@ internal fun collapsingContentMinHeightPx(viewportPx: Int, collapseDistancePx: I
 }
 
 /**
- * 状态栏 inset 由外层 Scaffold 统一提供。大标题随内容向上离场，
- * 收起后小标题直接在固定返回按钮右侧出现，不使用 LargeTopAppBar 的字形缩放。
+ * 状态栏 inset 由页面自身消费，确保整页转场与预测性返回覆盖状态栏区域而不出现顶部横切线。
+ * 大标题随内容向上离场，收起后小标题直接在固定返回按钮右侧出现，不使用 LargeTopAppBar 的字形缩放。
  */
 @Composable
 internal fun CollapsingScreen(
@@ -94,12 +96,17 @@ internal fun CollapsingScreen(
     val progress = collapsingTitleProgress(scroll.value, collapseDistance.roundToInt())
     val titleOffset = with(density) { -ExpandedTitleHeight.toPx() * progress }
     val motionEnabled = animationsEnabled()
+    val statusBarTop = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
     // 软键盘弹出时只补超出系统导航栏的部分，避免与调用方已计入的底部导航栏 inset 叠加。
     val imeBottom = WindowInsets.ime.asPaddingValues().calculateBottomPadding()
     val navBottom = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
     val extraImePadding = (imeBottom - navBottom).coerceAtLeast(0.dp)
 
-    BoxWithConstraints(modifier = modifier.fillMaxSize()) {
+    BoxWithConstraints(
+        modifier = modifier
+            .fillMaxSize()
+            .background(MaterialTheme.colorScheme.surface),
+    ) {
         // 视口高取本层约束：滚动区与固定顶栏共用同一个 Box，高度一致。
         val contentMinHeight = with(density) {
             collapsingContentMinHeightPx(
@@ -114,7 +121,7 @@ internal fun CollapsingScreen(
                 .heightIn(min = contentMinHeight)
                 .padding(horizontal = PageHorizontalPadding),
         ) {
-            Spacer(Modifier.height(CollapsedTitleHeight + ExpandedTitleGap))
+            Spacer(Modifier.height(statusBarTop + CollapsedTitleHeight + ExpandedTitleGap))
             Text(
                 text = title,
                 style = MaterialTheme.typography.headlineLarge.copy(
@@ -142,8 +149,9 @@ internal fun CollapsingScreen(
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .height(CollapsedTitleHeight)
                 .background(MaterialTheme.colorScheme.surface)
+                .statusBarsPadding()
+                .height(CollapsedTitleHeight)
                 .padding(horizontal = PageHorizontalPadding),
             verticalAlignment = Alignment.CenterVertically,
         ) {
