@@ -34,7 +34,7 @@ func (a *desktopApp) openMainReady() {
 		ui.MessageBox(desktopAppName, "打开主窗口失败："+err.Error(), ui.MB_OK|ui.MB_ICONERROR)
 		return
 	}
-	ui.OpenMainPage(ui.MainPageToday)
+	ui.OpenMainPage(ui.MainPageHome)
 }
 
 const desktopAppName = "科贸生活"

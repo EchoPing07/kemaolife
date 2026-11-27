@@ -28,7 +28,7 @@
 2. 生成 Java 类实测落在 `com.github.echoping07.kemaolife.bridge.kemaolife.Kemaolife`（`-javapkg` 只决定前缀，末段固定取 Go 包名）；Kotlin 调 `Kemaolife.init(...)` / `Kemaolife.call(...)`。改包名须同步 `android/.../data/Bridge.kt` 与 `android/README.md`。
 3. 仓库与文档不出现任何凭据明文；学校代码属学校事实，可用内置默认值（当前 `3126`）；示例中的用户自填值写 `<学校代码>`。
 4. CLI 支持 linux / darwin（源码构建 + 预编译产物），windows 为后续计划；桌面端仅 Windows、移动端仅 Android。内部标识（`cmd` 目录名、二进制名、AUMID、Android 包名、产物名）冻结，不因支持平台扩展而改名。Windows 端命名用 `desktop`：主窗口 + 托盘程序是给人的；`agent` 一词仅指 CLI 侧的 AI agent。
-5. Windows 主窗口固定为今天 / 课表 / 电费 / 校园网 / 设置五页。关闭主窗口只隐藏到托盘；重复启动不带 `--background` 时唤起已有主窗口（已有实例仅驻留托盘、主窗口尚未创建时，通知其创建并显示）；重复启动带 `--background` 时直接退出，不改变已有实例的窗口状态；托盘左键打开主窗口并定位「今天」。窗口行为与完整规则见 [windows.md](windows.md)。
+5. Windows 主窗口固定为首页 / 课表 / 电费 / 校园网 / 设置 / 关于六页。关闭主窗口只隐藏到托盘；重复启动不带 `--background` 时唤起已有主窗口（已有实例仅驻留托盘、主窗口尚未创建时，通知其创建并显示）；重复启动带 `--background` 时直接退出，不改变已有实例的窗口状态；托盘左键打开主窗口并定位「首页」。窗口行为与完整规则见 [windows.md](windows.md)。
 
 ## 2. CLI 命令
 
@@ -170,7 +170,7 @@ CLI `--json` 与 Android 门面共用同一信封，字段名一致。
 | `data` | object | 业务数据，`ok:false` 时缺省 |
 | `error` | object | `{code, message}`，`ok:false` 时存在 |
 | `ts` | string | 响应生成时间（RFC3339，本地时区） |
-| `stale` | bool | 课表查询恒给出。`RefreshFirst`（CLI）刷新失败沿用旧快照时为 `true`，否则 `false`；`CacheOnly`（Windows 今天 / 课表页与 Android 查询类 `op`）**恒 `false`**——纯读缓存没有「本次刷新失败」这回事，Windows 页面与 Android UI 的同步错误依据独立刷新结果单独维护。非课表命令可缺省 |
+| `stale` | bool | 课表查询恒给出。`RefreshFirst`（CLI）刷新失败沿用旧快照时为 `true`，否则 `false`；`CacheOnly`（Windows 首页 / 课表页与 Android 查询类 `op`）**恒 `false`**——纯读缓存没有「本次刷新失败」这回事，Windows 页面与 Android UI 的同步错误依据独立刷新结果单独维护。非课表命令可缺省 |
 | `syncedAt` | string | 快照同步时间；课表查询恒给出（`RefreshFirst` 刷新成功时是本次时间、`stale:true` 或 `CacheOnly` 时是本地快照的同步时间）；CLI 与 Android 的 `timetable sync` 也给出 |
 
 `error.code` 使用 §8 的 `1001`–`5001` 域；CLI 退出码 `0/1/2/3/4` 由该域映射得出，**JSON 信封内不出现退出码**。`ok:false` 时 `data` 缺省，`ok:true` 时 `error` 缺省。所有示例按 Go 强类型 DTO 编解码。
@@ -261,7 +261,7 @@ func Call(reqJSON string) string { /* ... */ }
 | `config show` | `{ "studentId", "eduPassword", "customerCode", "customerCodeSource", "configPath" }` |
 | `--version --json` | `{ "version", "commit" }` |
 
-Windows 端不暴露 CLI / JSON 信封，五页主窗口、托盘菜单、悬浮提示与设置页只消费本机状态与 DTO，不新增对外字段。Windows 的 `GetSchedule` / `GetWeekSchedule` 使用 `CacheOnly`，`SyncTimetable` 独立刷新；电费完整报告使用既有 `ElectricityReport`，不另设 Windows DTO。
+Windows 端不暴露 CLI / JSON 信封，六页主窗口、托盘菜单、悬浮提示与设置页只消费本机状态与 DTO，不新增对外字段。Windows 的 `GetSchedule` / `GetWeekSchedule` 使用 `CacheOnly`，`SyncTimetable` 独立刷新；电费完整报告使用既有 `ElectricityReport`，不另设 Windows DTO。
 
 `DaySchedule` 示例为字段示意；`<...>` 是占位符字符串，实际数值字段按字段表编码。
 

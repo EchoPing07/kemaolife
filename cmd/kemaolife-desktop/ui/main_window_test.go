@@ -40,11 +40,11 @@ func testMainWindow(page int) *mainWindow {
 }
 
 func TestTodayPageRendersDTO(t *testing.T) {
-	w := testMainWindow(mainPageToday)
+	w := testMainWindow(mainPageHome)
 	tt := myui.NewTester(w.view, 1180, 760)
-	for _, text := range []string{"今天", "示例课程", "20.00", "已在线", "08:30~10:00"} {
+	for _, text := range []string{"首页", "示例课程", "20.00", "已在线", "08:30~10:00"} {
 		if !tt.HasText(text) {
-			t.Errorf("今天页缺少 %q；当前文本：%q", text, tt.Texts())
+			t.Errorf("首页缺少 %q；当前文本：%q", text, tt.Texts())
 		}
 	}
 }
@@ -148,7 +148,7 @@ func TestCloneMainStateDoesNotAliasSlices(t *testing.T) {
 }
 
 func TestDarkThemePagesRender(t *testing.T) {
-	for _, page := range []int{mainPageToday, mainPageTimetable, mainPageElectricity, mainPageCampus, mainPageSettings} {
+	for _, page := range []int{mainPageHome, mainPageTimetable, mainPageElectricity, mainPageCampus, mainPageSettings, mainPageAbout} {
 		w := testMainWindow(page)
 		tt := myui.NewTester(w.view, 960, 640)
 		tt.SetDark(true)
@@ -229,7 +229,7 @@ func TestTimetableWeekActions(t *testing.T) {
 }
 
 func TestCourseDetailDialogOpensAndCloses(t *testing.T) {
-	w := testMainWindow(mainPageToday)
+	w := testMainWindow(mainPageHome)
 	w.openCourseDetail(w.state.Today, w.state.Today.Entries[0])
 	tt := myui.NewTester(w.view, 1180, 760)
 	for _, want := range []string{"示例课程", "示例教师", "示例地点", "关闭"} {
@@ -315,7 +315,7 @@ func TestTimetableAndTodayRespectLocationDisplaySettings(t *testing.T) {
 	}
 
 	// 默认：课室显示优化=开、课室前显示@=开、过长隐藏=关。
-	for _, page := range []int{mainPageToday, mainPageTimetable} {
+	for _, page := range []int{mainPageHome, mainPageTimetable} {
 		w := testMainWindow(page)
 		w.state.Today.Entries = []model.Entry{entry}
 		w.state.Days[0].Entries = []model.Entry{entry}
@@ -332,7 +332,7 @@ func TestTimetableAndTodayRespectLocationDisplaySettings(t *testing.T) {
 	}
 
 	// 关闭优化与 @，开启过长隐藏：展示原始地点且不带 @。
-	for _, page := range []int{mainPageToday, mainPageTimetable} {
+	for _, page := range []int{mainPageHome, mainPageTimetable} {
 		w := testMainWindow(page)
 		w.state.Today.Entries = []model.Entry{entry}
 		w.state.Days[0].Entries = []model.Entry{entry}
@@ -342,6 +342,89 @@ func TestTimetableAndTodayRespectLocationDisplaySettings(t *testing.T) {
 		tt := myui.NewTester(w.view, 1180, 760)
 		if !tt.HasText("10-302软件实训室") || tt.HasText("@10-302") {
 			t.Errorf("page=%d 关闭优化与@后应展示原始地点；当前文本：%q", page, tt.Texts())
+		}
+	}
+}
+
+func TestSidebarCompactToggleAndTimetableRender(t *testing.T) {
+	for _, page := range []int{mainPageHome, mainPageTimetable, mainPageElectricity, mainPageCampus, mainPageSettings, mainPageAbout} {
+		w := testMainWindow(page)
+		w.sidebarCompact = true
+		tt := myui.NewTester(w.view, 960, 640)
+		if !mainPaletteForTest(tt) {
+			t.Fatalf("page=%d 折叠侧栏未完成渲染", page)
+		}
+		if w.sidebarWidth() != sidebarWidthCompact {
+			t.Fatalf("折叠态宽度错误: got %v, want %v", w.sidebarWidth(), sidebarWidthCompact)
+		}
+	}
+}
+
+func TestSettingsThemeModeSwitchAndSave(t *testing.T) {
+	w := testMainWindow(mainPageSettings)
+	var gotTheme string
+	w.handler.OnSaveSettings = func(res desktop.SettingsResult) (string, desktop.SettingsForm, bool) {
+		gotTheme = res.ThemeMode
+		form := w.state.SettingsForm
+		form.ThemeMode = res.ThemeMode
+		return "已保存", form, true
+	}
+	tt := myui.NewTester(w.view, 1180, 760)
+	if err := tt.Click("深色"); err != nil {
+		t.Fatal(err)
+	}
+	if !w.settingsDirty || w.settings.ThemeMode != desktop.ThemeDark {
+		t.Fatalf("选择深色主题未更新草稿: dirty=%v mode=%q", w.settingsDirty, w.settings.ThemeMode)
+	}
+	if err := tt.Click("保存"); err != nil {
+		t.Fatal(err)
+	}
+	if gotTheme != desktop.ThemeDark {
+		t.Fatalf("保存回传 ThemeMode = %q, want %q", gotTheme, desktop.ThemeDark)
+	}
+}
+
+func TestAboutPageRendersAndChecksUpdate(t *testing.T) {
+	w := testMainWindow(mainPageAbout)
+	w.state.Version = "0.6.6 (abc1234)"
+	checked := false
+	openedURL := ""
+	w.handler.OnCheckUpdate = func() { checked = true }
+	w.handler.OnOpenURL = func(u string) { openedURL = u }
+
+	tt := myui.NewTester(w.view, 1180, 760)
+	for _, want := range []string{"关于", "0.6.6 (abc1234)", "开源仓库", "版本发布", "QQ 交流群", "MIT", "检查更新"} {
+		if !tt.HasText(want) {
+			t.Fatalf("关于页缺少 %q；当前文本：%q", want, tt.Texts())
+		}
+	}
+	if err := tt.Click("检查更新"); err != nil {
+		t.Fatal(err)
+	}
+	if !checked {
+		t.Fatal("点击检查更新未触发 OnCheckUpdate")
+	}
+	if err := tt.Click("打开仓库"); err != nil {
+		t.Fatal(err)
+	}
+	if openedURL != aboutRepoURL {
+		t.Fatalf("点击打开仓库 URL = %q, want %q", openedURL, aboutRepoURL)
+	}
+}
+
+func TestAllPagesRenderAcrossWindowSizes(t *testing.T) {
+	sizes := [][2]int{{960, 640}, {1180, 760}, {1440, 900}}
+	pages := []int{mainPageHome, mainPageTimetable, mainPageElectricity, mainPageCampus, mainPageSettings, mainPageAbout}
+	for _, sz := range sizes {
+		for _, compact := range []bool{false, true} {
+			for _, page := range pages {
+				w := testMainWindow(page)
+				w.sidebarCompact = compact
+				tt := myui.NewTester(w.view, sz[0], sz[1])
+				if !mainPaletteForTest(tt) {
+					t.Fatalf("size=%dx%d compact=%v page=%d 渲染失败", sz[0], sz[1], compact, page)
+				}
+			}
 		}
 	}
 }

@@ -13,15 +13,15 @@ import (
 )
 
 func pageHeader(c *myui.Context, title, subtitle string, actions func()) {
-	myui.Row(c).AlignItems(myui.Center).Gap(16).Children(func() {
-		myui.Column(c).Grow(1).Gap(4).Children(func() {
-			myui.Text(c, title).FontSize(26).Bold()
+	myui.Row(c).FillWidth().AlignItems(myui.Center).Gap(16).Children(func() {
+		myui.Column(c).Grow(1).MinWidth(0).Gap(4).Children(func() {
+			myui.Text(c, title).FontSize(26).FontWeight(600)
 			if subtitle != "" {
 				myui.Text(c, subtitle).FontSize(12).TextColor(c.Theme().TextMuted)
 			}
 		})
 		if actions != nil {
-			myui.Row(c).AlignItems(myui.Center).Gap(8).Children(actions)
+			myui.Row(c).Shrink(0).AlignItems(myui.Center).Gap(8).Children(actions)
 		}
 	})
 }
@@ -29,12 +29,12 @@ func pageHeader(c *myui.Context, title, subtitle string, actions func()) {
 func mainCard(c *myui.Context) myui.Element {
 	p := mainPalette(c)
 	return myui.Column(c).Padding(18, 20).Gap(14).Radius(8).Background(p.card).
-		Border(1, p.cardBorder)
+		Border(1, p.cardBorder).Shadow(0, 1, 2, 0, p.cardShadow)
 }
 
 func mainSectionTitle(c *myui.Context, title, detail string) {
 	myui.Row(c).AlignItems(myui.Center).Gap(10).Children(func() {
-		myui.Text(c, title).FontSize(14).Bold()
+		myui.Text(c, title).FontSize(14).FontWeight(600)
 		myui.Spacer(c)
 		if detail != "" {
 			myui.Text(c, detail).FontSize(11).TextColor(c.Theme().TextMuted)
@@ -43,11 +43,13 @@ func mainSectionTitle(c *myui.Context, title, detail string) {
 }
 
 func mainBadge(c *myui.Context, label string, textColor, bgColor myui.Color, withDot bool) {
-	myui.Row(c).Padding(3, 9).Gap(6).Radius(12).Background(bgColor).AlignItems(myui.Center).Children(func() {
+	p := mainPalette(c)
+	myui.Row(c).Padding(2, 8).Gap(6).Radius(4).Background(bgColor).Border(1, p.hairline).
+		AlignItems(myui.Center).Children(func() {
 		if withDot {
 			myui.Box(c).Size(6, 6).Radius(3).Background(textColor).Shrink(0)
 		}
-		myui.Text(c, label).FontSize(11).Bold().TextColor(textColor).SingleLine()
+		myui.Text(c, label).FontSize(11).FontWeight(500).TextColor(textColor).SingleLine()
 	})
 }
 
@@ -55,12 +57,13 @@ func mainInfoBar(c *myui.Context, icon *myui.SVG, text string, fg, bg, border my
 	if strings.TrimSpace(text) == "" {
 		return
 	}
+	t := c.Theme()
 	myui.Row(c).Padding(10, 14).Gap(10).Radius(6).Background(bg).Border(1, border).
 		AlignItems(myui.Center).Children(func() {
 		if icon != nil {
 			myui.Icon(c, icon).FontSize(15).TextColor(fg).Shrink(0)
 		}
-		myui.Text(c, text).FontSize(12).TextColor(fg).Selectable().Grow(1)
+		myui.Text(c, text).FontSize(12).TextColor(t.Text).Selectable().Grow(1)
 	})
 }
 
@@ -85,8 +88,8 @@ func mainError(c *myui.Context, text string) {
 }
 
 func mainEmpty(c *myui.Context, title, detail string) {
-	myui.Column(c).Padding(32, 16).Gap(6).AlignItems(myui.Center).Children(func() {
-		myui.Text(c, title).FontSize(15).Bold().TextColor(c.Theme().Text)
+	myui.Column(c).Padding(28, 16).Gap(6).AlignItems(myui.Center).Children(func() {
+		myui.Text(c, title).FontSize(15).FontWeight(600).TextColor(c.Theme().Text)
 		if detail != "" {
 			myui.Text(c, detail).FontSize(12).TextColor(c.Theme().TextMuted).TextAlign(myui.Center)
 		}
@@ -96,10 +99,10 @@ func mainEmpty(c *myui.Context, title, detail string) {
 func mainSubtleLink(c *myui.Context, key, label string) bool {
 	p := mainPalette(c)
 	t := c.Theme()
-	btn := myui.ButtonBase(c.Key(key)).Height(30).Padding(0, 10).Gap(4).Radius(5).
+	btn := myui.ButtonBase(c.Key(key)).Height(28).Padding(0, 10).Gap(4).Radius(4).
 		AlignItems(myui.Center).Justify(myui.Center)
 	btn.Children(func() {
-		myui.Text(c, label).FontSize(12).TextColor(t.Accent).SingleLine()
+		myui.Text(c, label).FontSize(12).FontWeight(500).TextColor(t.Accent).SingleLine()
 		myui.Icon(c, mainIcons.chevronRight).FontSize(13).TextColor(t.Accent)
 	})
 	if btn.Pressed() {
@@ -144,26 +147,26 @@ func mainEntryLocation(entry model.Entry, opt timetableDisplayOptions) string {
 func mainLessonRow(c *myui.Context, key any, entry model.Entry, opt timetableDisplayOptions, onClick func()) {
 	p := mainPalette(c)
 	t := c.Theme()
-	cc := courseColorFor(entry.Name, t.Dark)
 	shownLocation := mainEntryLocation(entry, opt)
-	row := myui.ButtonBase(c.Key(key)).Padding(10, 12).Gap(14).Radius(6).
-		Background(p.cardSubtle).AlignItems(myui.Center).Justify(myui.Start)
+	row := myui.ButtonBase(c.Key(key)).Padding(10, 14).Gap(14).Radius(6).
+		Background(p.cardSecondary).Border(1, p.hairline).
+		AlignItems(myui.Center).Justify(myui.Start)
 	if row.Pressed() {
 		row.Background(p.navPressed)
 	} else if row.Hovered() {
-		row.Background(p.cardHover)
+		row.Background(p.cardHover).BorderColor(p.cardBorder)
 	}
 	row.Children(func() {
-		// 用淡底色节次胶囊关联课表色系，避免生硬的左侧竖条装饰。
-		myui.Column(c).Width(94).Shrink(0).Padding(6, 8).Gap(2).Radius(6).
-			Background(cc.fill).Border(1, cc.border).AlignItems(myui.Center).Children(func() {
-			myui.Text(c, "第 "+mainTextOr(entry.Periods, "—")+" 节").FontSize(12).Bold().TextColor(cc.text)
+		// 极简黑灰/少蓝线条层次：左侧 2px 主题蓝细线 + 单色节次时间 + 高对比课程名。
+		myui.Box(c).Width(2).Height(32).Radius(1).Background(t.Accent.Alpha(0.75)).Shrink(0)
+		myui.Column(c).Width(86).Shrink(0).Gap(2).Children(func() {
+			myui.Text(c, "第 "+mainTextOr(entry.Periods, "—")+" 节").FontSize(12).FontWeight(600).TextColor(t.Text)
 			if entry.Time != "" {
-				myui.Text(c, entry.Time).FontSize(10).TextColor(cc.text.Alpha(0.78)).FontFeatures("tnum")
+				myui.Text(c, entry.Time).FontSize(11).TextColor(t.TextMuted).FontFeatures("tnum")
 			}
 		})
-		myui.Column(c).Grow(1).Gap(4).Children(func() {
-			nameText := myui.Text(c, mainTextOr(entry.Name, "未命名课程")).FontSize(14).Bold()
+		myui.Column(c).Grow(1).MinWidth(0).Gap(4).Children(func() {
+			nameText := myui.Text(c, mainTextOr(entry.Name, "未命名课程")).FontSize(14).FontWeight(600)
 			if opt.hideOverflow {
 				nameText.MaxLines(1)
 			}
@@ -190,29 +193,21 @@ func mainLessonRow(c *myui.Context, key any, entry model.Entry, opt timetableDis
 	}
 }
 
-type courseColor struct{ fill, hover, border, text myui.Color }
+type courseColor struct{ fill, hover, border, accent, text myui.Color }
 
-// 课表 8 色调色板与 Android 端保持同一色相语言，纯色块 + 极淡同色描边，不加左侧竖条。
+// 极简素色 + 少数蓝/冷灰线条方案：去掉糖果多色，保持纯白/深灰卡片 + 清晰细线框 + 2px 克制强调边。
 func courseColorFor(name string, dark bool) courseColor {
 	light := []courseColor{
-		{myui.RGB(255, 236, 239), myui.Hex("#ffe0e5"), myui.RGBA(209, 75, 98, 0.22), myui.Hex("#7a1f31")}, // 玫瑰
-		{myui.Hex("#fff1e6"), myui.Hex("#ffe4d1"), myui.RGBA(212, 107, 40, 0.22), myui.Hex("#733409")},    // 蜜桃
-		{myui.Hex("#fff6df"), myui.Hex("#ffedc2"), myui.RGBA(196, 138, 20, 0.24), myui.Hex("#634400")},    // 琥珀
-		{myui.Hex("#eaf7e6"), myui.Hex("#dcf0d5"), myui.RGBA(71, 145, 52, 0.22), myui.Hex("#204d16")},     // 新芽
-		{myui.Hex("#e4f6ef"), myui.Hex("#d2efe4"), myui.RGBA(30, 140, 110, 0.22), myui.Hex("#0c4536")},    // 薄荷
-		{myui.Hex("#e7f3ff"), myui.Hex("#d6eaff"), myui.RGBA(29, 114, 194, 0.22), myui.Hex("#0d3c6b")},    // 天蓝
-		{myui.Hex("#f0ecff"), myui.Hex("#e3dcff"), myui.RGBA(108, 83, 201, 0.22), myui.Hex("#362673")},    // 淡紫
-		{myui.Hex("#fcedf6"), myui.Hex("#f8deed"), myui.RGBA(184, 71, 138, 0.22), myui.Hex("#631d47")},    // 樱粉
+		{myui.Hex("#ffffff"), myui.Hex("#f5f7fa"), myui.RGBA(0, 0, 0, 0.095), myui.Hex("#0067c0"), myui.Hex("#1a1a1a")},
+		{myui.Hex("#fafbfc"), myui.Hex("#f2f4f7"), myui.RGBA(0, 0, 0, 0.095), myui.Hex("#3b4252"), myui.Hex("#1a1a1a")},
+		{myui.Hex("#f6f9fd"), myui.Hex("#edf3fb"), myui.RGBA(0, 103, 192, 0.16), myui.Hex("#2b6cb0"), myui.Hex("#1a1a1a")},
+		{myui.Hex("#f8f9fa"), myui.Hex("#eff1f4"), myui.RGBA(0, 0, 0, 0.095), myui.Hex("#5f6b7a"), myui.Hex("#1a1a1a")},
 	}
 	darkColors := []courseColor{
-		{myui.Hex("#43262c"), myui.Hex("#502e35"), myui.RGBA(240, 128, 148, 0.24), myui.Hex("#ffd9df")},
-		{myui.Hex("#432f21"), myui.Hex("#503928"), myui.RGBA(242, 156, 97, 0.24), myui.Hex("#ffe4d1")},
-		{myui.Hex("#3e341e"), myui.Hex("#4b3f24"), myui.RGBA(230, 185, 76, 0.24), myui.Hex("#fff0c9")},
-		{myui.Hex("#263c23"), myui.Hex("#2f492b"), myui.RGBA(126, 203, 104, 0.24), myui.Hex("#dcf5d3")},
-		{myui.Hex("#1e3b34"), myui.Hex("#264840"), myui.RGBA(86, 199, 168, 0.24), myui.RGB(206, 243, 231)},
-		{myui.Hex("#20364a"), myui.Hex("#28425a"), myui.RGBA(107, 180, 245, 0.24), myui.Hex("#d4ebff")},
-		{myui.Hex("#312b4c"), myui.Hex("#3b345c"), myui.RGBA(166, 149, 240, 0.24), myui.Hex("#e6e0ff")},
-		{myui.Hex("#412538"), myui.Hex("#4e2d43"), myui.RGBA(226, 130, 189, 0.24), myui.Hex("#fbdcf0")},
+		{myui.Hex("#2c2c2c"), myui.Hex("#343434"), myui.RGBA(255, 255, 255, 0.095), myui.Hex("#60cdff"), myui.Hex("#f3f3f3")},
+		{myui.Hex("#292b2f"), myui.Hex("#32353a"), myui.RGBA(255, 255, 255, 0.095), myui.Hex("#8c96a4"), myui.Hex("#f3f3f3")},
+		{myui.Hex("#262d36"), myui.Hex("#2e3742"), myui.RGBA(96, 205, 255, 0.18), myui.Hex("#4ea8de"), myui.Hex("#f3f3f3")},
+		{myui.Hex("#2b2b2b"), myui.Hex("#333333"), myui.RGBA(255, 255, 255, 0.095), myui.Hex("#a0a8b0"), myui.Hex("#f3f3f3")},
 	}
 	colors := light
 	if dark {
@@ -239,18 +234,6 @@ func campusStateColor(c *myui.Context, state model.CampusState) myui.Color {
 	}
 }
 
-func campusStateSoftBg(c *myui.Context, state model.CampusState) myui.Color {
-	p := mainPalette(c)
-	switch state {
-	case model.CampusOnline:
-		return p.successSoft
-	case model.CampusUnauth:
-		return p.warningSoft
-	default:
-		return p.cardSubtle
-	}
-}
-
 func mainStateLabel(state model.CampusState) string {
 	if state == "" {
 		return "尚未检查"
@@ -273,18 +256,6 @@ func mainTimeText(value string) string {
 }
 
 func mainFormatFloat(v float64) string { return strconv.FormatFloat(v, 'f', 2, 64) }
-
-func mainMetric(c *myui.Context, label, value, unit string, color myui.Color) {
-	myui.Column(c).Gap(6).Children(func() {
-		myui.Text(c, label).FontSize(12).TextColor(c.Theme().TextMuted)
-		myui.Row(c).AlignItems(myui.Baseline).Gap(5).Children(func() {
-			myui.Text(c, value).FontSize(28).Bold().TextColor(color).FontFeatures("tnum")
-			if unit != "" {
-				myui.Text(c, unit).FontSize(12).TextColor(c.Theme().TextMuted)
-			}
-		})
-	})
-}
 
 func mainBoolText(v bool, yes, no string) string {
 	if v {

@@ -153,6 +153,7 @@ func run() (err error) {
 
 	loaded, loadErr := a.store.Load()
 	a.settings = loaded
+	ui.ApplyThemeMode(loaded.ThemeMode)
 	if loadErr != nil {
 		// 配置损坏不阻断启动：用默认值继续，用户重新填一次即可。
 		a.tip.Set("配置损坏，已使用默认值：" + loadErr.Error())
@@ -264,6 +265,7 @@ func (a *desktopApp) applySettings(res desktop.SettingsResult) error {
 	a.settingsMu.Lock()
 	a.settings = next
 	a.settingsMu.Unlock()
+	ui.ApplyThemeMode(next.ThemeMode)
 
 	a.refreshTrayTip()
 	if strings.TrimSpace(previous.StudentID) != strings.TrimSpace(next.StudentID) {

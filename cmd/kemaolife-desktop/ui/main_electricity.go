@@ -20,133 +20,238 @@ const (
 func (w *mainWindow) paintElectricity(c *myui.Context) {
 	t := c.Theme()
 	p := mainPalette(c)
-	myui.Column(c).Fill().Padding(24, 28).Gap(16).Children(func() {
-		pageHeader(c, "电费", "余额、采集时间与每月每日用量", func() {
-			myui.Text(c, "月份").FontSize(12).TextColor(t.TextMuted)
-			if myui.TextInput(c.Key("electricity-month"), &w.month).Placeholder("YYYY-MM").Label("电费月份").
-				Width(124).Disabled(w.state.ElectricityLoading).Changed() {
-				w.monthDirty = true
-			}
-			if myui.Button(c.Key("month-query"), "查询月份").Disabled(w.state.ElectricityLoading || w.state.Refreshing).
-				Clicked() && w.handler.OnElectricityMonth != nil {
-				w.handler.OnElectricityMonth(strings.TrimSpace(w.month))
-			}
-			if myui.PrimaryButton(c.Key("electricity-poll"), "").Disabled(w.state.ElectricityLoading || w.state.Refreshing).
-				Children(func() {
-					myui.Icon(c, mainIcons.refresh)
-					myui.Text(c, "立即查询电费")
-				}).Clicked() && w.handler.OnElectricityPoll != nil {
-				w.handler.OnElectricityPoll()
-			}
-		})
-		mainLoading(c, w.state.ElectricityLoading, "正在查询电费…")
-		mainError(c, w.state.ElectricityError)
+	windowW, _ := c.Size()
+	contentW := windowW - w.sidebarWidth() - 56
+	busy := w.state.ElectricityLoading || w.state.Refreshing
 
-		unit := "度"
-		balance, monthUse, daily, daysLeft := "—", "—", "—", "—"
-		if w.state.HasReport {
-			unit = mainTextOr(w.state.Report.Status.Unit, "度")
-			balance = mainFormatFloat(w.state.Report.Status.Balance)
-			monthUse = mainFormatFloat(w.state.Report.Usage.MonthUse)
-			if w.state.Report.Status.DailyAvg != nil {
-				daily = mainFormatFloat(*w.state.Report.Status.DailyAvg)
-			}
-			if w.state.Report.Status.EstimatedDays != nil {
-				daysLeft = strconv.Itoa(*w.state.Report.Status.EstimatedDays)
-			}
+	subtitle := "余额、采集时间与每月每日用量（约有 1 天延迟）"
+	if w.state.HasReport {
+		subtitle = "数据截至 " + mainTextOr(mainTimeText(w.state.Report.Status.CollectedAt), "—") +
+			" · 用量统计至 " + mainTextOr(w.state.Report.Usage.DataUntil, "—") + " · 约有 1 天延迟"
+	}
+
+	unit := "度"
+	balance, monthUse, daily, daysLeft := "—", "—", "—", "—"
+	if w.state.HasReport {
+		unit = mainTextOr(w.state.Report.Status.Unit, "度")
+		balance = mainFormatFloat(w.state.Report.Status.Balance)
+		monthUse = mainFormatFloat(w.state.Report.Usage.MonthUse)
+		if w.state.Report.Status.DailyAvg != nil {
+			daily = mainFormatFloat(*w.state.Report.Status.DailyAvg)
 		}
+		if w.state.Report.Status.EstimatedDays != nil {
+			daysLeft = strconv.Itoa(*w.state.Report.Status.EstimatedDays)
+		}
+	}
 
-		// 左右双栏布局：左侧固定电费摘要，右侧上方柱形/折线趋势图 + 下方明细表格。
-		myui.Row(c).Grow(1).Gap(16).AlignItems(myui.Stretch).Children(func() {
-			myui.Column(c).Width(308).FillHeight().Children(func() {
-				mainCard(c).Grow(1).Children(func() {
-					myui.Row(c).AlignItems(myui.Center).Gap(8).Children(func() {
-						myui.Text(c, "电费摘要").FontSize(14).Bold()
-						myui.Spacer(c)
-						mainBadge(c, mainTextOr(w.state.Report.Usage.YearMonth, "尚未查询"), t.TextMuted, p.cardSubtle, false)
-					})
-
-					myui.Column(c).Padding(16, 18).Gap(6).Radius(6).Background(p.accentSoft).Children(func() {
-						myui.Text(c, "剩余电费").FontSize(12).TextColor(t.TextMuted)
-						myui.Row(c).AlignItems(myui.Baseline).Gap(6).Children(func() {
-							myui.Text(c, balance).FontSize(32).Bold().TextColor(t.Accent).FontFeatures("tnum")
-							if w.state.HasReport {
-								myui.Text(c, unit).FontSize(13).TextColor(t.TextMuted)
-							}
-						})
-					})
-
-					myui.Column(c).Gap(8).Children(func() {
-						electricityStatRow(c, "本月用量", monthUse, unit)
-						electricityStatRow(c, "近 7 日均量", daily, unit)
-						electricityStatRow(c, "预计可用", daysLeft, "天")
-					})
-
-					myui.Spacer(c)
-					myui.Box(c).Height(1).Background(p.hairline)
-					myui.Column(c).Gap(4).Children(func() {
-						if w.state.HasReport {
-							myui.Text(c, "数据截至 "+mainTextOr(mainTimeText(w.state.Report.Status.CollectedAt), "—")).
-								FontSize(11).TextColor(t.TextMuted).FontFeatures("tnum")
-							myui.Text(c, "用量统计至 "+mainTextOr(w.state.Report.Usage.DataUntil, "—")).
-								FontSize(11).TextColor(t.TextMuted).FontFeatures("tnum")
-						}
-						myui.Text(c, "电费数据约有 1 天延迟").FontSize(11).TextColor(t.TextMuted)
-					})
-				})
+	myui.Column(c).Fill().Padding(22, 28, 18, 28).Gap(14).Children(func() {
+		// 1. 干净页眉：只有标题/采集时间 + 单一主操作按钮。
+		myui.Column(c).Shrink(0).FillWidth().Gap(10).Children(func() {
+			pageHeader(c, "电费", subtitle, func() {
+				if fluentPrimaryButton(c, "electricity-poll", "").Disabled(busy).
+					Children(func() {
+						myui.Icon(c, mainIcons.refresh).FontSize(14)
+						myui.Text(c, "立即查询电费").FontSize(13).FontWeight(500)
+					}).Clicked() && w.handler.OnElectricityPoll != nil {
+					w.handler.OnElectricityPoll()
+				}
 			})
+			mainLoading(c, w.state.ElectricityLoading, "正在查询电费…")
+			mainError(c, w.state.ElectricityError)
+		})
 
-			mainCard(c).Grow(1).Padding(18, 20).Gap(12).Children(func() {
-				myui.Row(c).AlignItems(myui.Center).Gap(10).Children(func() {
-					myui.Text(c, "每日用量").FontSize(14).Bold()
-					if w.state.HasReport {
-						mainBadge(c, strconv.Itoa(len(w.state.Report.Usage.Days))+" 天记录", t.TextMuted, p.cardSubtle, false)
-					}
-					myui.Spacer(c)
-					if w.state.HasReport && len(w.state.Report.Usage.Days) > 0 {
-						myui.Segmented(c.Key("electricity-chart-mode"), &w.electricityChart, "柱形图", "折线图").
-							Label("图表样式")
-					}
-				})
+		// 2. 统一单卡 4 格摘要条：用极细竖线分格替代 4 个独立盒子的视觉割裂感。
+		myui.Column(c).Shrink(0).FillWidth().Radius(8).Background(p.card).
+			Border(1, p.cardBorder).Shadow(0, 1, 2, 0, p.cardShadow).Children(func() {
+			myui.Row(c).FillWidth().Padding(10, 18).AlignItems(myui.Center).Gap(10).
+				BorderWidth(0, 0, 1, 0).BorderColor(p.hairline).Children(func() {
+				myui.Icon(c, mainIcons.electricity).FontSize(15).TextColor(t.Text)
+				myui.Text(c, "电费摘要").FontSize(13).FontWeight(600).TextColor(t.Text)
+				mainBadge(c, mainTextOr(w.state.Report.Usage.YearMonth, "尚未查询"), t.TextMuted, p.cardSubtle, false)
+				myui.Spacer(c)
+				myui.Text(c, "数据约有 1 天延迟").FontSize(11).TextColor(t.TextMuted)
+			})
+			myui.Row(c).FillWidth().AlignItems(myui.Stretch).Children(func() {
+				electricityMetricCell(c, "剩余电费", balance, unit, true, true)
+				electricityMetricCell(c, "本月用量", monthUse, unit, false, true)
+				electricityMetricCell(c, "近 7 日均量", daily, unit, false, true)
+				electricityMetricCell(c, "预计可用", daysLeft, "天", false, false)
+			})
+		})
+
+		// 3. 主工作区：左侧趋势图 + 右侧每日明细，自适应窄/宽窗口。
+		sideListW := float32(296)
+		if contentW < 820 {
+			sideListW = 248
+		}
+		chartW := contentW - sideListW - 14
+
+		myui.Row(c).Grow(1).Height(0).FillWidth().Gap(14).AlignItems(myui.Stretch).Children(func() {
+			// 左卡：趋势图与月份控制
+			mainCard(c).Grow(1).MinWidth(0).Padding(16, 18).Gap(12).Children(func() {
+				w.paintElectricityTrendHeader(c, unit, busy, chartW)
 
 				if !w.state.HasReport {
 					myui.Spacer(c)
-					mainEmpty(c, "暂无电费数据", "输入 YYYY-MM 查询指定月份，或点击右上角「立即查询电费」")
+					mainEmpty(c, "暂无电费数据", "可选择右上角月份点击「查询」，或点页面右上角「立即查询电费」")
 					myui.Spacer(c)
 					return
 				}
 				if len(w.state.Report.Usage.Days) == 0 {
 					myui.Spacer(c)
-					mainEmpty(c, "该月暂无每日用量", "")
+					mainEmpty(c, "该月暂无每日用量", "试试切换到其他月份查看历史记录")
 					myui.Spacer(c)
 					return
 				}
 
 				w.paintElectricityChart(c, unit)
-				w.paintElectricityTable(c, unit, monthUse)
+				w.paintElectricityStatsFooter(c, unit)
+			})
+
+			// 右卡：每日明细（窄表无竖线，悬浮与左侧图表联动高亮）
+			mainCard(c).Width(sideListW).Shrink(0).Padding(16, 0, 0, 0).Gap(0).Clip().Children(func() {
+				myui.Row(c).Shrink(0).FillWidth().Padding(0, 16, 12, 16).AlignItems(myui.Center).Gap(8).
+					BorderWidth(0, 0, 1, 0).BorderColor(p.hairline).Children(func() {
+					myui.Text(c, "每日明细").FontSize(14).FontWeight(600).TextColor(t.Text)
+					if w.state.HasReport {
+						mainBadge(c, strconv.Itoa(len(w.state.Report.Usage.Days))+" 天", t.TextMuted, p.cardSubtle, false)
+					}
+					myui.Spacer(c)
+					myui.Text(c, unit).FontSize(11).TextColor(t.TextMuted)
+				})
+
+				if !w.state.HasReport || len(w.state.Report.Usage.Days) == 0 {
+					myui.Column(c).Grow(1).Center().Padding(16).Children(func() {
+						myui.Text(c, "暂无记录").FontSize(12).TextColor(t.TextMuted)
+					})
+					return
+				}
+
+				w.paintElectricityDetailList(c, unit, monthUse)
 			})
 		})
 	})
 }
 
-func electricityStatRow(c *myui.Context, label, value, unit string) {
+func electricityMetricCell(c *myui.Context, label, value, unit string, emphasize, dividerRight bool) {
 	p := mainPalette(c)
 	t := c.Theme()
-	myui.Row(c).Padding(11, 14).Radius(6).Background(p.cardSubtle).AlignItems(myui.Baseline).Children(func() {
-		myui.Text(c, label).FontSize(12).TextColor(t.TextMuted)
-		myui.Spacer(c)
-		myui.Text(c, value).FontSize(18).Bold().TextColor(t.Text).FontFeatures("tnum")
-		if value != "—" && unit != "" {
-			myui.Text(c, unit).FontSize(11).TextColor(t.TextMuted).Padding(0, 0, 0, 4)
-		}
+	cell := myui.Column(c).Grow(1).MinWidth(0).Padding(14, 18).Gap(4)
+	if dividerRight {
+		cell.BorderWidth(0, 1, 0, 0).BorderColor(p.hairline)
+	}
+	cell.Children(func() {
+		myui.Text(c, label).FontSize(11).TextColor(t.TextMuted)
+		myui.Row(c).AlignItems(myui.Baseline).Gap(4).Children(func() {
+			valSize := float32(22)
+			if emphasize {
+				valSize = 26
+			}
+			myui.Text(c, value).FontSize(valSize).FontWeight(600).TextColor(t.Text).FontFeatures("tnum")
+			if value != "—" && unit != "" {
+				myui.Text(c, unit).FontSize(11).TextColor(t.TextMuted)
+			}
+		})
 	})
+}
+
+func (w *mainWindow) paintElectricityTrendHeader(c *myui.Context, unit string, busy bool, cardW float32) {
+	t := c.Theme()
+	days := w.state.Report.Usage.Days
+	hoverIdx := w.electricityHover - 1
+	hasHover := hoverIdx >= 0 && hoverIdx < len(days)
+
+	var dailyAvg float64
+	hasAvg := w.state.Report.Status.DailyAvg != nil && *w.state.Report.Status.DailyAvg > 0
+	if hasAvg {
+		dailyAvg = *w.state.Report.Status.DailyAvg
+	}
+
+	renderTitle := func() {
+		myui.Row(c).Shrink(0).AlignItems(myui.Center).Gap(10).Children(func() {
+			myui.Text(c, "每日用电趋势").FontSize(14).FontWeight(600).TextColor(t.Text).SingleLine()
+			if hasHover {
+				d := days[hoverIdx]
+				myui.Text(c, d.Date+" "+dateWeekdayCn(d.Date)+" · "+mainFormatFloat(d.Use)+" "+unit).
+					FontSize(12).FontWeight(600).TextColor(t.Accent).SingleLine().FontFeatures("tnum")
+			} else if hasAvg {
+				myui.Row(c).AlignItems(myui.Center).Gap(5).Children(func() {
+					myui.Box(c).Width(12).Height(1.5).Radius(1).Background(t.TextMuted.Alpha(0.65)).Shrink(0)
+					myui.Text(c, "近 7 日均 "+mainFormatFloat(dailyAvg)+" "+unit).
+						FontSize(11).TextColor(t.TextMuted).SingleLine().FontFeatures("tnum")
+				})
+			}
+		})
+	}
+
+	renderMonthControls := func() {
+		myui.Row(c).Shrink(0).AlignItems(myui.Center).Gap(6).Children(func() {
+			if fluentIconButton(c, "month-prev", mainIcons.left, "上一月", false).Disabled(busy).Clicked() {
+				w.shiftElectricityMonth(-1)
+			}
+			if fluentTextInput(c, "electricity-month", &w.month).Placeholder("YYYY-MM").Label("电费月份").
+				Width(88).Disabled(w.state.ElectricityLoading).Changed() {
+				w.monthDirty = true
+			}
+			if fluentIconButton(c, "month-next", mainIcons.right, "下一月", false).Disabled(busy).Clicked() {
+				w.shiftElectricityMonth(1)
+			}
+			if fluentButton(c, "month-query", "查询").Disabled(busy).
+				Clicked() && w.handler.OnElectricityMonth != nil {
+				w.handler.OnElectricityMonth(strings.TrimSpace(w.month))
+			}
+		})
+	}
+
+	renderChartMode := func() {
+		if w.state.HasReport && len(days) > 0 {
+			fluentSegmented(c, "electricity-chart-mode", &w.electricityChart, "柱形图", "折线图").
+				Label("图表样式")
+		}
+	}
+
+	if cardW < 680 {
+		myui.Column(c).Shrink(0).FillWidth().Gap(8).Children(func() {
+			renderTitle()
+			myui.Row(c).FillWidth().AlignItems(myui.Center).Gap(8).Children(func() {
+				renderMonthControls()
+				myui.Spacer(c)
+				renderChartMode()
+			})
+		})
+		return
+	}
+	myui.Row(c).Shrink(0).FillWidth().AlignItems(myui.Center).Gap(10).Children(func() {
+		renderTitle()
+		myui.Spacer(c)
+		myui.Row(c).Shrink(0).AlignItems(myui.Center).Gap(8).Children(func() {
+			renderMonthControls()
+			renderChartMode()
+		})
+	})
+}
+
+func (w *mainWindow) shiftElectricityMonth(delta int) {
+	base := strings.TrimSpace(w.month)
+	if base == "" {
+		base = mainDisplayMonth(w.state)
+	}
+	parsed, err := time.Parse("2006-01", base)
+	if err != nil {
+		return
+	}
+	next := parsed.AddDate(0, delta, 0).Format("2006-01")
+	w.month = next
+	w.monthDirty = true
+	if w.handler.OnElectricityMonth != nil {
+		w.handler.OnElectricityMonth(next)
+	}
 }
 
 func (w *mainWindow) paintElectricityChart(c *myui.Context, unit string) {
 	p := mainPalette(c)
 	t := c.Theme()
 	days := w.state.Report.Usage.Days
-	// electricityHover 采用 1-based（0 表示未悬停），保证结构体零值安全。
 	hoverIdx := w.electricityHover - 1
 	if hoverIdx < 0 || hoverIdx >= len(days) {
 		hoverIdx = -1
@@ -169,143 +274,145 @@ func (w *mainWindow) paintElectricityChart(c *myui.Context, unit string) {
 	yMax := niceChartMax(maxUse)
 
 	const (
-		padL float32 = 42
-		padR float32 = 14
-		padT float32 = 16
+		padL float32 = 38
+		padR float32 = 10
+		padT float32 = 18
 		padB float32 = 24
 	)
 
-	myui.Column(c).Height(228).Padding(12, 14, 10, 14).Gap(6).Radius(6).
-		Background(p.cardSubtle.Alpha(0.6)).Border(1, p.cardBorder).Children(func() {
-		// 图表顶栏：悬停时显示精确日期与数值，平时显示趋势与日均参考说明。
-		myui.Row(c).AlignItems(myui.Center).Gap(10).Children(func() {
-			if hoverIdx >= 0 && hoverIdx < len(days) {
-				d := days[hoverIdx]
-				myui.Text(c, d.Date+" "+dateWeekdayCn(d.Date)).FontSize(12).Bold().TextColor(t.Text).FontFeatures("tnum")
-				myui.Text(c, mainFormatFloat(d.Use)+" "+unit).FontSize(12).Bold().TextColor(t.Accent).FontFeatures("tnum")
-			} else {
-				myui.Text(c, "每日用电趋势").FontSize(12).Bold().TextColor(t.Text)
-				if hasAvg {
-					myui.Row(c).AlignItems(myui.Center).Gap(5).Children(func() {
-						myui.Box(c).Width(14).Height(2).Radius(1).Background(t.Warning.Alpha(0.85))
-						myui.Text(c, "近 7 日均 "+mainFormatFloat(dailyAvg)+" "+unit).FontSize(11).
-							TextColor(t.TextMuted).FontFeatures("tnum")
-					})
-				}
+	hoveredNow := 0
+	chartMode := w.electricityChart
+	activeHover := hoverIdx
+	accent := t.Accent
+	textMuted := t.TextMuted
+	textColor := t.Text
+	cardBg := p.card
+	gridColor := p.hairline
+	axisLineColor := p.cardBorder
+	avgColor := t.TextMuted
+
+	myui.Box(c).Grow(1).MinHeight(140).FillWidth().Draw(func(pt *myui.Painter, r myui.Rect) {
+		plotX := r.X + padL
+		plotY := r.Y + padT
+		plotW := r.W - padL - padR
+		plotH := r.H - padT - padB
+		if plotW <= 20 || plotH <= 20 || len(days) == 0 {
+			return
+		}
+
+		const ticks = 3
+		for i := 0; i <= ticks; i++ {
+			frac := float32(i) / float32(ticks)
+			y := plotY + plotH*(1-frac)
+			lineC := gridColor
+			if i == 0 {
+				lineC = axisLineColor
 			}
-			myui.Spacer(c)
-			myui.Text(c, "单位："+unit).FontSize(11).TextColor(t.TextMuted)
-		})
+			pt.Line(plotX, y, plotX+plotW, y, 1, lineC)
+			val := yMax * float64(frac)
+			lbl := formatAxisValue(val)
+			tw, _ := pt.MeasureText(padL-6, myui.Span{Text: lbl, Size: 10})
+			pt.Text(plotX-tw-6, y-6, lbl, 10, textMuted)
+		}
 
-		// 绘图画布 + 透明列悬停热区。
-		hoveredNow := 0
-		chartMode := w.electricityChart
-		activeHover := hoverIdx
-		accent := t.Accent
-		textMuted := t.TextMuted
-		textColor := t.Text
-		cardBg := p.card
-		gridColor := p.hairline
-		avgColor := t.Warning
+		if hasAvg && dailyAvg <= yMax {
+			avgY := plotY + plotH*(1-float32(dailyAvg/yMax))
+			var dash myui.Path
+			dash.MoveTo(plotX, avgY).LineTo(plotX+plotW, avgY).Dash(0, 4, 4)
+			pt.StrokePath(&dash, 1.2, avgColor.Alpha(0.75))
+		}
 
-		myui.Box(c).Grow(1).FillWidth().Draw(func(pt *myui.Painter, r myui.Rect) {
-			plotX := r.X + padL
-			plotY := r.Y + padT
-			plotW := r.W - padL - padR
-			plotH := r.H - padT - padB
-			if plotW <= 20 || plotH <= 20 || len(days) == 0 {
-				return
+		n := len(days)
+		slotW := plotW / float32(n)
+		points := make([][2]float32, n)
+		for i, d := range days {
+			cx := plotX + (float32(i)+0.5)*slotW
+			ratio := float32(math.Max(0, math.Min(1, d.Use/yMax)))
+			cy := plotY + plotH*(1-ratio)
+			points[i] = [2]float32{cx, cy}
+		}
+
+		if chartMode == electricityChartBar {
+			drawElectricityBars(pt, days, points, plotY, plotH, slotW, activeHover, accent, textColor)
+		} else {
+			drawElectricityLine(pt, days, points, plotY, plotH, activeHover, accent, cardBg, textColor, gridColor)
+		}
+
+		maxLabels := max(2, int(plotW/54))
+		step := max(1, (n+maxLabels-1)/maxLabels)
+		lastRight := plotX - 100
+		for i, d := range days {
+			if i%step != 0 && i != n-1 {
+				continue
 			}
-
-			// 水平网格线与 Y 轴刻度（4 档：0, 1/3, 2/3, max）。
-			const ticks = 3
-			for i := 0; i <= ticks; i++ {
-				frac := float32(i) / float32(ticks)
-				y := plotY + plotH*(1-frac)
-				lineC := gridColor
-				if i == 0 {
-					lineC = p.cardBorder
-				}
-				pt.Line(plotX, y, plotX+plotW, y, 1, lineC)
-				val := yMax * float64(frac)
-				lbl := formatAxisValue(val)
-				tw, _ := pt.MeasureText(padL-6, myui.Span{Text: lbl, Size: 10})
-				pt.Text(plotX-tw-6, y-6, lbl, 10, textMuted)
+			lbl := shortChartDate(d.Date)
+			tw, _ := pt.MeasureText(50, myui.Span{Text: lbl, Size: 10})
+			cx := points[i][0]
+			lx := cx - tw/2
+			if lx < plotX {
+				lx = plotX
 			}
-
-			// 近 7 日均量虚线参考线。
-			if hasAvg && dailyAvg <= yMax {
-				avgY := plotY + plotH*(1-float32(dailyAvg/yMax))
-				var dash myui.Path
-				dash.MoveTo(plotX, avgY).LineTo(plotX+plotW, avgY).Dash(0, 4, 4)
-				pt.StrokePath(&dash, 1.2, avgColor.Alpha(0.75))
+			if lx+tw > plotX+plotW {
+				lx = plotX + plotW - tw
 			}
-
-			n := len(days)
-			slotW := plotW / float32(n)
-			points := make([][2]float32, n)
+			if lx < lastRight+10 {
+				continue
+			}
+			lastRight = lx + tw
+			lblColor := textMuted
+			if i == activeHover {
+				lblColor = accent
+			}
+			pt.Text(lx, plotY+plotH+6, lbl, 10, lblColor)
+		}
+	}).Children(func() {
+		myui.Row(c).Absolute().Left(padL).Right(padR).Top(padT).Bottom(padB).Children(func() {
 			for i, d := range days {
-				cx := plotX + (float32(i)+0.5)*slotW
-				ratio := float32(math.Max(0, math.Min(1, d.Use/yMax)))
-				cy := plotY + plotH*(1-ratio)
-				points[i] = [2]float32{cx, cy}
+				tip := d.Date + " " + dateWeekdayCn(d.Date) + "：" + mainFormatFloat(d.Use) + " " + unit
+				slot := myui.Box(c.Key(struct {
+					k string
+					i int
+				}{"chart-slot", i})).
+					Grow(1).FillHeight().Tooltip(tip)
+				if slot.Hovered() {
+					hoveredNow = i + 1
+				}
 			}
-
-			if chartMode == electricityChartBar {
-				drawElectricityBars(pt, days, points, plotY, plotH, slotW, activeHover, accent, textColor)
-			} else {
-				drawElectricityLine(pt, days, points, plotY, plotH, activeHover, accent, cardBg, textColor, gridColor)
-			}
-
-			// X 轴日期标签：按像素间距防碰撞，避免末项与前一项贴近。
-			maxLabels := max(2, int(plotW/56))
-			step := max(1, (n+maxLabels-1)/maxLabels)
-			lastRight := plotX - 100
-			for i, d := range days {
-				if i%step != 0 && i != n-1 {
-					continue
-				}
-				lbl := shortChartDate(d.Date)
-				tw, _ := pt.MeasureText(50, myui.Span{Text: lbl, Size: 10})
-				cx := points[i][0]
-				lx := cx - tw/2
-				if lx < plotX {
-					lx = plotX
-				}
-				if lx+tw > plotX+plotW {
-					lx = plotX + plotW - tw
-				}
-				if lx < lastRight+10 {
-					continue
-				}
-				lastRight = lx + tw
-				lblColor := textMuted
-				if i == activeHover {
-					lblColor = accent
-				}
-				pt.Text(lx, plotY+plotH+6, lbl, 10, lblColor)
-			}
-		}).Children(func() {
-			myui.Row(c).Absolute().Left(padL).Right(padR).Top(padT).Bottom(padB).Children(func() {
-				for i, d := range days {
-					tip := d.Date + " " + dateWeekdayCn(d.Date) + "：" + mainFormatFloat(d.Use) + " " + unit
-					slot := myui.Box(c.Key(struct {
-						k string
-						i int
-					}{"chart-slot", i})).
-						Grow(1).FillHeight().Tooltip(tip)
-					if slot.Hovered() {
-						hoveredNow = i + 1
-					}
-				}
-			})
 		})
-		w.electricityHover = hoveredNow
+	})
+	w.electricityHover = hoveredNow
+}
+
+func (w *mainWindow) paintElectricityStatsFooter(c *myui.Context, unit string) {
+	p := mainPalette(c)
+	t := c.Theme()
+	days := w.state.Report.Usage.Days
+	if len(days) == 0 {
+		return
+	}
+	minDay, maxDay := days[0], days[0]
+	for _, d := range days[1:] {
+		if d.Use < minDay.Use {
+			minDay = d
+		}
+		if d.Use > maxDay.Use {
+			maxDay = d
+		}
+	}
+	myui.Row(c).Shrink(0).FillWidth().Padding(10, 0, 0, 0).Gap(12).AlignItems(myui.Center).
+		BorderWidth(1, 0, 0, 0).BorderColor(p.hairline).Children(func() {
+		myui.Text(c, "峰值 "+mainFormatFloat(maxDay.Use)+" "+unit+"（"+shortChartDate(maxDay.Date)+"）").
+			FontSize(11).TextColor(t.TextMuted).FontFeatures("tnum")
+		myui.Text(c, "·").FontSize(11).TextColor(t.TextMuted)
+		myui.Text(c, "最低 "+mainFormatFloat(minDay.Use)+" "+unit+"（"+shortChartDate(minDay.Date)+"）").
+			FontSize(11).TextColor(t.TextMuted).FontFeatures("tnum")
+		myui.Spacer(c)
+		myui.Text(c, "共 "+strconv.Itoa(len(days))+" 天记录").FontSize(11).TextColor(t.TextMuted).FontFeatures("tnum")
 	})
 }
 
 func drawElectricityBars(pt *myui.Painter, days []model.DayUsage, points [][2]float32, plotY, plotH, slotW float32, hover int, accent, textColor myui.Color) {
-	barW := minFloat(32, maxFloat(5, slotW*0.56))
+	barW := minFloat(28, maxFloat(5, slotW*0.56))
 	bottomY := plotY + plotH
 	showAllValues := len(days) <= 10
 
@@ -319,7 +426,7 @@ func drawElectricityBars(pt *myui.Painter, days []model.DayUsage, points [][2]fl
 			barH = 2
 			cy = bottomY - 2
 		}
-		fill := accent.Alpha(0.80)
+		fill := accent.Alpha(0.82)
 		if i == hover {
 			fill = accent
 		}
@@ -329,7 +436,7 @@ func drawElectricityBars(pt *myui.Painter, days []model.DayUsage, points [][2]fl
 		if showAllValues || i == hover {
 			lbl := mainFormatFloat(d.Use)
 			tw, _ := pt.MeasureText(56, myui.Span{Text: lbl, Size: 10})
-			ty := maxFloat(plotY-13, cy-14)
+			ty := maxFloat(plotY-14, cy-14)
 			cVal := textColor.Alpha(0.78)
 			if i == hover {
 				cVal = accent
@@ -343,7 +450,6 @@ func drawElectricityLine(pt *myui.Painter, days []model.DayUsage, points [][2]fl
 	bottomY := plotY + plotH
 	n := len(points)
 	if n >= 2 {
-		// 折线下方柔和面积渐变。
 		var area myui.Path
 		area.MoveTo(points[0][0], bottomY)
 		for _, ptXY := range points {
@@ -351,12 +457,11 @@ func drawElectricityLine(pt *myui.Painter, days []model.DayUsage, points [][2]fl
 		}
 		area.LineTo(points[n-1][0], bottomY).Close()
 		pt.FillPathGradient(&area, myui.LinearGradient{
-			From:  accent.Alpha(0.24),
+			From:  accent.Alpha(0.22),
 			To:    accent.Alpha(0.01),
 			Angle: 180,
 		})
 
-		// 主折线路径。
 		var line myui.Path
 		line.Cap(myui.RoundCap).Join(myui.RoundJoin)
 		line.MoveTo(points[0][0], points[0][1])
@@ -391,7 +496,7 @@ func drawElectricityLine(pt *myui.Painter, days []model.DayUsage, points [][2]fl
 		if showAllValues || i == hover {
 			lbl := mainFormatFloat(days[i].Use)
 			tw, _ := pt.MeasureText(56, myui.Span{Text: lbl, Size: 10})
-			ty := maxFloat(plotY-13, cy-16)
+			ty := maxFloat(plotY-14, cy-16)
 			cVal := textColor.Alpha(0.78)
 			if i == hover {
 				cVal = accent
@@ -401,96 +506,46 @@ func drawElectricityLine(pt *myui.Painter, days []model.DayUsage, points [][2]fl
 	}
 }
 
-func (w *mainWindow) paintElectricityTable(c *myui.Context, unit, monthUse string) {
+func (w *mainWindow) paintElectricityDetailList(c *myui.Context, unit, monthUse string) {
 	p := mainPalette(c)
 	t := c.Theme()
 	days := w.state.Report.Usage.Days
-	const idxW, weekW, useW float32 = 48, 84, 146
 
-	myui.Column(c).Grow(1).MinHeight(140).Radius(6).Background(p.card).Border(1, p.cardBorder).Clip().Children(func() {
-		// 表头行：带底色与纵横网格线，形成清晰的桌面表格结构。
-		myui.Row(c).Height(34).Background(p.cardSubtle).
-			BorderWidth(0, 0, 1, 0).BorderColor(p.cardBorder).AlignItems(myui.Stretch).Children(func() {
-			tableCell(c, idxW, false, myui.Center, true, func() {
-				myui.Text(c, "#").FontSize(12).Bold().TextColor(t.TextMuted)
-			})
-			tableCell(c, 0, true, myui.Start, true, func() {
-				myui.Text(c, "日期").FontSize(12).Bold().TextColor(t.TextMuted)
-			})
-			tableCell(c, weekW, false, myui.Center, true, func() {
-				myui.Text(c, "星期").FontSize(12).Bold().TextColor(t.TextMuted)
-			})
-			tableCell(c, useW, false, myui.End, false, func() {
-				myui.Text(c, "当日用量（"+unit+"）").FontSize(12).Bold().TextColor(t.TextMuted)
-			})
-		})
-
-		// 表体滚动区：斑马纹 + 细格线 + 等宽数字。
-		myui.Scroll(c.Key("electricity-table-body")).Grow(1).Children(func() {
-			for i, day := range days {
-				bg := p.card
-				if i%2 == 1 {
-					bg = p.cardSubtle.Alpha(0.55)
-				}
-				if w.electricityHover > 0 && i == w.electricityHover-1 {
-					bg = p.accentSoft
-				}
-				row := myui.Row(c.Key(day.Date)).Height(34).Background(bg).
-					BorderWidth(0, 0, 1, 0).BorderColor(p.hairline).AlignItems(myui.Stretch)
-				if row.Hovered() {
-					row.Background(p.cardHover)
-				}
-				row.Children(func() {
-					tableCell(c, idxW, false, myui.Center, true, func() {
-						myui.Text(c, strconv.Itoa(i+1)).FontSize(12).TextColor(t.TextMuted).FontFeatures("tnum")
-					})
-					tableCell(c, 0, true, myui.Start, true, func() {
-						myui.Text(c, day.Date).FontSize(13).TextColor(t.Text).SingleLine().FontFeatures("tnum")
-					})
-					tableCell(c, weekW, false, myui.Center, true, func() {
-						myui.Text(c, dateWeekdayCn(day.Date)).FontSize(12).TextColor(t.TextMuted).SingleLine()
-					})
-					tableCell(c, useW, false, myui.End, false, func() {
-						myui.Text(c, mainFormatFloat(day.Use)).FontSize(13).Bold().TextColor(t.Text).
-							SingleLine().FontFeatures("tnum")
-					})
-				})
+	myui.Scroll(c.Key("electricity-table-body")).Grow(1).Height(0).FillWidth().Children(func() {
+		for i, day := range days {
+			bg := myui.Transparent
+			if w.electricityHover > 0 && i == w.electricityHover-1 {
+				bg = p.accentSoft
 			}
-		})
-
-		// 表尾汇总行：固定在表格底部，与上方列严格对齐。
-		myui.Row(c).Height(36).Background(p.cardSubtle).
-			BorderWidth(1, 0, 0, 0).BorderColor(p.cardBorder).AlignItems(myui.Stretch).Children(func() {
-			tableCell(c, 0, true, myui.Start, true, func() {
-				myui.Text(c, "本月合计").FontSize(12).Bold().TextColor(t.Text)
-			})
-			tableCell(c, useW, false, myui.End, false, func() {
-				myui.Text(c, monthUse+" "+unit).FontSize(13).Bold().TextColor(t.Accent).
+			row := myui.Row(c.Key(day.Date)).FillWidth().Height(36).Padding(0, 16).Background(bg).
+				BorderWidth(0, 0, 1, 0).BorderColor(p.hairline.Alpha(0.6)).
+				AlignItems(myui.Center).Gap(8)
+			if row.Hovered() {
+				row.Background(p.cardHover)
+			}
+			row.Children(func() {
+				myui.Text(c, day.Date).FontSize(12).TextColor(t.Text).SingleLine().FontFeatures("tnum")
+				myui.Text(c, dateWeekdayCn(day.Date)).FontSize(11).TextColor(t.TextMuted).SingleLine()
+				myui.Spacer(c)
+				myui.Text(c, mainFormatFloat(day.Use)).FontSize(13).FontWeight(600).TextColor(t.Text).
 					SingleLine().FontFeatures("tnum")
 			})
-		})
+		}
 	})
-}
 
-func tableCell(c *myui.Context, width float32, grow bool, justify myui.Align, rightBorder bool, content func()) {
-	p := mainPalette(c)
-	cell := myui.Row(c).Padding(0, 14).AlignItems(myui.Center).Justify(justify)
-	if grow {
-		cell.Grow(1)
-	} else {
-		cell.Width(width).Shrink(0)
-	}
-	if rightBorder {
-		cell.BorderWidth(0, 1, 0, 0).BorderColor(p.hairline)
-	}
-	cell.Children(content)
+	myui.Row(c).Shrink(0).FillWidth().Height(40).Padding(0, 16).Background(p.cardSecondary).
+		BorderWidth(1, 0, 0, 0).BorderColor(p.hairline).AlignItems(myui.Center).Children(func() {
+		myui.Text(c, "本月合计").FontSize(12).FontWeight(600).TextColor(t.Text)
+		myui.Spacer(c)
+		myui.Text(c, monthUse+" "+unit).FontSize(13).FontWeight(600).TextColor(t.Text).
+			SingleLine().FontFeatures("tnum")
+	})
 }
 
 func niceChartMax(maxVal float64) float64 {
 	if maxVal <= 0 {
 		return 1
 	}
-	// 留出少量顶部余白并取易读刻度上限。
 	target := maxVal * 1.15
 	exp := math.Pow(10, math.Floor(math.Log10(target)))
 	norm := target / exp

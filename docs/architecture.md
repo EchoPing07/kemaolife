@@ -111,7 +111,7 @@ kemaolife/                         # GitHub: EchoPing07/kemaolife
 │       └── requestlog.go          # Android 请求记录（包在既有 Transport 外层，见 privacy.md §7）
 ├── cmd/
 │   ├── kemaolife/                 # CLI（linux / darwin）：单二进制 + 子命令
-│   ├── kemaolife-desktop/         # Windows：五页主窗口 + 托盘 + 自启 + ticker（GUI 子系统无控制台）
+│   ├── kemaolife-desktop/         # Windows：六页主窗口 + 托盘 + 自启 + ticker（GUI 子系统无控制台）
 │   │   ├── console_windows.go     # FreeConsole 兜底
 │   │   └── ui/                    # MyGo 主窗口 + Win32 托盘、菜单与通知；UI 只消费 DTO
 │   └── kemaolife-mobile/          # Android：gomobile bind 薄门面（§6）
@@ -231,14 +231,14 @@ func ReloginCampusNetwork(ctx context.Context, d CampusDeps) error
 
 | | CLI（linux / darwin） | Windows 主窗口 + 常驻托盘 | Android |
 |---|---|---|---|
-| `GetSchedule` / `GetWeekSchedule` | 每次进程调用一次，`RefreshFirst`：内部先刷新 | 今天 / 课表页与切周均 `CacheOnly`：只读本地快照，不联网 | 打开 / 切周，`CacheOnly`：只读本地快照 |
+| `GetSchedule` / `GetWeekSchedule` | 每次进程调用一次，`RefreshFirst`：内部先刷新 | 首页 / 课表页与切周均 `CacheOnly`：只读本地快照，不联网 | 打开 / 切周，`CacheOnly`：只读本地快照 |
 | `SyncTimetable` | 显式 `sync`（只刷新不查询） | 启动读快照后后台同步一次；「刷新课表」独立触发，不与切周合并 | 打开 App（不受最小查询间隔约束）、切回课表 tab（按间隔）、手动刷新 / 设置页「测试」（不受节流） |
 | `ExportTimetableCSV` | 不调 | 不调 | 课表页「导出课表」：只读快照，SAF 落盘 |
 | `CheckElectricity` | 显式 `kemaolife electricity` | `PollOnce` 启动立即查一次，之后 ticker 默认 4 小时；默认立即刷新保留告警；`QueryElectricity` 支持指定月份手动查询且不告警、不改退避 | 打开 App + 进入更多按间隔 + 手动刷新 |
 | `alert.Evaluate` | 不调 | 仅 `PollOnce` 电费成功后由 `desktop.Engine` 调用；月份手动查询不调 | 电费查询成功后经门面 `electricity.alert` 调用（0 请求，无后台定时） |
 | `EnsureCampusNetwork` | 不调 | 仅自动模式，每轮电费轮询前置 | 不调 |
 | `GetCampusNetworkStatus` 等 | 不调 | 启动立即判态一次，之后独立 ticker 默认 120s；主窗口 / 托盘手动按钮用 `CampusNetwork` | 「更多」页 / 手动动作前（默认仅 WiFi 下探测） |
-| 结果去向 | stdout（`--json` 只出数据） | 五页主窗口 + 托盘状态 / 悬浮提示 + 系统通知 | Compose 三 tab |
+| 结果去向 | stdout（`--json` 只出数据） | 六页主窗口 + 托盘状态 / 悬浮提示 + 系统通知 | Compose 三 tab |
 | 进程生命 | 秒级 | 天级（登录时 `--background` 自启仅托盘，普通启动显示主窗口，不保活） | 分钟级，随时被杀 |
 
 CLI 不调用校园网用例。校园网用例用独立的 `app.CampusDeps`（`Clock` / `Net` / `Ready`），不挂在 `app.Deps` 下；`platform/campusnet_stub.go` 与 `notify_stub.go` 是备用实现（返回 `2001` / no-op），当前无装配点。
@@ -270,9 +270,9 @@ CLI 不调用校园网用例。校园网用例用独立的 `app.CampusDeps`（`C
 
 Windows 是一个原生主窗口 + 托盘程序，不是浏览器套壳：主窗口使用 MyGo 原生 UI（Direct3D 11 + DirectWrite），托盘、菜单与通知保留标准库 `syscall` 的 Win32 实现，自启注册表项与 DPAPI 继续使用 advapi32 / crypt32。发布构建通过 `mygo_nowebview` 移除网页加载路径，单二进制、免 .NET。通知由托盘 `NIF_INFO` 承载，进程启动时设置 `Kemaolife.Desktop` AUMID 用于归类；不承诺 WinRT Toast 或操作中心归档。
 
-主窗口固定为今天 / 课表 / 电费 / 校园网 / 设置五页。今天与完整周课表均通过 `CacheOnly` 读取快照，切周不联网；启动先读快照再后台 `SyncTimetable`，手动刷新走同一独立用例。Windows 新增保存教务密码，和校园网凭据一样使用用户级 DPAPI。
+主窗口固定为首页 / 课表 / 电费 / 校园网 / 设置 / 关于六页。首页与完整周课表均通过 `CacheOnly` 读取快照，切周不联网；启动先读快照再后台 `SyncTimetable`，手动刷新走同一独立用例。Windows 新增保存教务密码，和校园网凭据一样使用用户级 DPAPI。
 
-普通启动显示主窗口；自启注册表命令带 `--background`，新实例只驻留托盘。关闭主窗口只隐藏到托盘，重复启动唤起已有主窗口，托盘左键定位「今天」。校园网页展示三态与对应动作，不展示接入详情；电费页展示完整报告和按日期升序的每日表格，月份查询使用 `Engine.QueryElectricity`，不改变默认轮询的告警与退避。
+普通启动显示主窗口；自启注册表命令带 `--background`，新实例只驻留托盘。关闭主窗口只隐藏到托盘，重复启动唤起已有主窗口，托盘左键定位「首页」。校园网页展示三态与对应动作，不展示接入详情；电费页展示完整报告和按日期升序的每日明细，月份查询使用 `Engine.QueryElectricity`，不改变默认轮询的告警与退避。
 
 校园网默认手动模式，自动模式才做轮询前置：
 
@@ -282,7 +282,7 @@ Windows 是一个原生主窗口 + 托盘程序，不是浏览器套壳：主窗
                           │（前置认证失败只更新托盘状态，不阻断本轮电费，也不自动登录）
 ```
 
-行为规则（五页主窗口、课表同步、窗口生命周期、自启参数、轮询间隔、告警、设置项）见 [windows.md](windows.md)。
+行为规则（六页主窗口、课表同步、窗口生命周期、自启参数、轮询间隔、告警、设置项与关于页）见 [windows.md](windows.md)。
 
 ## 8. 依赖约束
 

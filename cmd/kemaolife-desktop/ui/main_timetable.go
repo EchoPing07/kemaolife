@@ -6,6 +6,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/EchoPing07/kemaolife/internal/core/model"
 	coreTimetable "github.com/EchoPing07/kemaolife/internal/core/timetable"
@@ -14,6 +15,7 @@ import (
 
 func (w *mainWindow) paintTimetable(c *myui.Context) {
 	t := c.Theme()
+	p := mainPalette(c)
 	week := "本周"
 	if w.state.Week > 0 {
 		week = "第 " + strconv.Itoa(w.state.Week) + " 周"
@@ -27,26 +29,27 @@ func (w *mainWindow) paintTimetable(c *myui.Context) {
 	if w.state.TimetableOffline {
 		week += " · 离线数据"
 	}
-	myui.Column(c).Fill().Padding(24, 28, 18, 28).Gap(14).Children(func() {
+	myui.Column(c).Fill().Padding(22, 28, 16, 28).Gap(14).Children(func() {
 		pageHeader(c, "课表", week, func() {
-			if myui.Button(c.Key("week-prev"), "").Label("上一周").Tooltip("上一周").
-				Disabled(w.state.Week <= 1 || w.state.TimetableLoading || w.state.Refreshing).
-				Children(func() { myui.Icon(c, mainIcons.left) }).Clicked() {
-				w.selectWeek(w.state.Week - 1)
-			}
-			if myui.Button(c.Key("week-current"), "当周").
-				Disabled(w.state.TimetableLoading || w.state.Refreshing).Clicked() {
-				w.selectWeek(0)
-			}
-			if myui.Button(c.Key("week-next"), "").Label("下一周").Tooltip("下一周").
-				Disabled(w.state.TimetableLoading || w.state.Refreshing || (w.state.LastWeek > 0 && w.state.Week >= w.state.LastWeek)).
-				Children(func() { myui.Icon(c, mainIcons.right) }).Clicked() {
-				w.selectWeek(w.state.Week + 1)
-			}
-			if myui.PrimaryButton(c.Key("week-refresh"), "").Disabled(w.state.TimetableLoading || w.state.Refreshing).
+			busy := w.state.TimetableLoading || w.state.Refreshing
+			myui.Row(c).AlignItems(myui.Center).Gap(2).Padding(2).Radius(6).
+				Background(p.cardSubtle).Border(1, p.hairline).Children(func() {
+				if fluentIconButton(c, "week-prev", mainIcons.left, "上一周", true).
+					Disabled(w.state.Week <= 1 || busy).Clicked() {
+					w.selectWeek(w.state.Week - 1)
+				}
+				if fluentSubtleButton(c, "week-current", "当周").Disabled(busy).Clicked() {
+					w.selectWeek(0)
+				}
+				if fluentIconButton(c, "week-next", mainIcons.right, "下一周", true).
+					Disabled(busy || (w.state.LastWeek > 0 && w.state.Week >= w.state.LastWeek)).Clicked() {
+					w.selectWeek(w.state.Week + 1)
+				}
+			})
+			if fluentPrimaryButton(c, "week-refresh", "").Disabled(busy).
 				Children(func() {
-					myui.Icon(c, mainIcons.refresh)
-					myui.Text(c, "刷新课表")
+					myui.Icon(c, mainIcons.refresh).FontSize(14)
+					myui.Text(c, "刷新课表").FontSize(13).FontWeight(500)
 				}).Clicked() && w.handler.OnTimetableRefresh != nil {
 				w.handler.OnTimetableRefresh()
 			}
@@ -155,18 +158,21 @@ func (w *mainWindow) timetableGrid(c *myui.Context) {
 	p := mainPalette(c)
 	t := c.Theme()
 	windowW, windowH := c.Size()
-	const sidebarW, pagePadX, titleH = 208, 56, 44
-	gridW := maxFloat(820, windowW-sidebarW-pagePadX-2)
-	gridH := maxFloat(540, windowH-titleH-148)
+	sidebarW := w.sidebarWidth()
+	const pagePadX = 56
+	titleH := titleBarDefaultH
+	gridW := maxFloat(680, windowW-sidebarW-pagePadX-2)
+	gridH := maxFloat(430, windowH-titleH-148)
 	const headerH, timeW = 54, 44
 	rowH := (gridH - headerH) / 12
 	dayW := (gridW - timeW) / 7
 
-	myui.Column(c).Grow(1).Radius(8).Background(p.card).Border(1, p.cardBorder).Clip().Children(func() {
+	myui.Column(c).Grow(1).Radius(8).Background(p.card).Border(1, p.cardBorder).
+		Shadow(0, 1, 3, 0, p.cardShadow).Clip().Children(func() {
 		myui.ScrollBoth(c).Grow(1).TrackScroll(&w.timetableScroll).Children(func() {
-			myui.Box(c).Width(gridW).Height(gridH).Background(p.card).Children(func() {
+			myui.Box(c).Width(gridW).Height(gridH).Children(func() {
 				// 顶部表头底色条。
-				myui.Box(c).Absolute().Left(0).Top(0).Width(gridW).Height(headerH).Background(p.cardSubtle)
+				myui.Box(c).Absolute().Left(0).Top(0).Width(gridW).Height(headerH).Background(p.cardSecondary)
 
 				// 今天列的极淡底色贯穿全部节次，跨周查看时也能快速定位。
 				for i := 0; i < 7 && i < len(w.state.Days); i++ {
@@ -176,16 +182,15 @@ func (w *mainWindow) timetableGrid(c *myui.Context) {
 					}
 				}
 
-				// 仅绘制轻盈水平辅助线与极淡纵向分隔，避免 Excel 式重网格线。
+				// 轻盈水平辅助线与极淡纵向分隔。
 				myui.Box(c).Absolute().Left(0).Top(headerH).Width(gridW).Height(1).Background(p.hairline)
 				for period := 0; period < 12; period++ {
 					y := headerH + float32(period)*rowH
 					myui.Text(c, strconv.Itoa(period+1)).Absolute().Left(0).Top(y + rowH/2 - 8).
 						Width(timeW).TextAlign(myui.Center).FontSize(11).TextColor(t.TextMuted).FontFeatures("tnum")
 					if period > 0 {
-						lineColor := p.hairline.Alpha(0.7)
+						lineColor := p.hairline.Alpha(0.75)
 						if period == 4 || period == 8 {
-							// 午休与晚课分界略微加重，方便快速扫读上午/下午/晚上。
 							lineColor = p.cardBorder
 						}
 						myui.Box(c).Absolute().Left(timeW).Top(y).Width(gridW - timeW).Height(1).Background(lineColor)
@@ -222,7 +227,7 @@ func (w *mainWindow) timetableGrid(c *myui.Context) {
 						dateColor = t.Accent
 					}
 					myui.Text(c, "周"+mainTextOr(day.WeekdayCn, "—")).Absolute().Left(x + 10).Top(9).
-						Width(dayW - 20).FontSize(12).Bold().TextColor(weekdayColor)
+						Width(dayW - 20).FontSize(12).FontWeight(600).TextColor(weekdayColor)
 					myui.Text(c, date).Absolute().Left(x + 10).Top(28).Width(dayW - 20).
 						FontSize(11).TextColor(dateColor).FontFeatures("tnum")
 				}
@@ -244,16 +249,20 @@ func (w *mainWindow) timetableGrid(c *myui.Context) {
 					})).Absolute().
 						Left(x).Top(y).Width(width).Height(height).Column().
 						AlignItems(myui.Start).Justify(myui.Start).
-						Padding(7, 8).Gap(2).Radius(6).
+						Padding(7, 8, 7, 10).Gap(2).Radius(6).
 						Border(1, cc.border).
 						Clip().Label(detail).Tooltip(detail)
 					if course.Hovered() {
-						course.Background(cc.hover)
+						course.Background(cc.hover).Shadow(0, 2, 6, 0, p.cardShadow)
 					} else {
 						course.Background(cc.fill)
 					}
+					accentStrip := cc.accent
+					course.DrawOver(func(pt *myui.Painter, r myui.Rect) {
+						pt.FillRadii(myui.Rect{X: r.X, Y: r.Y, W: 2, H: r.H}, [4]float32{6, 0, 0, 6}, accentStrip)
+					})
 					course.Children(func() {
-						nameText := myui.Text(c, mainTextOr(block.entry.Name, "未命名课程")).FontSize(12).Bold().
+						nameText := myui.Text(c, mainTextOr(block.entry.Name, "未命名课程")).FontSize(12).FontWeight(600).
 							TextColor(cc.text)
 						if displayOpt.hideOverflow {
 							switch {
@@ -296,46 +305,44 @@ func (w *mainWindow) paintCourseDialog(c *myui.Context) {
 	t := c.Theme()
 	entry := w.courseDialogItem
 	day := w.courseDialogDay
-	cc := courseColorFor(entry.Name, t.Dark)
 
 	myui.DialogBase(c.Key("course-detail-dialog"), &w.courseDialogOpen, func(backdrop, panel myui.Element) {
 		backdrop.Background(p.backdrop)
-		panel.Width(420).Padding(22, 24).Gap(16).Radius(8).Background(p.card).
-			Border(1, p.cardBorder).Shadow(0, 16, 36, 0, myui.RGBA(0, 0, 0, 0.22)).Children(func() {
-			myui.Row(c).AlignItems(myui.Center).Gap(10).Children(func() {
-				myui.Text(c, mainTextOr(entry.Name, "未命名课程")).FontSize(18).Bold().Grow(1)
-				mainBadge(c, "第 "+mainTextOr(entry.Periods, "—")+" 节", cc.text, cc.fill, false)
-				closeBtn := myui.ButtonBase(c.Key("course-dialog-x")).Size(28, 28).Radius(6).
-					Center().Label("关闭弹窗")
-				closeBtn.Children(func() {
-					myui.Icon(c, mainIcons.close).FontSize(15).TextColor(t.TextMuted)
+		panel.Width(440).Radius(8).Background(p.card).
+			Border(1, p.cardBorder).Shadow(0, 16, 40, 0, myui.RGBA(0, 0, 0, 0.26)).Clip().
+			Transition(myui.ElementTransition{
+				Duration: 150 * time.Millisecond,
+				Enter:    &myui.Motion{Scale: 0.96, Opacity: 0},
+			}).Children(func() {
+			myui.Column(c).Padding(22, 24).Gap(16).Children(func() {
+				myui.Row(c).AlignItems(myui.Center).Gap(10).Children(func() {
+					myui.Text(c, mainTextOr(entry.Name, "未命名课程")).FontSize(18).FontWeight(600).Grow(1)
+					mainBadge(c, "第 "+mainTextOr(entry.Periods, "—")+" 节", t.TextMuted, p.cardSubtle, false)
+					if fluentIconButton(c, "course-dialog-x", mainIcons.close, "关闭弹窗", true).Clicked() {
+						w.courseDialogOpen = false
+					}
 				})
-				if closeBtn.Hovered() {
-					closeBtn.Background(p.navHover)
-				}
-				if closeBtn.Clicked() {
-					w.courseDialogOpen = false
-				}
+
+				myui.Column(c).Padding(12, 14).Gap(10).Radius(6).Background(p.cardSecondary).
+					Border(1, p.hairline).Children(func() {
+					if !day.Date.IsZero() {
+						courseMetaRow(c, mainIcons.calendar, "日期", day.Date.String()+"  星期"+mainTextOr(day.WeekdayCn, "—"))
+					}
+					courseMetaRow(c, mainIcons.clock, "节次", "第 "+mainTextOr(entry.Periods, "—")+" 节")
+					if entry.Time != "" {
+						courseMetaRow(c, mainIcons.timer, "时间", entry.Time)
+					}
+					if entry.WeeksText != "" {
+						courseMetaRow(c, mainIcons.bookOpen, "周次", entry.WeeksText)
+					}
+					courseMetaRow(c, mainIcons.user, "教师", mainTextOr(entry.Teacher, "—"))
+					courseMetaRow(c, mainIcons.pin, "地点", mainTextOr(entry.Location, "—"))
+				})
 			})
 
-			myui.Column(c).Padding(12, 14).Gap(10).Radius(6).Background(p.cardSubtle).Children(func() {
-				if !day.Date.IsZero() {
-					courseMetaRow(c, "日期", day.Date.String()+"  星期"+mainTextOr(day.WeekdayCn, "—"))
-				}
-				courseMetaRow(c, "节次", "第 "+mainTextOr(entry.Periods, "—")+" 节")
-				if entry.Time != "" {
-					courseMetaRow(c, "时间", entry.Time)
-				}
-				if entry.WeeksText != "" {
-					courseMetaRow(c, "周次", entry.WeeksText)
-				}
-				courseMetaRow(c, "教师", mainTextOr(entry.Teacher, "—"))
-				courseMetaRow(c, "地点", mainTextOr(entry.Location, "—"))
-			})
-
-			myui.Box(c).Height(1).Background(p.hairline)
-			myui.Row(c).Justify(myui.End).Children(func() {
-				if myui.PrimaryButton(c.Key("course-dialog-close"), "关闭").Clicked() {
+			myui.Row(c).Padding(14, 24).Justify(myui.End).Background(p.dialogFooter).
+				BorderWidth(1, 0, 0, 0).BorderColor(p.hairline).Children(func() {
+				if fluentPrimaryButton(c, "course-dialog-close", "关闭").Clicked() {
 					w.courseDialogOpen = false
 				}
 			})
@@ -343,10 +350,13 @@ func (w *mainWindow) paintCourseDialog(c *myui.Context) {
 	})
 }
 
-func courseMetaRow(c *myui.Context, label, value string) {
+func courseMetaRow(c *myui.Context, icon *myui.SVG, label, value string) {
 	t := c.Theme()
-	myui.Row(c).AlignItems(myui.Start).Gap(12).Children(func() {
-		myui.Text(c, label).Width(46).Shrink(0).FontSize(12).TextColor(t.TextMuted)
+	myui.Row(c).AlignItems(myui.Start).Gap(10).Children(func() {
+		if icon != nil {
+			myui.Icon(c, icon).FontSize(14).TextColor(t.TextMuted).Margin(2, 0, 0, 0).Shrink(0)
+		}
+		myui.Text(c, label).Width(42).Shrink(0).FontSize(12).TextColor(t.TextMuted)
 		myui.Text(c, value).FontSize(13).TextColor(t.Text).Selectable().Grow(1).FontFeatures("tnum")
 	})
 }

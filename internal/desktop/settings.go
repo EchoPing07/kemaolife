@@ -59,12 +59,35 @@ type Settings struct {
 	// 默认 false；老配置无此字段，升级后行为不变。
 	AutoUpdateCheck bool `json:"autoUpdateCheck,omitempty"`
 
+	// ThemeMode 控制主窗口外观主题：system（跟随系统，默认）/ light / dark。
+	// 可选字段，老配置缺省按 system 处理（docs/windows.md §3.5）。
+	ThemeMode string `json:"themeMode,omitempty"`
+
 	// 课表显示选项（docs/windows.md §3.2 / §3.5）。
 	// 不加 omitempty：前两项默认 true，关闭时必须显式写入 false 才能覆盖
 	// Load() 的默认值；老配置缺字段时反序列化自动保持默认值。
 	OptimizeLocationDisplay bool `json:"optimizeLocationDisplay"`
 	PrefixLocationAt        bool `json:"prefixLocationAt"`
 	HideTimetableOverflow   bool `json:"hideTimetableOverflow"`
+}
+
+// 主窗口外观主题取值（docs/windows.md §3.5）。
+const (
+	ThemeSystem = "system"
+	ThemeLight  = "light"
+	ThemeDark   = "dark"
+)
+
+// NormalizeThemeMode 将外部输入的主题模式归一化为 system / light / dark。
+func NormalizeThemeMode(mode string) string {
+	switch strings.ToLower(strings.TrimSpace(mode)) {
+	case ThemeLight:
+		return ThemeLight
+	case ThemeDark:
+		return ThemeDark
+	default:
+		return ThemeSystem
+	}
 }
 
 // 校园网状态探测间隔的默认值与下限（docs/windows.md）。
@@ -83,6 +106,7 @@ func DefaultSettings() Settings {
 		AutoMode:                false, // 默认手动
 		AutoStart:               true,  // 登录时自启一次
 		AutoUpdateCheck:         false, // 默认不自动检查更新
+		ThemeMode:               ThemeSystem,
 		OptimizeLocationDisplay: true,  // 默认开启课室显示优化
 		PrefixLocationAt:        true,  // 默认课室前显示 @
 		HideTimetableOverflow:   false, // 默认完整换行，不截断
@@ -100,6 +124,7 @@ func DefaultSettings() Settings {
 // 轮询间隔低于 600s 一律钳制（AGENTS §5.5：不可放行）。
 func (s *Settings) normalize() (clamped bool) {
 	def := DefaultSettings()
+	s.ThemeMode = NormalizeThemeMode(s.ThemeMode)
 	if s.PollSeconds <= 0 {
 		s.PollSeconds = def.PollSeconds
 	}

@@ -101,7 +101,7 @@ func handleTrayMessage(hwnd uintptr, msg uint32, wParam, lParam uintptr) (uintpt
 	case TrayCallbackMessage:
 		// lParam 低字是鼠标消息：右键弹菜单，左键单击交给上层（打开设置）。
 		//
-		// 左键单击唤起主窗口「今天」：双击在 Win11 的溢出面板里
+		// 左键单击唤起主窗口「首页」：双击在 Win11 的溢出面板里
 		// 经常被面板自身吞掉，单击更可靠。
 		// 复选：双击图标没反应的问题在 Win11 溢出面板里常见，两个消息都认。
 		switch uint32(lParam) & 0xFFFF {

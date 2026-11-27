@@ -45,6 +45,7 @@ func ToSettingsForm(s Settings) SettingsForm {
 		WiredOnly:               s.CampusWiredOnly,
 		AutoStart:               s.AutoStart,
 		AutoUpdateCheck:         s.AutoUpdateCheck,
+		ThemeMode:               NormalizeThemeMode(s.ThemeMode),
 		OptimizeLocationDisplay: s.OptimizeLocationDisplay,
 		PrefixLocationAt:        s.PrefixLocationAt,
 		HideTimetableOverflow:   s.HideTimetableOverflow,
@@ -79,6 +80,7 @@ func ParseSettingsResult(res SettingsResult, base Settings) (Settings, error) {
 	next.CampusWiredOnly = res.WiredOnly
 	next.AutoStart = res.AutoStart
 	next.AutoUpdateCheck = res.AutoUpdateCheck
+	next.ThemeMode = NormalizeThemeMode(res.ThemeMode)
 	next.OptimizeLocationDisplay = res.OptimizeLocationDisplay
 	next.PrefixLocationAt = res.PrefixLocationAt
 	next.HideTimetableOverflow = res.HideTimetableOverflow
@@ -159,6 +161,7 @@ type SettingsForm struct {
 	WiredOnly               bool
 	AutoStart               bool
 	AutoUpdateCheck         bool
+	ThemeMode               string
 	OptimizeLocationDisplay bool
 	PrefixLocationAt        bool
 	HideTimetableOverflow   bool
@@ -182,6 +185,7 @@ type SettingsResult struct {
 	WiredOnly               bool
 	AutoStart               bool
 	AutoUpdateCheck         bool
+	ThemeMode               string
 	OptimizeLocationDisplay bool
 	PrefixLocationAt        bool
 	HideTimetableOverflow   bool

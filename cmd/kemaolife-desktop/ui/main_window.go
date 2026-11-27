@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/EchoPing07/kemaolife/internal/core/model"
 	"github.com/EchoPing07/kemaolife/internal/desktop"
@@ -56,19 +57,28 @@ type MainWindowHandler struct {
 	// 返回值依次是页内提示、保存后的生效表单和是否已落盘。
 	OnSaveSettings func(desktop.SettingsResult) (string, desktop.SettingsForm, bool)
 	OnCheckUpdate  func()
+	OnOpenURL      func(string)
 }
 
 const (
-	mainPageToday = iota
+	mainPageHome = iota
 	mainPageTimetable
 	mainPageElectricity
 	mainPageCampus
 	mainPageSettings
+	mainPageAbout
 )
 
 const (
-	MainPageToday    = mainPageToday
+	MainPageHome     = mainPageHome
 	MainPageSettings = mainPageSettings
+	MainPageAbout    = mainPageAbout
+)
+
+const (
+	sidebarWidthExpanded float32 = 212
+	sidebarWidthCompact  float32 = 56
+	titleBarDefaultH     float32 = 48
 )
 
 type mainWindow struct {
@@ -77,6 +87,7 @@ type mainWindow struct {
 	handler MainWindowHandler
 	page    int
 
+	sidebarCompact   bool
 	month            string
 	monthDirty       bool
 	settings         desktop.SettingsResult
@@ -122,7 +133,7 @@ func OpenMainWindow(owner, icon uintptr, state MainWindowState, h MainWindowHand
 	if w := mainWnd; w != nil && w.native != nil {
 		w.handler = h
 		w.state = cloneMainState(state)
-		w.page = mainPageToday
+		w.page = mainPageHome
 		w.syncStateForView()
 		mainMu.Unlock()
 		w.native.Update(func() {})
@@ -133,7 +144,7 @@ func OpenMainWindow(owner, icon uintptr, state MainWindowState, h MainWindowHand
 	mainMu.Unlock()
 
 	w := &mainWindow{
-		state: cloneMainState(state), handler: h, page: mainPageToday,
+		state: cloneMainState(state), handler: h, page: mainPageHome,
 		month: mainDisplayMonth(state),
 	}
 	w.setSettingsForm(state.SettingsForm)
@@ -145,7 +156,7 @@ func OpenMainWindow(owner, icon uintptr, state MainWindowState, h MainWindowHand
 		MinHeight:       640,
 		UseContentSize:  true,
 		TitleBarStyle:   mygo.TitleBarHidden,
-		TitleBarHeight:  44,
+		TitleBarHeight:  int(titleBarDefaultH),
 		Vibrancy:        mygo.VibrancyMica,
 		BackgroundColor: "light-dark(#f3f3f3, #202020)",
 		Content:         myui.View(w.view),
@@ -248,11 +259,18 @@ func (w *mainWindow) openCourseDetail(day model.DaySchedule, entry model.Entry) 
 	w.courseDialogOpen = true
 }
 
+func (w *mainWindow) sidebarWidth() float32 {
+	if w.sidebarCompact {
+		return sidebarWidthCompact
+	}
+	return sidebarWidthExpanded
+}
+
 func (w *mainWindow) view(c *myui.Context) {
 	applyMainTheme(c)
 	p := mainPalette(c)
 	bar := c.TitleBar()
-	titleHeight := maxFloat(bar.Height, 44)
+	titleHeight := maxFloat(bar.Height, titleBarDefaultH)
 	if c.Vibrancy() {
 		c.Root().Background(myui.Transparent)
 	}
@@ -262,45 +280,59 @@ func (w *mainWindow) view(c *myui.Context) {
 		root.Background(p.shell)
 	}
 	root.Children(func() {
-		// Win11 透明标题栏区域：展示透明背景应用图标与标题，右侧为系统窗口控制按钮留白。
-		myui.Row(c).Height(titleHeight).Padding(0, bar.Right+16, 0, 16).AlignItems(myui.Center).
-			DragWindow().Children(func() {
-			titleColor := c.Theme().Text
-			if !c.WindowActive() {
-				titleColor = c.Theme().TextMuted
+		// Win11 透明标题栏：最左放置导航折叠按钮（不拦截拖拽），右侧整段承载 DragWindow。
+		myui.Row(c).Height(titleHeight).Padding(0, bar.Right+12, 0, 12).AlignItems(myui.Center).Gap(6).Children(func() {
+			toggleTip := "折叠导航栏"
+			if w.sidebarCompact {
+				toggleTip = "展开导航栏"
 			}
-			if img := appTitleBarIcon(); img != nil {
-				el := myui.Image(c, img).Size(20, 20)
-				if !c.WindowActive() {
-					el.Opacity(0.65)
-				}
-			} else {
-				iconColor := tAccent(c)
-				if !c.WindowActive() {
-					iconColor = c.Theme().TextMuted
-				}
-				myui.Icon(c, mainIcons.app).FontSize(17).TextColor(iconColor)
+			if fluentIconButton(c, "sidebar-toggle", mainIcons.menu, toggleTip, true).Clicked() {
+				w.sidebarCompact = !w.sidebarCompact
 			}
-			myui.Text(c, "科贸生活").FontSize(12).Bold().TextColor(titleColor).Padding(0, 0, 0, 8)
+			myui.Row(c).Grow(1).FillHeight().AlignItems(myui.Center).Gap(8).DragWindow().Children(func() {
+				titleColor := c.Theme().Text
+				if !c.WindowActive() {
+					titleColor = c.Theme().TextMuted
+				}
+				if img := appTitleBarIcon(); img != nil {
+					el := myui.Image(c, img).Size(18, 18)
+					if !c.WindowActive() {
+						el.Opacity(0.65)
+					}
+				} else {
+					iconColor := tAccent(c)
+					if !c.WindowActive() {
+						iconColor = c.Theme().TextMuted
+					}
+					myui.Icon(c, mainIcons.app).FontSize(16).TextColor(iconColor)
+				}
+				myui.Text(c, "科贸生活").FontSize(12).FontWeight(500).TextColor(titleColor)
+			})
 		})
 
-		myui.Row(c).Grow(1).AlignItems(myui.Stretch).Children(func() {
+		myui.Row(c).Grow(1).Height(0).AlignItems(myui.Stretch).Children(func() {
 			w.paintSidebar(c)
-			// Win11 经典层级：左侧与顶栏承载 Mica 材质，右侧内容区以左上圆角画布承接。
-			myui.Column(c).Grow(1).FillHeight().Background(p.layer).
-				Radius(8, 0, 0, 0).BorderWidth(1, 0, 0, 1).BorderColor(p.layerStroke).Clip().Children(func() {
-				switch w.page {
-				case mainPageToday:
-					w.paintToday(c)
-				case mainPageTimetable:
-					w.paintTimetable(c)
-				case mainPageElectricity:
-					w.paintElectricity(c)
-				case mainPageCampus:
-					w.paintCampus(c)
-				case mainPageSettings:
-					w.paintSettings(c)
-				}
+			// 整窗通铺纯净 Mica 淡色调，内容区不加多余灰底套娃，白/深灰卡片直接浮在 Mica 上。
+			myui.Column(c).Grow(1).MinWidth(0).FillHeight().Clip().Children(func() {
+				myui.Column(c.Key(w.page)).Fill().Transition(myui.ElementTransition{
+					Duration: 160 * time.Millisecond,
+					Enter:    &myui.Motion{Y: 8, Opacity: 0},
+				}).Children(func() {
+					switch w.page {
+					case mainPageHome:
+						w.paintHome(c)
+					case mainPageTimetable:
+						w.paintTimetable(c)
+					case mainPageElectricity:
+						w.paintElectricity(c)
+					case mainPageCampus:
+						w.paintCampus(c)
+					case mainPageSettings:
+						w.paintSettings(c)
+					case mainPageAbout:
+						w.paintAbout(c)
+					}
+				})
 			})
 		})
 	})
@@ -317,23 +349,28 @@ type navItem struct {
 func (w *mainWindow) paintSidebar(c *myui.Context) {
 	p := mainPalette(c)
 	primaryNav := []navItem{
-		{mainPageToday, "今天", mainIcons.today},
+		{mainPageHome, "首页", mainIcons.home},
 		{mainPageTimetable, "课表", mainIcons.calendar},
 		{mainPageElectricity, "电费", mainIcons.electricity},
 		{mainPageCampus, "校园网", mainIcons.network},
 	}
-	settingsNav := navItem{mainPageSettings, "设置", mainIcons.settings}
+	footerNav := []navItem{
+		{mainPageSettings, "设置", mainIcons.settings},
+		{mainPageAbout, "关于", mainIcons.info},
+	}
 
-	myui.Column(c).Width(208).FillHeight().Padding(6, 10, 14, 10).Gap(3).Children(func() {
+	padX := float32(10)
+	if w.sidebarCompact {
+		padX = 8
+	}
+	myui.Column(c).Width(w.sidebarWidth()).Shrink(0).FillHeight().Padding(4, padX, 14, padX).Gap(3).Children(func() {
 		for _, item := range primaryNav {
 			w.paintNavButton(c, item, p)
 		}
 		myui.Spacer(c)
-		myui.Box(c).Height(1).Background(p.hairline).Margin(6, 8)
-		w.paintNavButton(c, settingsNav, p)
-		if w.state.Version != "" {
-			myui.Text(c, w.state.Version).FontSize(11).TextColor(c.Theme().TextMuted).
-				SingleLine().Padding(6, 14, 0, 14)
+		myui.Box(c).Height(1).Background(p.hairline).Margin(6, 6)
+		for _, item := range footerNav {
+			w.paintNavButton(c, item, p)
 		}
 	})
 }
@@ -341,15 +378,20 @@ func (w *mainWindow) paintSidebar(c *myui.Context) {
 func (w *mainWindow) paintNavButton(c *myui.Context, item navItem, p mainColors) {
 	t := c.Theme()
 	active := w.page == item.page
-	button := myui.ButtonBase(c.Key(item.name)).Height(38).Padding(0, 12, 0, 4).Gap(10).
-		Radius(6).AlignItems(myui.Center).Justify(myui.Start)
+	button := myui.ButtonBase(c.Key(item.name)).Height(38).Radius(4).
+		AlignItems(myui.Center).Label(item.name)
+	if w.sidebarCompact {
+		button.Padding(0, 6, 0, 2).Gap(4).Justify(myui.Center).Tooltip(item.name)
+	} else {
+		button.Padding(0, 12, 0, 4).Gap(10).Justify(myui.Start)
+	}
 
 	indicatorColor := myui.Transparent
 	iconColor := t.TextMuted
 	textColor := t.Text
 	if active {
 		indicatorColor = t.Accent
-		iconColor = t.Accent
+		iconColor = t.Text
 		if !c.WindowActive() {
 			indicatorColor = t.TextMuted
 			iconColor = t.TextMuted
@@ -359,12 +401,20 @@ func (w *mainWindow) paintNavButton(c *myui.Context, item navItem, p mainColors)
 	}
 
 	button.Children(func() {
-		// Win11 NavigationView 标志性的 3px 圆角选中指示条。
-		myui.Box(c).Width(3).Height(16).Radius(2).Background(indicatorColor).Shrink(0)
-		myui.Icon(c, item.icon).FontSize(16).TextColor(iconColor).Shrink(0)
-		label := myui.Text(c, item.name).FontSize(14).TextColor(textColor).SingleLine()
+		// Win11 NavigationView 标志性的 3px 圆角选中指示条，切页时纵向滑移。
+		ind := myui.Box(c).Width(3).Height(16).Radius(2).Background(indicatorColor).Shrink(0)
 		if active {
-			label.Bold()
+			ind.Transition(myui.ElementTransition{
+				Match:    "nav-indicator",
+				Duration: 180 * time.Millisecond,
+			})
+		}
+		myui.Icon(c, item.icon).FontSize(16).TextColor(iconColor).Shrink(0)
+		if !w.sidebarCompact {
+			label := myui.Text(c, item.name).FontSize(14).TextColor(textColor).SingleLine()
+			if active {
+				label.FontWeight(600)
+			}
 		}
 	})
 

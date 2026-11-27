@@ -165,6 +165,46 @@ func TestSettingsStoreTimetableDisplayCompatibilityAndRoundTrip(t *testing.T) {
 	}
 }
 
+func TestSettingsStoreThemeModeCompatibilityAndNormalization(t *testing.T) {
+	inner := porttest.NewMemStore()
+	if err := inner.Put(desktop.ConfigStoreKey, []byte(`{"studentId":"<学号>"}`)); err != nil {
+		t.Fatal(err)
+	}
+	store := desktop.NewSettingsStore(inner)
+	loaded, err := store.Load()
+	if err != nil {
+		t.Fatalf("读取老配置: %v", err)
+	}
+	if loaded.ThemeMode != desktop.ThemeSystem {
+		t.Fatalf("老配置缺省 themeMode 应回落 system, got %q", loaded.ThemeMode)
+	}
+	if got := desktop.NormalizeThemeMode("invalid"); got != desktop.ThemeSystem {
+		t.Fatalf("非法 themeMode 应归一化为 system, got %q", got)
+	}
+
+	for _, mode := range []string{desktop.ThemeLight, desktop.ThemeDark, desktop.ThemeSystem} {
+		res := validSettingsResult()
+		res.ThemeMode = mode
+		next, err := desktop.ParseSettingsResult(res, loaded)
+		if err != nil {
+			t.Fatalf("ParseSettingsResult(%s): %v", mode, err)
+		}
+		if _, err := store.Save(next); err != nil {
+			t.Fatalf("Save(%s): %v", mode, err)
+		}
+		reloaded, err := store.Load()
+		if err != nil {
+			t.Fatalf("Load(%s): %v", mode, err)
+		}
+		if reloaded.ThemeMode != mode {
+			t.Fatalf("ThemeMode 往返不一致: got %q, want %q", reloaded.ThemeMode, mode)
+		}
+		if form := desktop.ToSettingsForm(reloaded); form.ThemeMode != mode {
+			t.Fatalf("ToSettingsForm.ThemeMode = %q, want %q", form.ThemeMode, mode)
+		}
+	}
+}
+
 func TestPollKeepsFullElectricityReport(t *testing.T) {
 	campus := newFakeCampus(model.CampusOnline)
 	srv := electricityServer(t, 35.99, 2)
