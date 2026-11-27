@@ -80,6 +80,7 @@ import com.github.echoping07.kemaolife.ui.SettingsOverviewScreen
 import com.github.echoping07.kemaolife.ui.SettingsPage
 import com.github.echoping07.kemaolife.ui.TabIcons
 import com.github.echoping07.kemaolife.ui.TimetableScreen
+import com.github.echoping07.kemaolife.ui.XiaomiPredictiveBackFix
 import com.github.echoping07.kemaolife.ui.animationsEnabled
 import com.github.echoping07.kemaolife.ui.readAnimationsEnabled
 import com.github.echoping07.kemaolife.ui.rememberAppBackStack
@@ -124,12 +125,14 @@ class MainActivity : ComponentActivity() {
                     amoled = theme.amoled,
                     continuousCorners = theme.continuousCorners,
                 ) {
-                    AppRoot(
-                        viewModel = viewModel,
-                        theme = theme,
-                        requestedTab = requestedTab.value,
-                        onConsumeRequestedTab = { requestedTab.value = null },
-                    )
+                    XiaomiPredictiveBackFix {
+                        AppRoot(
+                            viewModel = viewModel,
+                            theme = theme,
+                            requestedTab = requestedTab.value,
+                            onConsumeRequestedTab = { requestedTab.value = null },
+                        )
+                    }
                 }
             }
         }
