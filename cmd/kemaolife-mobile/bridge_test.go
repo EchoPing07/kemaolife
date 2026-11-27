@@ -9,10 +9,13 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
+	"runtime/debug"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
+	"github.com/EchoPing07/kemaolife/internal/core"
 	"github.com/EchoPing07/kemaolife/internal/core/model"
 	"github.com/EchoPing07/kemaolife/internal/core/timetable"
 )
@@ -845,5 +848,125 @@ func TestElectricityAlertOpValidation(t *testing.T) {
 	badMode := decode(t, Call(`{"op":"electricity.alert","mode":"unknown","status":{"balance":5}}`))
 	if badMode["ok"] != false || int(badMode["error"].(map[string]any)["code"].(float64)) != 2001 {
 		t.Errorf("未知 mode 应回 2001: %v", badMode)
+	}
+}
+
+type countingStore struct {
+	inner core.KVStore
+	gets  atomic.Int64
+}
+
+func (c *countingStore) Get(key string) ([]byte, error) {
+	c.gets.Add(1)
+	return c.inner.Get(key)
+}
+
+func (c *countingStore) Put(key string, v []byte) error { return c.inner.Put(key, v) }
+func (c *countingStore) Delete(key string) error        { return c.inner.Delete(key) }
+
+// 移动端会话内缓存已解析快照：多次切周 / 查日期只读一次盘；Put / Delete / 重 Init 立即失效。
+func TestMobileSnapshotCacheHitAndInvalidation(t *testing.T) {
+	dir := filepath.ToSlash(t.TempDir())
+	s := testSession(t, initConfig{CacheDir: dir})
+
+	gs, ok := s.deps.Store.(*generationStore)
+	if !ok {
+		t.Fatalf("deps.Store 类型 = %T, want *generationStore", s.deps.Store)
+	}
+	spy := &countingStore{inner: gs.inner}
+	gs.inner = spy
+
+	makeSnap := func(courseName string) *timetable.Snapshot {
+		return &timetable.Snapshot{
+			Version:     timetable.SnapshotVersion,
+			SyncedAt:    time.Date(2026, 11, 9, 21, 10, 2, 0, time.Local),
+			Week1Monday: model.Date{Year: 2026, Month: 8, Day: 31},
+			SlotTimes:   []string{"08:30~10:00"},
+			LastWeek:    16,
+			Lessons: []timetable.Lesson{
+				{
+					Name:      courseName,
+					Periods:   "1-2",
+					Weekday:   1,
+					Weeks:     []int{1, 2, 3},
+					Teacher:   "教师甲",
+					Location:  "1号楼-101",
+					WeeksText: "1-3周",
+				},
+			},
+		}
+	}
+
+	if err := timetable.SaveSnapshot(s.deps.Store, makeSnap("线性代数")); err != nil {
+		t.Fatal(err)
+	}
+
+	// 连续查第 1 周、第 2 周、第 3 周与指定日期：只应穿透底层存储 1 次。
+	for _, req := range []string{
+		`{"op":"timetable.week","week":1}`,
+		`{"op":"timetable.week","week":2}`,
+		`{"op":"timetable.week","week":3}`,
+		`{"op":"timetable.date","date":"2026-08-31"}`,
+	} {
+		env := decode(t, Call(req))
+		if env["ok"] != true {
+			t.Fatalf("%s 失败: %v", req, env)
+		}
+	}
+	if got := spy.gets.Load(); got != 1 {
+		t.Fatalf("连续 4 次课表查询底层 Get 次数 = %d, want 1（应命中内存快照缓存）", got)
+	}
+
+	// Put 写入新快照后必须立刻失效缓存：下一次查询读到新课程，随后再次命中缓存。
+	if err := timetable.SaveSnapshot(s.deps.Store, makeSnap("概率论")); err != nil {
+		t.Fatal(err)
+	}
+	week1 := decode(t, Call(`{"op":"timetable.week","week":1}`))
+	if week1["ok"] != true {
+		t.Fatalf("更新后 timetable.week 失败: %v", week1)
+	}
+	days := week1["data"].(map[string]any)["days"].([]any)
+	entries := days[0].(map[string]any)["entries"].([]any)
+	if entries[0].(map[string]any)["name"] != "概率论" {
+		t.Fatalf("Put 后仍读到旧缓存课程: %v", entries[0])
+	}
+	_ = decode(t, Call(`{"op":"timetable.week","week":2}`))
+	if got := spy.gets.Load(); got != 2 {
+		t.Fatalf("Put 后两次查询底层 Get 次数 = %d, want 2", got)
+	}
+
+	// Delete 必须立刻失效缓存：下一次查询回 3001，不能继续吐出旧课表。
+	if err := s.deps.Store.Delete(timetable.SnapshotStoreKey); err != nil {
+		t.Fatal(err)
+	}
+	afterDel := decode(t, Call(`{"op":"timetable.week","week":1}`))
+	if afterDel["ok"] != false {
+		t.Fatalf("Delete 后不应命中旧缓存: %v", afterDel)
+	}
+	if code := int(afterDel["error"].(map[string]any)["code"].(float64)); code != 3001 {
+		t.Errorf("Delete 后 code = %d, want 3001", code)
+	}
+
+	// 重新写入并预热缓存后，再 Init 新会话必须拿到全新的空缓存（不复用旧会话指针）。
+	if err := timetable.SaveSnapshot(s.deps.Store, makeSnap("数据结构")); err != nil {
+		t.Fatal(err)
+	}
+	_ = decode(t, Call(`{"op":"timetable.week","week":1}`))
+	if gs.cachedSnap == nil {
+		t.Fatal("预期旧会话已预热 cachedSnap")
+	}
+
+	s2 := testSession(t, initConfig{CacheDir: dir})
+	gs2 := s2.deps.Store.(*generationStore)
+	if gs2 == gs || gs2.cachedSnap != nil {
+		t.Fatal("重 Init 必须创建全新空缓存的 generationStore")
+	}
+	if err := s.ctx.Err(); !errors.Is(err, context.Canceled) {
+		t.Errorf("重 Init 应取消旧会话 context, got %v", err)
+	}
+
+	// 进程级 Go 内存软上限在 Init 成功后应已按移动端预算生效。
+	if got := debug.SetMemoryLimit(-1); got != mobileMemoryLimitBytes {
+		t.Errorf("Go memory limit = %d, want %d", got, mobileMemoryLimitBytes)
 	}
 }

@@ -410,3 +410,21 @@ func TestGetIndexPageWithoutCollecDate(t *testing.T) {
 		t.Errorf("collecdate = %q, want 空", got)
 	}
 }
+
+// 超过上限的异常响应会被 io.LimitReader 截断并收敛为 4002，防止撑爆移动端内存。
+func TestCallBoundsOversizedResponseBody(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json;charset=UTF-8")
+		_, _ = fmt.Fprintf(w, `{"code_":0,"result_":"true","body":"%s"}`, strings.Repeat("a", maxResponseBytes+64))
+	}))
+	defer srv.Close()
+
+	c := NewClient(srv.Client(), srv.URL)
+	_, _, err := c.GetBindRoom(context.Background(), testAccount, testSchool)
+	if err == nil {
+		t.Fatal("超长响应应返回错误")
+	}
+	if model.CodeOf(err) != model.CodeMalformedResponse {
+		t.Errorf("code = %d, want %d", model.CodeOf(err), model.CodeMalformedResponse)
+	}
+}

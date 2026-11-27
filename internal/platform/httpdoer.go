@@ -134,5 +134,20 @@ func (h *HTTPDoer) DoNoRedirect(req *http.Request) (*http.Response, error) {
 	return h.noRedirect().Do(req)
 }
 
-// CloseIdleConnections 供长驻进程（Windows）在空闲时释放连接；CLI 秒级退出无需调用。
-func (h *HTTPDoer) CloseIdleConnections() { h.client.CloseIdleConnections() }
+// CloseIdleConnections 供长驻进程（Windows / Android）在空闲或重建会话时释放连接；
+// CLI 秒级退出无需调用。
+func (h *HTTPDoer) CloseIdleConnections() {
+	if h == nil {
+		return
+	}
+	h.mu.Lock()
+	base, client := h.base, h.client
+	h.mu.Unlock()
+	if base != nil {
+		base.CloseIdleConnections()
+		return
+	}
+	if client != nil {
+		client.CloseIdleConnections()
+	}
+}

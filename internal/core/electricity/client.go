@@ -10,6 +10,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"net/url"
 	"sort"
@@ -19,6 +20,10 @@ import (
 	"github.com/EchoPing07/kemaolife/internal/core"
 	"github.com/EchoPing07/kemaolife/internal/core/model"
 )
+
+// maxResponseBytes 限制单次电费响应读取上限，防止异常上游或劫持页把移动端内存撑爆。
+// 正常响应在数 KB 量级（整月 31 天用量约 2~3 KB），1 MiB 留足余量。
+const maxResponseBytes = 1 << 20
 
 // Client 通过 HTTPDoer 访问水电后端；无鉴权，身份凭证只有学号（api-docs/contract.md §1）。
 type Client struct {
@@ -213,7 +218,7 @@ func (c *Client) call(ctx context.Context, cmd, account, schoolCode string, extr
 		Message   string     `json:"message_"`
 		Exception string     `json:"exception_"`
 	}
-	if err := json.NewDecoder(resp.Body).Decode(&outer); err != nil {
+	if err := json.NewDecoder(io.LimitReader(resp.Body, maxResponseBytes)).Decode(&outer); err != nil {
 		return nil, model.WrapError(model.CodeMalformedResponse, "电费外层 JSON 解析失败", err)
 	}
 	if !bool(outer.Result) {

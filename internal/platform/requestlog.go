@@ -25,7 +25,9 @@ import (
 //   - 与仓库无关：代码、测试夹具、文档里一律用占位符（P1 / P3）。
 type RequestLog struct {
 	mu      sync.Mutex
-	entries []LogEntry
+	entries []LogEntry // 固定容量环形缓冲区（按需分配，Clear 时释放）
+	head    int        // 最旧条目所在槽位
+	count   int        // 当前有效条目数
 	enabled atomic.Bool
 	max     int
 	bodyCap int
@@ -98,8 +100,10 @@ func (l *RequestLog) Clear() int {
 	}
 	l.mu.Lock()
 	defer l.mu.Unlock()
-	n := len(l.entries)
+	n := l.count
 	l.entries = nil
+	l.head = 0
+	l.count = 0
 	return n
 }
 
@@ -110,7 +114,7 @@ func (l *RequestLog) Count() int {
 	}
 	l.mu.Lock()
 	defer l.mu.Unlock()
-	return len(l.entries)
+	return l.count
 }
 
 // Summaries 返回最近 limit 条（新的在前）；limit<=0 表示全部。
@@ -120,12 +124,13 @@ func (l *RequestLog) Summaries(limit int) []LogSummary {
 	}
 	l.mu.Lock()
 	defer l.mu.Unlock()
-	out := make([]LogSummary, 0, len(l.entries))
-	for i := len(l.entries) - 1; i >= 0; i-- {
-		if limit > 0 && len(out) >= limit {
-			break
-		}
-		e := l.entries[i]
+	n := l.count
+	if limit > 0 && limit < n {
+		n = limit
+	}
+	out := make([]LogSummary, 0, n)
+	for i := l.count - 1; i >= 0 && len(out) < n; i-- {
+		e := l.entries[(l.head+i)%len(l.entries)]
 		out = append(out, LogSummary{
 			Seq: e.Seq, At: e.At, Method: e.Method, URL: e.URL,
 			Status: e.Status, DurationMs: e.DurationMs, Error: e.Error,
@@ -141,27 +146,46 @@ func (l *RequestLog) Find(seq int64) (LogEntry, bool) {
 	}
 	l.mu.Lock()
 	defer l.mu.Unlock()
-	for i := len(l.entries) - 1; i >= 0; i-- {
-		if l.entries[i].Seq == seq {
-			return l.entries[i], true
+	for i := l.count - 1; i >= 0; i-- {
+		e := l.entries[(l.head+i)%len(l.entries)]
+		if e.Seq == seq {
+			return e, true
 		}
 	}
 	return LogEntry{}, false
 }
 
-// append 写入一条记录：环形丢弃最旧的（`max` 条窗口）。
+// append 写入一条记录：固定容量环形覆写最旧槽位（`max` 条窗口），满窗后不再整片重分配或搬移。
 func (l *RequestLog) append(e LogEntry) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
+	capMax := l.max
+	if capMax <= 0 {
+		capMax = DefaultLogEntries
+	}
+	if len(l.entries) != capMax {
+		next := make([]LogEntry, capMax)
+		keep := l.count
+		if keep > capMax {
+			keep = capMax
+		}
+		start := l.count - keep
+		for i := 0; i < keep; i++ {
+			next[i] = l.entries[(l.head+start+i)%len(l.entries)]
+		}
+		l.entries = next
+		l.head = 0
+		l.count = keep
+	}
 	l.seq++
 	e.Seq = l.seq
-	l.entries = append(l.entries, e)
-	if len(l.entries) > l.max {
-		// 复制而不是 reslice：reslice 会让底层数组持续持有旧正文，内存只增不减。
-		keep := make([]LogEntry, l.max)
-		copy(keep, l.entries[len(l.entries)-l.max:])
-		l.entries = keep
+	if l.count < len(l.entries) {
+		l.entries[(l.head+l.count)%len(l.entries)] = e
+		l.count++
+		return
 	}
+	l.entries[l.head] = e
+	l.head = (l.head + 1) % len(l.entries)
 }
 
 // clip 只做长度截断（内存保护），不改动内容。
@@ -170,6 +194,18 @@ func (l *RequestLog) clip(s string) string {
 		return s[:l.bodyCap] + logTruncatedMark
 	}
 	return s
+}
+
+// clipBytes 在转 string 之前先按字节上限截断，避免为超大报文分配整份临时字符串。
+func (l *RequestLog) clipBytes(b []byte) string {
+	if l.bodyCap > 0 && len(b) > l.bodyCap {
+		var sb strings.Builder
+		sb.Grow(l.bodyCap + len(logTruncatedMark))
+		sb.Write(b[:l.bodyCap])
+		sb.WriteString(logTruncatedMark)
+		return sb.String()
+	}
+	return string(b)
 }
 
 // Wrap 把记录能力套在既有 RoundTripper 外层。
@@ -215,7 +251,7 @@ func (t *recordingTransport) RoundTrip(req *http.Request) (*http.Response, error
 			t.log.append(entry)
 			return nil, err
 		}
-		entry.RequestBody = t.log.clip(string(body))
+		entry.RequestBody = t.log.clipBytes(body)
 		req.Body = io.NopCloser(bytes.NewReader(body))
 		req.ContentLength = int64(len(body))
 		req.GetBody = func() (io.ReadCloser, error) {
@@ -241,10 +277,18 @@ func (t *recordingTransport) RoundTrip(req *http.Request) (*http.Response, error
 	if readErr != nil {
 		entry.Error = "读取响应正文失败"
 	} else {
-		entry.ResponseBody = t.log.clip(string(body))
+		entry.ResponseBody = t.log.clipBytes(body)
 	}
 	t.log.append(entry)
 	return resp, nil
+}
+
+// CloseIdleConnections 把空闲连接清理透传给底层 Transport，
+// 避免装上请求记录器后 http.Client.CloseIdleConnections 退化成空操作。
+func (t *recordingTransport) CloseIdleConnections() {
+	if ic, ok := t.next.(interface{ CloseIdleConnections() }); ok {
+		ic.CloseIdleConnections()
+	}
 }
 
 // formatHeaders 把标头拍平成可读文本，原样保留值。

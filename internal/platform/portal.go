@@ -141,6 +141,21 @@ func (p *PortalNetwork) SetRequestLog(l *RequestLog) {
 	}
 }
 
+// CloseIdleConnections 释放探测与认证客户端的空闲连接（重初始化 / 退后台时调用）。
+func (p *PortalNetwork) CloseIdleConnections() {
+	if p == nil {
+		return
+	}
+	p.mu.Lock()
+	transports := []http.RoundTripper{p.probeTransport, p.portalTransport}
+	p.mu.Unlock()
+	for _, tr := range transports {
+		if ic, ok := tr.(interface{ CloseIdleConnections() }); ok {
+			ic.CloseIdleConnections()
+		}
+	}
+}
+
 // Status 探测判态；探测失败归 offline，不返回错误（docs/contract.md §7.4）。
 func (p *PortalNetwork) Status(ctx context.Context) (model.CampusStatus, error) {
 	probe, err := p.probeOnce(ctx)

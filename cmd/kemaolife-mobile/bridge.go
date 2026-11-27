@@ -14,6 +14,8 @@ package kemaolife
 import (
 	"context"
 	"encoding/json"
+	"errors"
+	"runtime/debug"
 	"strings"
 	"sync"
 	"time"
@@ -39,6 +41,14 @@ const defaultCustomerCode = "3126"
 
 // defaultTimeout 是单次网络请求上限；课表同步含 CAS 登录 + 2 个请求，留足余量。
 const defaultTimeout = 30 * time.Second
+
+// mobileMemoryLimitBytes 与 mobileGCPercent 约束 Android 进程内 Go runtime 的软内存预算。
+// 默认 GOGC=100 且无软上限，在移动端切换页面或批量请求时容易推高常驻堆；
+// 24 MiB 软上限不会触发 OOM panic，只会在接近预算时更积极回收内存。
+const (
+	mobileMemoryLimitBytes = 24 << 20
+	mobileGCPercent        = 50
+)
 
 // initConfig 是 Kotlin 通过 Init 传入的全部信息（凭据已由 Keystore 解密）。
 //
@@ -90,9 +100,12 @@ type session struct {
 	cfg    model.Config
 	clock  platform.RealClock
 
-	// doer 保留具体适配器类型：它在 Init 里装好请求记录器，
-	// 测试也用它验证「经真实适配器发出的请求确实被记录下来」。
-	doer *platform.HTTPDoer
+	// doer / portal 保留具体适配器类型：
+	// - Init 里安装请求记录器；
+	// - 重 Init 时释放旧会话的空闲连接，避免连接池滞留内存；
+	// - 测试也用 doer 验证「经真实适配器发出的请求确实被记录下来」。
+	doer   *platform.HTTPDoer
+	portal *platform.PortalNetwork
 
 	ctx    context.Context
 	cancel context.CancelFunc
@@ -125,7 +138,18 @@ func currentRequestLog() *platform.RequestLog {
 // 保存设置时会再 Init 一次，若每次都写，就会与 IO 线程上正在格式化的 Call 形成数据竞争
 // （go test -race 能抓到，但 CI 未开）。时区在进程启动后按设备值固定一次是安全的折衷：
 // 设备时区变更由系统重建进程，App 内不动态跟随。
-var timeZoneOnce sync.Once
+var (
+	timeZoneOnce     sync.Once
+	memoryBudgetOnce sync.Once
+)
+
+// applyMemoryBudget 在进程首次成功校验 Init 参数时设置一次 Go 移动端内存预算。
+func applyMemoryBudget() {
+	memoryBudgetOnce.Do(func() {
+		debug.SetGCPercent(mobileGCPercent)
+		debug.SetMemoryLimit(mobileMemoryLimitBytes)
+	})
+}
 
 // Init is called by Kotlin once at startup and again after the settings page
 // saves (docs/contract.md §6). It returns the §2 envelope as JSON.
@@ -152,8 +176,9 @@ func Init(configJSON string) string {
 		return failure(model.WrapError(model.CodeInvalidArgument, "无法使用缓存目录", err))
 	}
 
-	// 时区校准放在目录校验之后：失败的 Init 不允许动全局 time.Local。
+	// 时区与内存预算配置放在目录校验之后：失败的 Init 不允许动进程级全局状态。
 	applyTimeZone(cfg.TimeZone, cfg.TimeZoneOffsetSeconds)
+	applyMemoryBudget()
 
 	clock := platform.RealClock{}
 	doer := platform.NewHTTPDoer(defaultTimeout)
@@ -194,27 +219,40 @@ func Init(configJSON string) string {
 			CustomerCode:         customerCode,
 			ElectricityStudentID: strings.TrimSpace(cfg.ElectricityStudentID),
 		},
-		clock: clock,
-		doer:  doer,
+		clock:  clock,
+		doer:   doer,
+		portal: portal,
 	}
 	s.ctx, s.cancel = context.WithCancel(context.Background())
 
-	var prevCancel context.CancelFunc
+	var (
+		prevCancel context.CancelFunc
+		prevDoer   *platform.HTTPDoer
+		prevPortal *platform.PortalNetwork
+	)
 	mu.Lock()
 	generation++
 	s.gen = generation
 	// Store 必须在发布 cur 之前装好：另一个线程拿到新 session 时不能看到 nil Store。
 	// 会话代次守卫让被取消的旧同步即使已拿到响应，也不能再写快照。
-	s.deps.Store = generationStore{inner: store, gen: s.gen}
+	s.deps.Store = newGenerationStore(store, s.gen)
 	if cur != nil {
 		prevCancel = cur.cancel
+		prevDoer = cur.doer
+		prevPortal = cur.portal
 	}
 	cur = s
 	mu.Unlock()
 
-	// 新一代次发布后再取消旧请求；旧 Call 会拿到 context.Canceled 并收敛成失败信封。
+	// 新一代次发布后再取消旧请求并关闭旧连接池；旧 Call 会拿到 context.Canceled 并收敛成失败信封。
 	if prevCancel != nil {
 		prevCancel()
+	}
+	if prevDoer != nil {
+		prevDoer.CloseIdleConnections()
+	}
+	if prevPortal != nil {
+		prevPortal.CloseIdleConnections()
 	}
 
 	// 旧请求已被取消 / 写入已被拦住，这时删旧快照不会留下旧账号数据。
@@ -229,30 +267,82 @@ func Init(configJSON string) string {
 	})
 }
 
-// generationStore 让旧会话的写盘失效，而不影响纯读缓存。
+// generationStore 让旧会话的写盘失效，同时在当前会话内存里缓存已解析的课表快照。
 //
-// 为什么需要它：context 取消只能拦住还在等网络的请求；已经拿到响应的旧同步
+// 为什么需要代次守卫：context 取消只能拦住还在等网络的请求；已经拿到响应的旧同步
 // 仍会走到 SaveSnapshot。凭据变更后再 Init 时，旧会话写进来的 Cookie / 课表
 // 会污染新账号的本地状态（docs/contract.md §6 规则 9）。
+//
+// 为什么缓存解析后的 *timetable.Snapshot：Android 课表页滑动切周 / 预取相邻周会连续
+// 调 timetable.week；缓存命中时 0 次磁盘读、0 次整学期 JSON 反序列化，写入 / 删除 /
+// 重 Init 时立即失效，避免读到旧数据。
 type generationStore struct {
 	inner core.KVStore
 	gen   uint64
+
+	cacheMu    sync.RWMutex
+	cachedSnap *timetable.Snapshot
+	snapSeq    uint64
 }
 
-func (g generationStore) Get(key string) ([]byte, error) { return g.inner.Get(key) }
+func newGenerationStore(inner core.KVStore, gen uint64) *generationStore {
+	return &generationStore{inner: inner, gen: gen}
+}
 
-func (g generationStore) Put(key string, v []byte) error {
+func (g *generationStore) Get(key string) ([]byte, error) { return g.inner.Get(key) }
+
+func (g *generationStore) Put(key string, v []byte) error {
 	if !isCurrentGeneration(g.gen) {
 		return model.NewError(model.CodeNetworkDown, "会话已更新，写入已取消")
+	}
+	if key == timetable.SnapshotStoreKey {
+		g.invalidateSnapshot()
+		defer g.invalidateSnapshot()
 	}
 	return g.inner.Put(key, v)
 }
 
-func (g generationStore) Delete(key string) error {
+func (g *generationStore) Delete(key string) error {
 	if !isCurrentGeneration(g.gen) {
 		return model.NewError(model.CodeNetworkDown, "会话已更新，删除已取消")
 	}
+	if key == timetable.SnapshotStoreKey {
+		g.invalidateSnapshot()
+		defer g.invalidateSnapshot()
+	}
 	return g.inner.Delete(key)
+}
+
+func (g *generationStore) invalidateSnapshot() {
+	g.cacheMu.Lock()
+	g.snapSeq++
+	g.cachedSnap = nil
+	g.cacheMu.Unlock()
+}
+
+// loadSnapshot 优先返回已解析的内存快照；未命中时从底层存储读盘解析一次并写回缓存。
+// 用版本号 snapSeq 防止并发 Put/Delete 与正在进行的读盘竞争把旧快照重新塞回缓存。
+func (g *generationStore) loadSnapshot() (*timetable.Snapshot, error) {
+	g.cacheMu.RLock()
+	if g.cachedSnap != nil {
+		snap := g.cachedSnap
+		g.cacheMu.RUnlock()
+		return snap, nil
+	}
+	seq := g.snapSeq
+	g.cacheMu.RUnlock()
+
+	snap, err := timetable.LoadSnapshot(g.inner)
+	if err != nil {
+		return nil, err
+	}
+
+	g.cacheMu.Lock()
+	if g.snapSeq == seq {
+		g.cachedSnap = snap
+	}
+	g.cacheMu.Unlock()
+	return snap, nil
 }
 
 func isCurrentGeneration(gen uint64) bool {
@@ -369,6 +459,30 @@ func (s *session) timetableSync() string {
 	return encode(env)
 }
 
+// loadCachedSnapshot 按 CacheOnly 口径读取快照：命中会话内存缓存时跳过读盘与 JSON 反序列化。
+// 只有 ErrSnapshotAbsent（从未同步过）映射为 3001，损坏 / 版本不匹配仍保留 3003（docs/contract.md §6 规则 6）。
+func (s *session) loadCachedSnapshot() (*timetable.Snapshot, error) {
+	if s.deps.Store == nil {
+		return nil, model.NewError(model.CodeInvalidArgument, "缺少存储端口")
+	}
+	var (
+		snap *timetable.Snapshot
+		err  error
+	)
+	if gs, ok := s.deps.Store.(*generationStore); ok {
+		snap, err = gs.loadSnapshot()
+	} else {
+		snap, err = timetable.LoadSnapshot(s.deps.Store)
+	}
+	if err != nil {
+		if errors.Is(err, timetable.ErrSnapshotAbsent) {
+			return nil, model.NewError(model.CodeCredentialMissing, "本地还没有课表，请先刷新一次")
+		}
+		return nil, err
+	}
+	return snap, nil
+}
+
 // timetableDate 是 `timetable date` 的门面口径：**只读缓存**。
 //
 // 为什么与 CLI 不同：CLI 的查询动作自带刷新（docs/contract.md §4），而 Android 的
@@ -378,26 +492,54 @@ func (s *session) timetableSync() string {
 // 纯读缓存没有「刷新失败」这回事，所以 `stale` 恒为 false；
 // 数据时间仍由信封的 `syncedAt` 给出，UI 据此显示「同步于」。
 func (s *session) timetableDate(date model.Date) string {
-	result, err := app.GetSchedule(s.ctx, s.deps, s.cfg, date, app.CacheOnly)
+	snap, err := s.loadCachedSnapshot()
 	if err != nil {
 		return failure(err)
 	}
-	return envelopeWithStale(s.clock.Now(), result.Day, result.Stale, result.SyncedAt)
+	day := timetable.Query(snap, date)
+	return envelopeWithStale(s.clock.Now(), day, false, snap.SyncedAt)
 }
 
 // timetableWeek 查询指定周；week == 0 表示当周，负数也是显式周次（学期前的周）。
 func (s *session) timetableWeek(week int) string {
-	result, err := app.GetWeekSchedule(s.ctx, s.deps, s.cfg, week, app.CacheOnly)
+	snap, err := s.loadCachedSnapshot()
 	if err != nil {
 		return failure(err)
 	}
-	data := map[string]any{"week": result.Week, "days": result.Days}
+	resolved := week
+	outsideSemester := false
+	if resolved == 0 {
+		today := model.NewDate(s.clock.Now())
+		if w := timetable.CurrentWeek(snap, today); w > 0 {
+			resolved = w
+		} else {
+			outsideSemester = true
+			resolved = floorDiv(today.DaysSince(snap.Week1Monday), 7) + 1
+		}
+	}
+	days := timetable.QueryWeek(snap, resolved)
+	if outsideSemester {
+		for i := range days {
+			days[i].InSemester = false
+			days[i].Entries = []model.Entry{}
+		}
+	}
+	data := map[string]any{"week": resolved, "days": days}
 	// lastWeek 是可选字段（0 = 未知）：Android 翻页容器用它确定翻页边界，
 	// 老客户端忽略即可（docs/contract.md §7.1）。
-	if result.LastWeek > 0 {
-		data["lastWeek"] = result.LastWeek
+	if snap.LastWeek > 0 {
+		data["lastWeek"] = snap.LastWeek
 	}
-	return envelopeWithStale(s.clock.Now(), data, result.Stale, result.SyncedAt)
+	return envelopeWithStale(s.clock.Now(), data, false, snap.SyncedAt)
+}
+
+// floorDiv 是数学意义上的整除（向负无穷取整），与 internal/app/schedule.go 同口径。
+func floorDiv(a, b int) int {
+	q := a / b
+	if a%b != 0 && (a < 0) != (b < 0) {
+		q--
+	}
+	return q
 }
 
 // timetableExport 导出整学期课表为 WakeUp 课程表可导入的 CSV。

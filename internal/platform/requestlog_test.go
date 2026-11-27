@@ -253,6 +253,157 @@ func TestHTTPDoerSetRequestLogRebuildsClients(t *testing.T) {
 	}
 }
 
+// 环形缓冲区满窗后应原地覆写，不再整片重分配，且保持「新的在前」与 Find / limit 语义一致。
+func TestRequestLogRingBufferWrapAroundAndOrder(t *testing.T) {
+	l := NewRequestLog(fixedClock())
+	l.SetEnabled(true)
+	l.max = 3
+
+	for i := 1; i <= 3; i++ {
+		l.append(LogEntry{Method: "GET", URL: "http://example.test/" + strings.Repeat("x", i)})
+	}
+	if len(l.entries) != 3 {
+		t.Fatalf("len(entries) = %d, want 3", len(l.entries))
+	}
+	firstSlotAddr := &l.entries[0]
+
+	// 连续多轮回绕（总共 10 条），底层数组不应重新分配。
+	for i := 4; i <= 10; i++ {
+		l.append(LogEntry{Method: "GET", URL: "http://example.test/" + strings.Repeat("x", i)})
+	}
+	if &l.entries[0] != firstSlotAddr {
+		t.Fatal("满窗覆写时触发了底层切片重分配，未真正使用固定容量环形缓冲区")
+	}
+	if got := l.Count(); got != 3 {
+		t.Fatalf("Count = %d, want 3", got)
+	}
+
+	all := l.Summaries(0)
+	if len(all) != 3 || all[0].Seq != 10 || all[1].Seq != 9 || all[2].Seq != 8 {
+		t.Fatalf("Summaries(0) = %+v, want seq [10, 9, 8]", all)
+	}
+	top2 := l.Summaries(2)
+	if len(top2) != 2 || top2[0].Seq != 10 || top2[1].Seq != 9 {
+		t.Fatalf("Summaries(2) = %+v, want seq [10, 9]", top2)
+	}
+
+	for _, seq := range []int64{8, 9, 10} {
+		entry, ok := l.Find(seq)
+		if !ok || entry.Seq != seq {
+			t.Errorf("Find(%d) = (%+v, %v), want found", seq, entry, ok)
+		}
+	}
+	if _, ok := l.Find(7); ok {
+		t.Error("被覆写的旧 seq=7 不应再被 Find 命中")
+	}
+
+	// Clear 应释放底层缓冲区；后续继续记录时 seq 单调递增。
+	if removed := l.Clear(); removed != 3 {
+		t.Errorf("Clear() = %d, want 3", removed)
+	}
+	if l.entries != nil || l.Count() != 0 {
+		t.Fatalf("Clear 后应释放内存: entries=%v count=%d", l.entries, l.Count())
+	}
+	l.append(LogEntry{Method: "POST", URL: "http://example.test/after-clear"})
+	after := l.Summaries(0)
+	if len(after) != 1 || after[0].Seq != 11 {
+		t.Fatalf("Clear 后追加应保持 seq 单调递增: %+v", after)
+	}
+}
+
+// clipBytes 必须在转 string 前按 bodyCap 截断，且 RoundTrip 透传给服务端 / 调用方的正文仍保持完整。
+func TestRequestLogClipsBytesBeforeStringAndPreservesDownstreamBodies(t *testing.T) {
+	l := NewRequestLog(fixedClock())
+	l.SetEnabled(true)
+	l.bodyCap = 16
+
+	short := []byte("hello")
+	if got := l.clipBytes(short); got != "hello" {
+		t.Fatalf("短正文不应截断: %q", got)
+	}
+	bigReq := strings.Repeat("Q", 256)
+	bigResp := strings.Repeat("R", 512)
+	clipped := l.clipBytes([]byte(bigResp))
+	if clipped != strings.Repeat("R", 16)+logTruncatedMark {
+		t.Fatalf("clipBytes = %q", clipped)
+	}
+
+	var gotServerBody string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		b, err := io.ReadAll(r.Body)
+		if err != nil {
+			t.Errorf("server ReadAll: %v", err)
+		}
+		gotServerBody = string(b)
+		_, _ = io.WriteString(w, bigResp)
+	}))
+	defer srv.Close()
+
+	client := &http.Client{Transport: l.Wrap(http.DefaultTransport)}
+	resp, err := client.Post(srv.URL+"/big", "text/plain", strings.NewReader(bigReq))
+	if err != nil {
+		t.Fatal(err)
+	}
+	gotClientBody, err := io.ReadAll(resp.Body)
+	_ = resp.Body.Close()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if gotServerBody != bigReq {
+		t.Errorf("服务端收到的请求体被截断: len=%d, want %d", len(gotServerBody), len(bigReq))
+	}
+	if string(gotClientBody) != bigResp {
+		t.Errorf("调用方收到的响应体被截断: len=%d, want %d", len(gotClientBody), len(bigResp))
+	}
+
+	entry, ok := l.Find(l.Summaries(1)[0].Seq)
+	if !ok {
+		t.Fatal("找不到刚记录的条目")
+	}
+	if entry.RequestBody != strings.Repeat("Q", 16)+logTruncatedMark {
+		t.Errorf("RequestBody 截断结果不对: %q", entry.RequestBody)
+	}
+	if entry.ResponseBody != strings.Repeat("R", 16)+logTruncatedMark {
+		t.Errorf("ResponseBody 截断结果不对: %q", entry.ResponseBody)
+	}
+}
+
+type idleCloseSpyTransport struct {
+	closed int
+}
+
+func (s *idleCloseSpyTransport) RoundTrip(*http.Request) (*http.Response, error) {
+	return nil, errString("unused")
+}
+
+func (s *idleCloseSpyTransport) CloseIdleConnections() { s.closed++ }
+
+// 包装 recordingTransport 后，http.Client.CloseIdleConnections 仍能透传到底层 Transport。
+func TestRecordingTransportForwardsCloseIdleConnections(t *testing.T) {
+	l := NewRequestLog(fixedClock())
+	spy := &idleCloseSpyTransport{}
+	client := &http.Client{Transport: l.Wrap(spy)}
+	client.CloseIdleConnections()
+	if spy.closed != 1 {
+		t.Fatalf("closed = %d, want 1", spy.closed)
+	}
+
+	// PortalNetwork / HTTPDoer 的 CloseIdleConnections 对 nil 与真实实例都必须安全。
+	var nilDoer *HTTPDoer
+	nilDoer.CloseIdleConnections()
+	var nilPortal *PortalNetwork
+	nilPortal.CloseIdleConnections()
+
+	doer := NewHTTPDoer(time.Second)
+	doer.SetRequestLog(l)
+	doer.CloseIdleConnections()
+
+	portal := NewPortalNetwork(func() PortalCredential { return PortalCredential{} }, "")
+	portal.SetRequestLog(l)
+	portal.CloseIdleConnections()
+}
+
 func mustRequest(t *testing.T, url string) *http.Request {
 	t.Helper()
 	req, err := http.NewRequest(http.MethodGet, url, nil)
