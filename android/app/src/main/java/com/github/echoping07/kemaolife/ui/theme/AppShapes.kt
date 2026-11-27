@@ -5,6 +5,7 @@ import androidx.compose.foundation.shape.CornerSize
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Shapes
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
@@ -23,12 +24,16 @@ internal val LocalCornerStyle = staticCompositionLocalOf { DEFAULT_CONTINUOUS_CO
  * 全 App 唯一的形状入口：半径在两种模式下完全一致，只换曲率算法。
  *
  * 关闭时走 Compose 的 `RoundedCornerShape`（标准圆弧），开启时走
- * [SmoothCornerShape]（超椭圆，接缝处曲率收敛到零）。`CircleShape` 不经过这里，
+ * [SmoothCornerShape]（超椭圆，接缝处曲率平缓过渡）。`CircleShape` 不经过这里，
  * 因为圆形在两种模式下没有差异。
  */
 @Composable
-internal fun appShape(radius: Dp): CornerBasedShape =
-    shapeFor(radius, radius, radius, radius)
+internal fun appShape(radius: Dp): CornerBasedShape {
+    val smooth = LocalCornerStyle.current
+    return remember(smooth, radius) {
+        if (smooth) SmoothCornerShape(radius) else RoundedCornerShape(radius)
+    }
+}
 
 /** 上下不同圆角（分组卡片的首行 / 末行）。 */
 @Composable
@@ -51,16 +56,23 @@ private fun shapeFor(
     bottomEnd: Dp,
     bottomStart: Dp,
 ): CornerBasedShape {
-    val corners = arrayOf(
-        CornerSize(topStart),
-        CornerSize(topEnd),
-        CornerSize(bottomEnd),
-        CornerSize(bottomStart),
-    )
-    return if (LocalCornerStyle.current) {
-        SmoothCornerShape(corners[0], corners[1], corners[2], corners[3])
-    } else {
-        RoundedCornerShape(corners[0], corners[1], corners[2], corners[3])
+    val smooth = LocalCornerStyle.current
+    return remember(smooth, topStart, topEnd, bottomEnd, bottomStart) {
+        if (smooth) {
+            SmoothCornerShape(
+                CornerSize(topStart),
+                CornerSize(topEnd),
+                CornerSize(bottomEnd),
+                CornerSize(bottomStart),
+            )
+        } else {
+            RoundedCornerShape(
+                topStart = topStart,
+                topEnd = topEnd,
+                bottomEnd = bottomEnd,
+                bottomStart = bottomStart,
+            )
+        }
     }
 }
 

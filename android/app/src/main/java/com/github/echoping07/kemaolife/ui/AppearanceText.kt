@@ -29,13 +29,7 @@ internal object AppearanceText {
     const val BottomBarLabelsEnabledSummary = "底栏同时显示图标与文字"
     const val BottomBarLabelsDisabledSummary = "底栏仅显示图标，形态更紧凑"
 
-    const val Preview = "配色预览"
-    const val SystemPalette = "系统动态配色"
-    const val PreviewBackground = "界面背景"
-    const val PreviewAction = "主要按钮"
-
     const val ThemeColors = "主题色"
-    const val PresetThemes = "预设主题"
     const val PresetThemesSummary = "AOSP 基础色，点选后立即应用"
     const val PresetThemesDynamicSummary = "莫奈取色已开启；所选主题色将在关闭取色后应用"
 

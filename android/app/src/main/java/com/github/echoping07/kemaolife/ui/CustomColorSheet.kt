@@ -23,8 +23,6 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.rounded.Check
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -52,6 +50,7 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontWeight
@@ -66,6 +65,12 @@ import com.github.echoping07.kemaolife.ui.theme.CustomThemePalette
 import com.github.echoping07.kemaolife.ui.theme.appShape
 import com.github.echoping07.kemaolife.ui.theme.customColorScheme
 
+private data class QuickPickSeed(
+    val argb: Int,
+    val color: Color,
+    val checkTint: Color,
+)
+
 private val QuickPickSeedColors = listOf(
     0xFF26A69A.toInt(), // 青绿
     0xFF2563EB.toInt(), // 钴蓝
@@ -75,7 +80,17 @@ private val QuickPickSeedColors = listOf(
     0xFFE11D48.toInt(), // 绯红
     0xFFD97706.toInt(), // 琥珀
     0xFF15803D.toInt(), // 松绿
-)
+).map { argb ->
+    QuickPickSeed(
+        argb = argb,
+        color = Color(argb),
+        checkTint = if (CustomThemePalette.relativeLuminance(argb) > 0.45) {
+            Color(0xFF17191C)
+        } else {
+            Color.White
+        },
+    )
+}
 
 private val HueSpectrumStops = listOf(
     Color(0xFFFF0000),
@@ -86,6 +101,11 @@ private val HueSpectrumStops = listOf(
     Color(0xFFFF00FF),
     Color(0xFFFF0000),
 )
+
+private val ValueOverlayBrush = Brush.verticalGradient(listOf(Color.Transparent, Color.Black))
+private val HueSpectrumBrush = Brush.horizontalGradient(HueSpectrumStops)
+private val IndicatorShadowColor = Color.Black.copy(alpha = 0.35f)
+private val ThumbShadowColor = Color.Black.copy(alpha = 0.28f)
 
 /**
  * 外观页「自定义主题色」底部选色弹层：
@@ -260,23 +280,19 @@ internal fun CustomColorSheet(
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
             Spacer(Modifier.height(10.dp))
+            val normalizedSelected = normalizeCustomThemeColor(selectedArgb)
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 QuickPickSeedColors.forEach { swatch ->
-                    val swatchSelected = normalizeCustomThemeColor(selectedArgb) == swatch
-                    val checkTint = if (CustomThemePalette.relativeLuminance(swatch) > 0.45) {
-                        Color(0xFF17191C)
-                    } else {
-                        Color.White
-                    }
+                    val swatchSelected = normalizedSelected == swatch.argb
                     Box(
                         modifier = Modifier
                             .size(34.dp)
                             .clip(CircleShape)
-                            .background(Color(swatch))
+                            .background(swatch.color)
                             .border(
                                 width = if (swatchSelected) 2.dp else 1.dp,
                                 color = if (swatchSelected) {
@@ -288,15 +304,15 @@ internal fun CustomColorSheet(
                             )
                             .clickable(role = Role.RadioButton) {
                                 focusManager.clearFocus()
-                                applySeedColor(swatch)
+                                applySeedColor(swatch.argb)
                             },
                         contentAlignment = Alignment.Center,
                     ) {
                         if (swatchSelected) {
                             Icon(
-                                imageVector = Icons.Rounded.Check,
+                                imageVector = TabIcons.Check,
                                 contentDescription = null,
-                                tint = checkTint,
+                                tint = swatch.checkTint,
                                 modifier = Modifier.size(16.dp),
                             )
                         }
@@ -449,7 +465,13 @@ private fun SaturationValuePanel(
     onChange: (Float, Float) -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    val pureHueColor = remember(hue) { Color(CustomThemePalette.hsvToRgb(hue, 1f, 1f)) }
+    val hueBrush = remember(hue) {
+        val pureHueColor = Color(CustomThemePalette.hsvToRgb(hue, 1f, 1f))
+        Brush.horizontalGradient(listOf(Color.White, pureHueColor))
+    }
+    val density = LocalDensity.current
+    val outerStroke = remember(density) { Stroke(width = with(density) { 2.dp.toPx() }) }
+    val innerStroke = remember(density) { Stroke(width = with(density) { 2.5.dp.toPx() }) }
     val shape = appShape(PageCorners.Nested)
     val latestOnChange by rememberUpdatedState(onChange)
 
@@ -485,26 +507,22 @@ private fun SaturationValuePanel(
                 }
             },
     ) {
-        drawRect(
-            brush = Brush.horizontalGradient(listOf(Color.White, pureHueColor)),
-        )
-        drawRect(
-            brush = Brush.verticalGradient(listOf(Color.Transparent, Color.Black)),
-        )
+        drawRect(brush = hueBrush)
+        drawRect(brush = ValueOverlayBrush)
         val cx = saturation.coerceIn(0f, 1f) * size.width
         val cy = (1f - value.coerceIn(0f, 1f)) * size.height
         val indicatorRadius = 11.dp.toPx()
         drawCircle(
-            color = Color.Black.copy(alpha = 0.35f),
+            color = IndicatorShadowColor,
             radius = indicatorRadius + 1.5.dp.toPx(),
             center = Offset(cx, cy),
-            style = Stroke(width = 2.dp.toPx()),
+            style = outerStroke,
         )
         drawCircle(
             color = Color.White,
             radius = indicatorRadius,
             center = Offset(cx, cy),
-            style = Stroke(width = 2.5.dp.toPx()),
+            style = innerStroke,
         )
     }
 }
@@ -546,7 +564,7 @@ private fun HueSliderBar(
         val trackTop = (size.height - trackHeight) / 2f
         val corner = CornerRadius(trackHeight / 2f, trackHeight / 2f)
         drawRoundRect(
-            brush = Brush.horizontalGradient(HueSpectrumStops),
+            brush = HueSpectrumBrush,
             topLeft = Offset(0f, trackTop),
             size = androidx.compose.ui.geometry.Size(size.width, trackHeight),
             cornerRadius = corner,
@@ -557,7 +575,7 @@ private fun HueSliderBar(
         val cx = thumbRadius + (hue.coerceIn(0f, 360f) / 360f) * usableWidth
         val cy = size.height / 2f
         drawCircle(
-            color = Color.Black.copy(alpha = 0.28f),
+            color = ThumbShadowColor,
             radius = thumbRadius + 1.dp.toPx(),
             center = Offset(cx, cy),
         )

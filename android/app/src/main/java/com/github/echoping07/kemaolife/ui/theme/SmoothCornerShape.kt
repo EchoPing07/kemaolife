@@ -9,15 +9,10 @@ import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.LayoutDirection
-import kotlin.math.abs
-import kotlin.math.cos
 import kotlin.math.min
-import kotlin.math.pow
-import kotlin.math.sign
-import kotlin.math.sin
 
 /**
- * 超椭圆圆角：曲率在与直边相接处收敛到零，避免普通圆弧的接缝感。
+ * 超椭圆圆角：曲率在与直边相接处平缓过渡，避免普通圆弧的接缝感。
  * 路径仅负责视觉形状，不需要 Android 12+ 的 RoundedCorner 平台 API。
  *
  * 必须继承 [CornerBasedShape] 而非直接实现 [Shape] —— `MaterialTheme.shapes` 的
@@ -30,9 +25,9 @@ internal class SmoothCornerShape(
     bottomStart: CornerSize,
 ) : CornerBasedShape(topStart, topEnd, bottomEnd, bottomStart) {
 
-    constructor(radius: Dp) : this(
-        CornerSize(radius), CornerSize(radius), CornerSize(radius), CornerSize(radius),
-    )
+    constructor(radius: Dp) : this(CornerSize(radius))
+
+    private constructor(corner: CornerSize) : this(corner, corner, corner, corner)
 
     override fun createOutline(
         size: Size,
@@ -42,23 +37,45 @@ internal class SmoothCornerShape(
         bottomStart: Float,
         layoutDirection: LayoutDirection,
     ): Outline {
-        val maxR = min(size.width, size.height) / 2f
-        val r1 = topStart.coerceIn(0f, maxR)
-        val r2 = topEnd.coerceIn(0f, maxR)
-        val r3 = bottomEnd.coerceIn(0f, maxR)
-        val r4 = bottomStart.coerceIn(0f, maxR)
-        if (r1 == 0f && r2 == 0f && r3 == 0f && r4 == 0f) {
-            return Outline.Rectangle(Rect(0f, 0f, size.width, size.height))
+        val w = size.width
+        val h = size.height
+        if (w <= 0f || h <= 0f) {
+            return Outline.Rectangle(Rect(0f, 0f, w, h))
         }
-        // 象限路径逐点生成，避免 arc/corner 的相对坐标在小尺寸下退化。
+        val maxR = min(w, h) / 2f
+        val isLtr = layoutDirection == LayoutDirection.Ltr
+        val tl = (if (isLtr) topStart else topEnd).coerceIn(0f, maxR)
+        val tr = (if (isLtr) topEnd else topStart).coerceIn(0f, maxR)
+        val br = (if (isLtr) bottomEnd else bottomStart).coerceIn(0f, maxR)
+        val bl = (if (isLtr) bottomStart else bottomEnd).coerceIn(0f, maxR)
+        if (tl == 0f && tr == 0f && br == 0f && bl == 0f) {
+            return Outline.Rectangle(Rect(0f, 0f, w, h))
+        }
+        // 单段三次贝塞尔逼近 n=4 超椭圆（无三角 / 幂运算）：
+        // 控制点距角顶点 0.091 * r，对角线中点精确落在 (1 - 2^-0.25) * r，
+        // 与直边接缝处曲率较标准圆弧降低一个数量级，且每角严格位于 [0, r] 内不重叠。
+        val k = SQUIRCLE_CONTROL_RATIO
         val path = Path().apply {
-            corner(r1, r1, 180f, 270f, r1)
-            lineTo(size.width - r2, 0f)
-            corner(size.width - r2, r2, 270f, 360f, r2)
-            lineTo(size.width, size.height - r3)
-            corner(size.width - r3, size.height - r3, 0f, 90f, r3)
-            lineTo(r4, size.height)
-            corner(r4, size.height - r4, 90f, 180f, r4)
+            moveTo(0f, tl)
+            if (tl > 0f) {
+                val c = tl * k
+                cubicTo(0f, c, c, 0f, tl, 0f)
+            }
+            lineTo(w - tr, 0f)
+            if (tr > 0f) {
+                val c = tr * k
+                cubicTo(w - c, 0f, w, c, w, tr)
+            }
+            lineTo(w, h - br)
+            if (br > 0f) {
+                val c = br * k
+                cubicTo(w, h - c, w - c, h, w - br, h)
+            }
+            lineTo(bl, h)
+            if (bl > 0f) {
+                val c = bl * k
+                cubicTo(c, h, 0f, h - c, 0f, h - bl)
+            }
             close()
         }
         return Outline.Generic(path)
@@ -71,23 +88,6 @@ internal class SmoothCornerShape(
         bottomStart: CornerSize,
     ): CornerBasedShape = SmoothCornerShape(topStart, topEnd, bottomEnd, bottomStart)
 
-    private fun Path.corner(cx: Float, cy: Float, start: Float, end: Float, radius: Float) {
-        if (radius == 0f) {
-            lineTo(cx, cy)
-            return
-        }
-        // n=4 的 squircle；分段足够密，填充轮廓在屏幕上连续平滑。
-        val steps = 16
-        for (step in 0..steps) {
-            val angle = Math.toRadians((start + (end - start) * step / steps).toDouble())
-            val c = cos(angle)
-            val s = sin(angle)
-            val x = cx + radius * sign(c) * abs(c).pow(0.5)
-            val y = cy + radius * sign(s) * abs(s).pow(0.5)
-            lineTo(x.toFloat(), y.toFloat())
-        }
-    }
-
     override fun equals(other: Any?): Boolean =
         other is SmoothCornerShape &&
             topStart == other.topStart && topEnd == other.topEnd &&
@@ -99,5 +99,10 @@ internal class SmoothCornerShape(
         result = 31 * result + bottomEnd.hashCode()
         result = 31 * result + bottomStart.hashCode()
         return result
+    }
+
+    private companion object {
+        // n=4 超椭圆三次贝塞尔控制点比例：(8 * (1 - 2^-0.25) - 1) / 3 ≈ 0.090943
+        const val SQUIRCLE_CONTROL_RATIO = 0.091f
     }
 }

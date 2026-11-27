@@ -1,8 +1,6 @@
 package com.github.echoping07.kemaolife.ui.theme
 
 import android.os.Build
-import androidx.compose.animation.animateColorAsState
-import androidx.compose.animation.core.tween
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.material3.ColorScheme
 import androidx.compose.material3.MaterialTheme
@@ -13,12 +11,12 @@ import androidx.compose.material3.dynamicLightColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.remember
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.sp
 import androidx.core.graphics.ColorUtils
-import com.github.echoping07.kemaolife.ui.animationsEnabled
 import com.github.echoping07.kemaolife.data.DEFAULT_CONTINUOUS_CORNERS
 import com.github.echoping07.kemaolife.data.DEFAULT_CUSTOM_THEME_COLOR
 import com.github.echoping07.kemaolife.data.DEFAULT_DYNAMIC_COLOR
@@ -27,6 +25,7 @@ import com.github.echoping07.kemaolife.data.THEME_MODE_DARK
 import com.github.echoping07.kemaolife.data.THEME_MODE_LIGHT
 import com.github.echoping07.kemaolife.data.isDarkTheme
 import com.github.echoping07.kemaolife.data.normalizeThemeColor
+import java.util.concurrent.ConcurrentHashMap
 
 /**
  * AOSP ThemePicker/ThemesStub 的 8 个基础色取自
@@ -112,7 +111,26 @@ private fun AppThemeColor.lightSurfaces(): LightSurfaces = LightSurfaces(
     highest = lightSurface(0.825f),
 )
 
+/**
+ * 缓存 16 组 `(AppThemeColor, dark)` 预设配色（另按需缓存 8 组深色 AMOLED），
+ * 让外观页预览与全局 `KemaolifeTheme` 共用同一份 `ColorScheme`，避免反复计算 HSL/blend。
+ */
+private val presetSchemeCache = ConcurrentHashMap<Int, ColorScheme>()
+
+private fun presetCacheKey(theme: AppThemeColor, dark: Boolean, amoled: Boolean): Int =
+    (theme.ordinal shl 2) or (if (dark) 2 else 0) or (if (dark && amoled) 1 else 0)
+
 private fun presetColorScheme(theme: AppThemeColor, dark: Boolean, amoled: Boolean): ColorScheme {
+    val base = presetSchemeCache.computeIfAbsent(presetCacheKey(theme, dark, amoled = false)) {
+        buildPresetColorScheme(theme, dark)
+    }
+    if (!dark || !amoled) return base
+    return presetSchemeCache.computeIfAbsent(presetCacheKey(theme, dark = true, amoled = true)) {
+        base.withAmoledSurfaces()
+    }
+}
+
+private fun buildPresetColorScheme(theme: AppThemeColor, dark: Boolean): ColorScheme {
     val argb = theme.color.toArgb()
     val secArgb = theme.secondarySeed.toArgb()
     val tertArgb = theme.tertiarySeed.toArgb()
@@ -136,8 +154,8 @@ private fun presetColorScheme(theme: AppThemeColor, dark: Boolean, amoled: Boole
 
     // 浅色：页面底色、固定顶栏（surface）与底栏（surfaceContainer）共用同一色，
     // 卡片 / 分组项用最亮表面纯白，白卡成为唯一亮面；深色与 AMOLED 不参与。
-    val base = baseColorScheme(dark = dark, surfaces = theme.lightSurfaces())
-    val colored = base.copy(
+    val base = baseColorScheme(dark = dark, surfaces = if (dark) null else theme.lightSurfaces())
+    return base.copy(
         primary = Color(primary),
         onPrimary = if (dark) Color(0xFF101418) else Color.White,
         primaryContainer = Color(container),
@@ -150,10 +168,9 @@ private fun presetColorScheme(theme: AppThemeColor, dark: Boolean, amoled: Boole
         tertiaryContainer = Color(tertContainer),
         onTertiaryContainer = if (dark) Color(0xFFFFE9BD) else Color(tertiary).darken(0.38f),
     )
-    return if (dark && amoled) colored.withAmoledSurfaces() else colored
 }
 
-private fun baseColorScheme(dark: Boolean, surfaces: LightSurfaces): ColorScheme = if (dark) {
+private fun baseColorScheme(dark: Boolean, surfaces: LightSurfaces?): ColorScheme = if (dark) {
     darkColorScheme(
         background = Color(0xFF0F1113),
         surface = Color(0xFF0F1113),
@@ -168,14 +185,15 @@ private fun baseColorScheme(dark: Boolean, surfaces: LightSurfaces): ColorScheme
         outlineVariant = Color(0xFF42484C),
     )
 } else {
+    val light = requireNotNull(surfaces)
     lightColorScheme(
-        background = surfaces.page,
-        surface = surfaces.page,
+        background = light.page,
+        surface = light.page,
         surfaceContainerLowest = Color(0xFFFFFFFF),
         surfaceContainerLow = Color(0xFFFFFFFF),
-        surfaceContainer = surfaces.page,
-        surfaceContainerHigh = surfaces.high,
-        surfaceContainerHighest = surfaces.highest,
+        surfaceContainer = light.page,
+        surfaceContainerHigh = light.high,
+        surfaceContainerHighest = light.highest,
         onSurface = Color(0xFF191C1E),
         onSurfaceVariant = Color(0xFF44474B),
         outline = Color(0xFF74777B),
@@ -210,58 +228,6 @@ private fun ColorScheme.withLightPageSurfaces(): ColorScheme = copy(
 
 private fun Color.darken(amount: Float) = Color(ColorUtils.blendARGB(toArgb(), android.graphics.Color.BLACK, amount))
 
-@Composable
-private fun animatedColor(target: Color, enabled: Boolean): Color =
-    animateColorAsState(
-        targetValue = target,
-        animationSpec = if (enabled) tween(260) else tween(0),
-        label = "themeColor",
-    ).value
-
-/** 整个色板一起过渡，包括动态取色、深浅色和 AMOLED 表面层级。 */
-@Composable
-private fun animatedColorScheme(target: ColorScheme): ColorScheme {
-    val enabled = animationsEnabled()
-    return target.copy(
-        primary = animatedColor(target.primary, enabled),
-        onPrimary = animatedColor(target.onPrimary, enabled),
-        primaryContainer = animatedColor(target.primaryContainer, enabled),
-        onPrimaryContainer = animatedColor(target.onPrimaryContainer, enabled),
-        inversePrimary = animatedColor(target.inversePrimary, enabled),
-        secondary = animatedColor(target.secondary, enabled),
-        onSecondary = animatedColor(target.onSecondary, enabled),
-        secondaryContainer = animatedColor(target.secondaryContainer, enabled),
-        onSecondaryContainer = animatedColor(target.onSecondaryContainer, enabled),
-        tertiary = animatedColor(target.tertiary, enabled),
-        onTertiary = animatedColor(target.onTertiary, enabled),
-        tertiaryContainer = animatedColor(target.tertiaryContainer, enabled),
-        onTertiaryContainer = animatedColor(target.onTertiaryContainer, enabled),
-        background = animatedColor(target.background, enabled),
-        onBackground = animatedColor(target.onBackground, enabled),
-        surface = animatedColor(target.surface, enabled),
-        onSurface = animatedColor(target.onSurface, enabled),
-        surfaceVariant = animatedColor(target.surfaceVariant, enabled),
-        onSurfaceVariant = animatedColor(target.onSurfaceVariant, enabled),
-        surfaceTint = animatedColor(target.surfaceTint, enabled),
-        inverseSurface = animatedColor(target.inverseSurface, enabled),
-        inverseOnSurface = animatedColor(target.inverseOnSurface, enabled),
-        error = animatedColor(target.error, enabled),
-        onError = animatedColor(target.onError, enabled),
-        errorContainer = animatedColor(target.errorContainer, enabled),
-        onErrorContainer = animatedColor(target.onErrorContainer, enabled),
-        outline = animatedColor(target.outline, enabled),
-        outlineVariant = animatedColor(target.outlineVariant, enabled),
-        scrim = animatedColor(target.scrim, enabled),
-        surfaceBright = animatedColor(target.surfaceBright, enabled),
-        surfaceDim = animatedColor(target.surfaceDim, enabled),
-        surfaceContainer = animatedColor(target.surfaceContainer, enabled),
-        surfaceContainerHigh = animatedColor(target.surfaceContainerHigh, enabled),
-        surfaceContainerHighest = animatedColor(target.surfaceContainerHighest, enabled),
-        surfaceContainerLow = animatedColor(target.surfaceContainerLow, enabled),
-        surfaceContainerLowest = animatedColor(target.surfaceContainerLowest, enabled),
-    )
-}
-
 private val AppTypography = Typography().let { base ->
     Typography(
         displaySmall = base.displaySmall.copy(letterSpacing = 0.sp),
@@ -288,26 +254,30 @@ fun KemaolifeTheme(
 ) {
     val dark = isDarkTheme(themeMode, darkTheme)
     val normalizedTheme = normalizeThemeColor(themeColor)
-    val theme = AppThemeColor.entries.firstOrNull { it.name == normalizedTheme }
-        ?: AppThemeColor.MONOCHROMATIC
     val context = LocalContext.current
-    val target = when {
-        dynamicColor && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S -> {
-            val dynamic = if (dark) dynamicDarkColorScheme(context) else dynamicLightColorScheme(context)
-            when {
-                dark && amoled -> dynamic.withAmoledSurfaces()
-                !dark -> dynamic.withLightPageSurfaces()
-                else -> dynamic
+    val target = remember(context, dynamicColor, dark, amoled, normalizedTheme, customThemeColor) {
+        when {
+            dynamicColor && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S -> {
+                val dynamic = if (dark) dynamicDarkColorScheme(context) else dynamicLightColorScheme(context)
+                when {
+                    dark && amoled -> dynamic.withAmoledSurfaces()
+                    !dark -> dynamic.withLightPageSurfaces()
+                    else -> dynamic
+                }
+            }
+            normalizedTheme == THEME_COLOR_CUSTOM -> customColorScheme(customThemeColor, dark, amoled)
+            else -> {
+                val theme = AppThemeColor.entries.firstOrNull { it.name == normalizedTheme }
+                    ?: AppThemeColor.MONOCHROMATIC
+                presetColorScheme(theme, dark, amoled)
             }
         }
-        normalizedTheme == THEME_COLOR_CUSTOM -> customColorScheme(customThemeColor, dark, amoled)
-        else -> presetColorScheme(theme, dark, amoled)
     }
     // 形状入口 appShape 读 LocalCornerStyle，必须包住整个 content。
     // AlertDialog / ModalBottomSheet 的 shape 参数在父组合求值，不依赖子组合继承。
     CompositionLocalProvider(LocalCornerStyle provides continuousCorners) {
         MaterialTheme(
-            colorScheme = animatedColorScheme(target),
+            colorScheme = target,
             typography = AppTypography,
             shapes = if (continuousCorners) SmoothShapes else RoundedShapes,
             content = content,

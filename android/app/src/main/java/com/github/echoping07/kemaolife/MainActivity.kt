@@ -38,6 +38,7 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -58,10 +59,11 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation3.runtime.NavEntry
 import androidx.navigation3.ui.NavDisplay
 import com.github.echoping07.kemaolife.data.ElectricityNotifier
+import com.github.echoping07.kemaolife.data.ThemeSettings
 import com.github.echoping07.kemaolife.ui.AppBackStackOps
+import com.github.echoping07.kemaolife.ui.AppDestination
 import com.github.echoping07.kemaolife.ui.AppNavTransitions
 import com.github.echoping07.kemaolife.ui.AppOpenGate
-import com.github.echoping07.kemaolife.ui.AppRoute
 import com.github.echoping07.kemaolife.ui.AppState
 import com.github.echoping07.kemaolife.ui.AppViewModel
 import com.github.echoping07.kemaolife.ui.DockedNavBar
@@ -69,14 +71,17 @@ import com.github.echoping07.kemaolife.ui.DockedNavBarMetrics
 import com.github.echoping07.kemaolife.ui.FloatingNavBar
 import com.github.echoping07.kemaolife.ui.FloatingNavBarMetrics
 import com.github.echoping07.kemaolife.ui.FloatingNavItemData
+import com.github.echoping07.kemaolife.ui.LocalAnimationsEnabled
 import com.github.echoping07.kemaolife.ui.MoreScreen
 import com.github.echoping07.kemaolife.ui.PageBottomPadding
 import com.github.echoping07.kemaolife.ui.ProbeDialog
 import com.github.echoping07.kemaolife.ui.SettingsChildScreen
 import com.github.echoping07.kemaolife.ui.SettingsOverviewScreen
+import com.github.echoping07.kemaolife.ui.SettingsPage
 import com.github.echoping07.kemaolife.ui.TabIcons
 import com.github.echoping07.kemaolife.ui.TimetableScreen
 import com.github.echoping07.kemaolife.ui.animationsEnabled
+import com.github.echoping07.kemaolife.ui.readAnimationsEnabled
 import com.github.echoping07.kemaolife.ui.rememberAppBackStack
 import com.github.echoping07.kemaolife.ui.theme.KemaolifeTheme
 
@@ -96,20 +101,36 @@ class MainActivity : ComponentActivity() {
             window.isNavigationBarContrastEnforced = false
         }
         setContent {
-            val state by viewModel.state.collectAsStateWithLifecycle()
-            KemaolifeTheme(
-                themeColor = state.themeColor,
-                customThemeColor = state.customThemeColor,
-                themeMode = state.themeMode,
-                dynamicColor = state.dynamicColor,
-                amoled = state.amoled,
-                continuousCorners = state.continuousCorners,
-            ) {
-                AppRoot(
-                    viewModel = viewModel,
-                    requestedTab = requestedTab.value,
-                    onConsumeRequestedTab = { requestedTab.value = null },
-                )
+            val theme by viewModel.themeSettings.collectAsStateWithLifecycle()
+            // 仅在初始化与回到前台时读一次系统动画缩放，避免每次组合 / 滚动反复触发 Settings Binder IPC。
+            var animationsEnabled by remember { mutableStateOf(readAnimationsEnabled(this@MainActivity)) }
+            val lifecycleOwner = LocalLifecycleOwner.current
+            DisposableEffect(lifecycleOwner) {
+                val observer =
+                    LifecycleEventObserver { _, event ->
+                        if (event == Lifecycle.Event.ON_RESUME) {
+                            animationsEnabled = readAnimationsEnabled(this@MainActivity)
+                        }
+                    }
+                lifecycleOwner.lifecycle.addObserver(observer)
+                onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+            }
+            CompositionLocalProvider(LocalAnimationsEnabled provides animationsEnabled) {
+                KemaolifeTheme(
+                    themeColor = theme.themeColor,
+                    customThemeColor = theme.customThemeColor,
+                    themeMode = theme.themeMode,
+                    dynamicColor = theme.dynamicColor,
+                    amoled = theme.amoled,
+                    continuousCorners = theme.continuousCorners,
+                ) {
+                    AppRoot(
+                        viewModel = viewModel,
+                        theme = theme,
+                        requestedTab = requestedTab.value,
+                        onConsumeRequestedTab = { requestedTab.value = null },
+                    )
+                }
             }
         }
     }
@@ -132,6 +153,7 @@ private enum class Tab { TIMETABLE, MORE, SETTINGS }
 @Composable
 private fun AppRoot(
     viewModel: AppViewModel,
+    theme: ThemeSettings,
     requestedTab: String?,
     onConsumeRequestedTab: () -> Unit,
 ) {
@@ -186,7 +208,7 @@ private fun AppRoot(
 
                     Lifecycle.Event.ON_RESUME -> {
                         if (gate.onResume()) {
-                            viewModel.onAppOpened(force = true)
+                            viewModel.onAppOpened()
                         }
                     }
 
@@ -216,13 +238,31 @@ private fun AppRoot(
     }
 
     val navBottomInset = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
-    val navScrollClearance = FloatingNavBarMetrics.scrollClearance(state.showBottomBarLabels) + navBottomInset
-    val isOnHome = backStack.lastOrNull() == AppRoute.Home
+    val navScrollClearance = FloatingNavBarMetrics.scrollClearance(theme.showBottomBarLabels) + navBottomInset
+    val isOnHome = backStack.lastOrNull() == AppDestination.Home
     val snackbarBottomPadding =
         when {
             !isOnHome -> 16.dp
-            state.floatingBottomBar -> FloatingNavBarMetrics.reservedHeight(state.showBottomBarLabels) + 8.dp
-            else -> DockedNavBarMetrics.contentHeight(state.showBottomBarLabels) + 8.dp
+            theme.floatingBottomBar -> FloatingNavBarMetrics.reservedHeight(theme.showBottomBarLabels) + 8.dp
+            else -> DockedNavBarMetrics.contentHeight(theme.showBottomBarLabels) + 8.dp
+        }
+    val onSelectTab: (Tab) -> Unit =
+        remember(viewModel) {
+            { next ->
+                tab = next
+                if (next == Tab.TIMETABLE) {
+                    // 切回课表时按最小间隔补一次同步（打开 App 本身是特殊自动，不受限）。
+                    viewModel.maybeAutoSync()
+                }
+            }
+        }
+    val onOpenSettings: (SettingsPage) -> Unit =
+        remember(backStack) {
+            { page -> AppBackStackOps.push(backStack, AppDestination.Settings(page)) }
+        }
+    val onBack: () -> Unit =
+        remember(backStack) {
+            { AppBackStackOps.pop(backStack) }
         }
 
     Scaffold(
@@ -247,37 +287,32 @@ private fun AppRoot(
         ) {
             NavDisplay(
                 backStack = backStack,
-                onBack = { AppBackStackOps.pop(backStack) },
+                onBack = onBack,
                 transitionSpec = { AppNavTransitions.push(motionEnabled) },
                 popTransitionSpec = { AppNavTransitions.pop(motionEnabled) },
                 predictivePopTransitionSpec = { _ -> AppNavTransitions.pop(motionEnabled) },
-                entryProvider = { route ->
-                    NavEntry(key = route, contentKey = route.routeId) { key ->
+                entryProvider = { destination ->
+                    NavEntry(key = destination, contentKey = destination.routeId) { key ->
                         when (key) {
-                            AppRoute.Home -> {
+                            AppDestination.Home -> {
                                 HomeShell(
                                     tab = tab,
+                                    theme = theme,
                                     state = state,
                                     viewModel = viewModel,
                                     navScrollClearance = navScrollClearance,
                                     motionEnabled = motionEnabled,
-                                    onSelectTab = { next ->
-                                        tab = next
-                                        if (next == Tab.TIMETABLE) {
-                                            // 切回课表时按最小间隔补一次同步（打开 App 本身是特殊自动，不受限）。
-                                            viewModel.maybeAutoSync()
-                                        }
-                                    },
-                                    onOpenSettingsChild = { child -> AppBackStackOps.push(backStack, child) },
+                                    onSelectTab = onSelectTab,
+                                    onOpenSettings = onOpenSettings,
                                 )
                             }
 
-                            is AppRoute.SettingsChild -> {
+                            is AppDestination.Settings -> {
                                 SettingsChildScreen(
-                                    route = key,
+                                    page = key.page,
                                     state = state,
                                     viewModel = viewModel,
-                                    onBack = { AppBackStackOps.pop(backStack) },
+                                    onBack = onBack,
                                 )
                             }
                         }
@@ -288,8 +323,8 @@ private fun AppRoot(
 
             // 关闭「预测性返回手势」时由后注册的 BackHandler 接管系统返回：
             // 侧滑过程中不驱动 NavDisplay 跟手预览，松手确认后仍走常规 popTransitionSpec 退场。
-            BackHandler(enabled = !state.predictiveBackEnabled && backStack.size > 1) {
-                AppBackStackOps.pop(backStack)
+            BackHandler(enabled = !theme.predictiveBackEnabled && backStack.size > 1) {
+                onBack()
             }
         }
     }
@@ -298,40 +333,47 @@ private fun AppRoot(
 @Composable
 private fun HomeShell(
     tab: Tab,
+    theme: ThemeSettings,
     state: AppState,
     viewModel: AppViewModel,
     navScrollClearance: Dp,
     motionEnabled: Boolean,
     onSelectTab: (Tab) -> Unit,
-    onOpenSettingsChild: (AppRoute.SettingsChild) -> Unit,
+    onOpenSettings: (SettingsPage) -> Unit,
 ) {
+    val timetableLabel = stringResource(R.string.tab_timetable)
+    val moreLabel = stringResource(R.string.tab_more)
+    val settingsLabel = stringResource(R.string.tab_settings)
     val navItems =
-        listOf(
-            FloatingNavItemData(
-                label = stringResource(R.string.tab_timetable),
-                icon = TabIcons.Timetable,
-                selectedIcon = TabIcons.TimetableFilled,
-                selected = tab == Tab.TIMETABLE,
-                onClick = { onSelectTab(Tab.TIMETABLE) },
-            ),
-            FloatingNavItemData(
-                label = stringResource(R.string.tab_more),
-                icon = TabIcons.More,
-                selectedIcon = TabIcons.MoreFilled,
-                selected = tab == Tab.MORE,
-                onClick = { onSelectTab(Tab.MORE) },
-            ),
-            FloatingNavItemData(
-                label = stringResource(R.string.tab_settings),
-                icon = TabIcons.Settings,
-                selectedIcon = TabIcons.SettingsFilled,
-                selected = tab == Tab.SETTINGS,
-                onClick = { onSelectTab(Tab.SETTINGS) },
-            ),
-        )
+        remember(tab, timetableLabel, moreLabel, settingsLabel, onSelectTab) {
+            listOf(
+                FloatingNavItemData(
+                    label = timetableLabel,
+                    icon = TabIcons.Timetable,
+                    selectedIcon = TabIcons.TimetableFilled,
+                    selected = tab == Tab.TIMETABLE,
+                    onClick = { onSelectTab(Tab.TIMETABLE) },
+                ),
+                FloatingNavItemData(
+                    label = moreLabel,
+                    icon = TabIcons.More,
+                    selectedIcon = TabIcons.MoreFilled,
+                    selected = tab == Tab.MORE,
+                    onClick = { onSelectTab(Tab.MORE) },
+                ),
+                FloatingNavItemData(
+                    label = settingsLabel,
+                    icon = TabIcons.Settings,
+                    selectedIcon = TabIcons.SettingsFilled,
+                    selected = tab == Tab.SETTINGS,
+                    onClick = { onSelectTab(Tab.SETTINGS) },
+                ),
+            )
+        }
+    val onGoSettings = remember(onSelectTab) { { onSelectTab(Tab.SETTINGS) } }
     // 悬浮模式下内容滚至底栏后方，需要留出底栏与手势区高度；贴底模式下底栏独立占位，内容区按常规留白即可。
-    val timetableBottomPadding = if (state.floatingBottomBar) navScrollClearance else 16.dp
-    val pageBottomPadding = if (state.floatingBottomBar) navScrollClearance else PageBottomPadding
+    val timetableBottomPadding = if (theme.floatingBottomBar) navScrollClearance else 16.dp
+    val pageBottomPadding = if (theme.floatingBottomBar) navScrollClearance else PageBottomPadding
 
     // 保持内容区在组合树中的位置恒定，切换底栏形态时不重建各 Tab 及其滚动状态。
     Box(
@@ -380,7 +422,7 @@ private fun HomeShell(
                             MoreScreen(
                                 state = state,
                                 viewModel = viewModel,
-                                onGoSettings = { onSelectTab(Tab.SETTINGS) },
+                                onGoSettings = onGoSettings,
                                 bottomContentPadding = pageBottomPadding,
                             )
                         }
@@ -390,26 +432,26 @@ private fun HomeShell(
                                 state = state,
                                 viewModel = viewModel,
                                 rootBottomPadding = pageBottomPadding,
-                                onNavigate = onOpenSettingsChild,
+                                onOpen = onOpenSettings,
                             )
                         }
                     }
                 }
             }
 
-            if (!state.floatingBottomBar) {
+            if (!theme.floatingBottomBar) {
                 DockedNavBar(
                     items = navItems,
-                    showLabels = state.showBottomBarLabels,
+                    showLabels = theme.showBottomBarLabels,
                     motionEnabled = motionEnabled,
                 )
             }
         }
 
-        if (state.floatingBottomBar) {
+        if (theme.floatingBottomBar) {
             FloatingNavBar(
                 items = navItems,
-                showLabels = state.showBottomBarLabels,
+                showLabels = theme.showBottomBarLabels,
                 motionEnabled = motionEnabled,
                 modifier = Modifier.align(Alignment.BottomCenter),
             )

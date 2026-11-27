@@ -24,9 +24,13 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import com.github.echoping07.kemaolife.R
+import com.github.echoping07.kemaolife.data.TimetableExport
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import java.io.OutputStreamWriter
 
 /**
  * 导出弹层：确认文件名 / 数据时间后再落盘。
@@ -40,10 +44,10 @@ import kotlinx.coroutines.withContext
  * 聊天应用打开 CSV）。
  */
 @Composable
-internal fun TimetableExportDialog(state: ExportState, onDismiss: () -> Unit) {
+internal fun TimetableExportDialog(state: TimetableExport, onDismiss: () -> Unit) {
     val context = LocalContext.current
+    val appContext = context.applicationContext
     val scope = rememberCoroutineScope()
-    val export = state.export
     var saving by remember { mutableStateOf(false) }
 
     val picker = rememberLauncherForActivityResult(
@@ -55,33 +59,34 @@ internal fun TimetableExportDialog(state: ExportState, onDismiss: () -> Unit) {
             return@rememberLauncherForActivityResult
         }
         scope.launch {
-            // 正文在 IO 线程编码一次，写盘也在 IO 线程。
-            val bytes = withContext(Dispatchers.IO) { export.csv.toByteArray(Charsets.UTF_8) }
-            val ok = withContext(Dispatchers.IO) { writeCsv(context, uri, bytes) }
+            // 单次 IO 切线程直接流式写 UTF-8；NonCancellable 防止弹层关闭 / 重建截断写盘中的文件。
+            val ok = withContext(NonCancellable + Dispatchers.IO) {
+                writeCsv(appContext, uri, state.csv)
+            }
             saving = false
             // 保存结果用 Toast 而不是 snackbar：弹层马上关闭，snackbar 会跟着消失。
             Toast.makeText(
-                context,
-                context.getString(if (ok) R.string.export_saved else R.string.export_failed),
+                appContext,
+                appContext.getString(if (ok) R.string.export_saved else R.string.export_failed),
                 Toast.LENGTH_SHORT,
             ).show()
-            if (ok) onDismiss()
+            if (ok && isActive) onDismiss()
         }
     }
 
     AlertDialog(
-        onDismissRequest = onDismiss,
+        onDismissRequest = { if (!saving) onDismiss() },
         title = { Text(stringResource(R.string.export_title)) },
         text = {
             Column(modifier = Modifier.fillMaxWidth()) {
-                ExportRow(stringResource(R.string.export_filename), export.filename)
+                ExportRow(stringResource(R.string.export_filename), state.filename)
                 ExportRow(
                     stringResource(R.string.export_lessons),
-                    stringResource(R.string.export_lessons_value, export.lessonCount),
+                    stringResource(R.string.export_lessons_value, state.lessonCount),
                 )
                 // 数据时间必须展示：导出的不是实时数据，用户得知道这是哪次同步的课表。
-                if (export.syncedAt.isNotBlank()) {
-                    ExportRow(stringResource(R.string.export_synced_at), shortStamp(export.syncedAt))
+                if (state.syncedAt.isNotBlank()) {
+                    ExportRow(stringResource(R.string.export_synced_at), shortStamp(state.syncedAt))
                 }
                 Spacer(Modifier.height(10.dp))
                 Text(
@@ -97,14 +102,16 @@ internal fun TimetableExportDialog(state: ExportState, onDismiss: () -> Unit) {
                 onClick = {
                     saving = true
                     // 文件名由 Go 侧给出（带快照同步时间），UI 不自己拼。
-                    picker.launch(export.filename)
+                    picker.launch(state.filename)
                 },
             ) {
                 Text(stringResource(if (saving) R.string.export_saving else R.string.action_save))
             }
         },
         dismissButton = {
-            TextButton(onClick = onDismiss) { Text(stringResource(android.R.string.cancel)) }
+            TextButton(enabled = !saving, onClick = onDismiss) {
+                Text(stringResource(android.R.string.cancel))
+            }
         },
         shape = MaterialTheme.shapes.extraLarge,
     )
@@ -123,20 +130,20 @@ private fun ExportRow(label: String, value: String) {
 }
 
 /**
- * 写入 CSV 正文。
+ * 流式写入 UTF-8 CSV 正文（避免额外复制一整份 ByteArray）。
  *
  * 优先用 `"wt"` 模式：部分 provider（尤其从模板复制来的文件）会保留旧内容尾部，
  * 截断模式才能保证导出的文件正好是这份课表。但并非所有 provider 都实现 `wt`
  * （会抛 IllegalArgumentException），所以退回普通的 `"w"` —— 宁可少截断，
  * 也不能让用户换个保存位置就失败。BOM 已由 Go 侧写进正文。
  */
-private fun writeCsv(context: Context, uri: Uri, bytes: ByteArray): Boolean {
+private fun writeCsv(context: Context, uri: Uri, csv: String): Boolean {
     for (mode in listOf("wt", "w")) {
         try {
             val out = context.contentResolver.openOutputStream(uri, mode) ?: continue
-            out.use {
-                it.write(bytes)
-                it.flush()
+            OutputStreamWriter(out, Charsets.UTF_8).buffered().use { writer ->
+                writer.write(csv)
+                writer.flush()
             }
             return true
         } catch (e: IllegalArgumentException) {

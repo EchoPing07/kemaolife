@@ -1,5 +1,6 @@
 package com.github.echoping07.kemaolife.ui
 
+import android.content.Context
 import android.provider.Settings
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.LinearEasing
@@ -29,7 +30,8 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -40,7 +42,7 @@ import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.StrokeJoin
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.vector.ImageVector
-import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -106,17 +108,19 @@ internal fun SectionCard(
  * 彻底告别传统死板细圈，展现富有弹性质感的现代科技感。
  */
 
-/** 系统关闭动画时不运行无限装饰动画；状态与静态加载提示仍保留。 */
-@Composable
-internal fun animationsEnabled(): Boolean {
-    val context = LocalContext.current
-    // 每次组合读取系统开关，设置变更后无需重启；读取自身不创建持续动画。
-    return Settings.Global.getFloat(
+/** 由根布局在生命周期变化时刷新后提供，避免组合期高频触发 Settings Binder IPC。 */
+internal val LocalAnimationsEnabled = staticCompositionLocalOf { true }
+
+internal fun readAnimationsEnabled(context: Context): Boolean =
+    Settings.Global.getFloat(
         context.contentResolver,
         Settings.Global.ANIMATOR_DURATION_SCALE,
         1f,
     ) != 0f
-}
+
+/** 系统关闭动画时不运行无限装饰动画；状态与静态加载提示仍保留。 */
+@Composable
+internal fun animationsEnabled(): Boolean = LocalAnimationsEnabled.current
 
 @Composable
 internal fun ExpressiveLoadingIndicator(
@@ -125,14 +129,16 @@ internal fun ExpressiveLoadingIndicator(
     size: Dp = 22.dp,
     strokeWidth: Dp = if (size < 22.dp) 2.2.dp else 3.2.dp,
 ) {
+    val strokePx = with(LocalDensity.current) { strokeWidth.toPx() }
     if (!animationsEnabled()) {
+        val staticStroke = remember(strokePx) { Stroke(width = strokePx, cap = StrokeCap.Round) }
         Canvas(modifier = modifier.size(size)) {
             drawArc(
                 color = color,
                 startAngle = -90f,
                 sweepAngle = 270f,
                 useCenter = false,
-                style = Stroke(strokeWidth.toPx(), cap = StrokeCap.Round),
+                style = staticStroke,
             )
         }
         return
@@ -140,7 +146,7 @@ internal fun ExpressiveLoadingIndicator(
     val transition = rememberInfiniteTransition(label = "expressiveWavy")
 
     // 基础自转相位 (0 ~ 360)
-    val baseRotation by transition.animateFloat(
+    val baseRotation = transition.animateFloat(
         initialValue = 0f,
         targetValue = 360f,
         animationSpec =
@@ -152,7 +158,7 @@ internal fun ExpressiveLoadingIndicator(
     )
 
     // 头部扩展相位 (0 ~ 360)
-    val headAngle by transition.animateFloat(
+    val headAngle = transition.animateFloat(
         initialValue = 0f,
         targetValue = 360f,
         animationSpec =
@@ -164,7 +170,7 @@ internal fun ExpressiveLoadingIndicator(
     )
 
     // 尾部追赶相位 (0 ~ 360)
-    val tailAngle by transition.animateFloat(
+    val tailAngle = transition.animateFloat(
         initialValue = 0f,
         targetValue = 360f,
         animationSpec =
@@ -182,7 +188,7 @@ internal fun ExpressiveLoadingIndicator(
     )
 
     // 波浪流体向前行进相位
-    val wavePhase by transition.animateFloat(
+    val wavePhase = transition.animateFloat(
         initialValue = 0f,
         targetValue = (2 * Math.PI).toFloat(),
         animationSpec =
@@ -193,21 +199,31 @@ internal fun ExpressiveLoadingIndicator(
         label = "wavePhase",
     )
 
+    val path = remember { Path() }
+    val stroke = remember(strokePx) {
+        Stroke(
+            width = strokePx,
+            cap = StrokeCap.Round,
+            join = StrokeJoin.Round,
+        )
+    }
+
     Canvas(modifier = modifier.size(size)) {
         val w = this.size.width
         val h = this.size.height
         val cx = w / 2f
         val cy = h / 2f
-        val strokePx = strokeWidth.toPx()
         val baseR = (min(w, h) - strokePx * 1.5f) / 2f
         val waveAmplitude = (baseR * 0.14f).coerceIn(1.2f, 3.2f)
         val waveCount = 5
 
-        // 计算当前圆弧的扫描跨度
-        val sweep = (headAngle - tailAngle).let { if (it < 0f) it + 360f else it }.coerceIn(18f, 290f)
-        val startAngle = (baseRotation + tailAngle) % 360f
+        // 计算当前圆弧的扫描跨度（在绘制阶段读取动画状态，避免每帧触发组合）。
+        val tail = tailAngle.value
+        val sweep = (headAngle.value - tail).let { if (it < 0f) it + 360f else it }.coerceIn(18f, 290f)
+        val startAngle = (baseRotation.value + tail) % 360f
+        val phase = wavePhase.value
 
-        val path = Path()
+        path.rewind()
         val steps = (sweep / 4).toInt().coerceAtLeast(16)
         for (i in 0..steps) {
             val progress = i.toFloat() / steps
@@ -215,7 +231,7 @@ internal fun ExpressiveLoadingIndicator(
             val currentRad = Math.toRadians(currentDeg.toDouble()).toFloat()
 
             // 径向正弦波扰动
-            val waveOffset = waveAmplitude * sin(waveCount * currentRad - wavePhase)
+            val waveOffset = waveAmplitude * sin(waveCount * currentRad - phase)
             val r = baseR + waveOffset
             val x = cx + r * cos(currentRad)
             val y = cy + r * sin(currentRad)
@@ -230,12 +246,7 @@ internal fun ExpressiveLoadingIndicator(
         drawPath(
             path = path,
             color = color,
-            style =
-                Stroke(
-                    width = strokePx,
-                    cap = StrokeCap.Round,
-                    join = StrokeJoin.Round,
-                ),
+            style = stroke,
         )
     }
 }

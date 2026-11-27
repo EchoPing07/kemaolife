@@ -3,14 +3,13 @@ package com.github.echoping07.kemaolife.ui
 import androidx.compose.foundation.ScrollState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
-import androidx.compose.foundation.layout.asPaddingValues
+import androidx.compose.foundation.layout.exclude
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -23,7 +22,9 @@ import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.union
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.windowInsetsBottomHeight
 import androidx.compose.foundation.layout.windowInsetsPadding
+import androidx.compose.foundation.layout.windowInsetsTopHeight
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.verticalScroll
@@ -32,10 +33,14 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
@@ -92,28 +97,28 @@ internal fun CollapsingScreen(
 ) {
     val scroll = scrollState ?: rememberScrollState()
     val density = LocalDensity.current
-    val collapseDistance = with(density) { (ExpandedTitleGap + ExpandedTitleHeight).toPx() }
-    val progress = collapsingTitleProgress(scroll.value, collapseDistance.roundToInt())
-    val titleOffset = with(density) { -ExpandedTitleHeight.toPx() * progress }
+    val collapseDistancePx = with(density) { (ExpandedTitleGap + ExpandedTitleHeight).toPx().roundToInt() }
+    val expandedTitleHeightPx = with(density) { ExpandedTitleHeight.toPx() }
     val motionEnabled = animationsEnabled()
-    val statusBarTop = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
-    // 软键盘弹出时只补超出系统导航栏的部分，避免与调用方已计入的底部导航栏 inset 叠加。
-    val imeBottom = WindowInsets.ime.asPaddingValues().calculateBottomPadding()
-    val navBottom = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
-    val extraImePadding = (imeBottom - navBottom).coerceAtLeast(0.dp)
+    var viewportHeightPx by remember { mutableIntStateOf(0) }
+    // 视口高取本层布局结果：滚动区与固定顶栏共用同一个 Box，高度一致。
+    val contentMinHeight = with(density) {
+        collapsingContentMinHeightPx(
+            viewportPx = viewportHeightPx,
+            collapseDistancePx = collapseDistancePx,
+        ).toDp()
+    }
 
-    BoxWithConstraints(
+    Box(
         modifier = modifier
             .fillMaxSize()
-            .background(MaterialTheme.colorScheme.surface),
+            .background(MaterialTheme.colorScheme.surface)
+            .onSizeChanged { size ->
+                if (size.height != viewportHeightPx) {
+                    viewportHeightPx = size.height
+                }
+            },
     ) {
-        // 视口高取本层约束：滚动区与固定顶栏共用同一个 Box，高度一致。
-        val contentMinHeight = with(density) {
-            collapsingContentMinHeightPx(
-                viewportPx = if (constraints.hasBoundedHeight) constraints.maxHeight else 0,
-                collapseDistancePx = collapseDistance.roundToInt(),
-            ).toDp()
-        }
         Column(
             modifier = Modifier
                 .fillMaxSize()
@@ -121,7 +126,8 @@ internal fun CollapsingScreen(
                 .heightIn(min = contentMinHeight)
                 .padding(horizontal = PageHorizontalPadding),
         ) {
-            Spacer(Modifier.height(statusBarTop + CollapsedTitleHeight + ExpandedTitleGap))
+            Spacer(Modifier.windowInsetsTopHeight(WindowInsets.statusBars))
+            Spacer(Modifier.height(CollapsedTitleHeight + ExpandedTitleGap))
             Text(
                 text = title,
                 style = MaterialTheme.typography.headlineLarge.copy(
@@ -134,7 +140,8 @@ internal fun CollapsingScreen(
                     .fillMaxWidth()
                     .height(ExpandedTitleHeight)
                     .graphicsLayer {
-                        translationY = if (motionEnabled) titleOffset else 0f
+                        val progress = collapsingTitleProgress(scroll.value, collapseDistancePx)
+                        translationY = if (motionEnabled) -expandedTitleHeightPx * progress else 0f
                         alpha = 1f - progress
                     },
             )
@@ -143,7 +150,9 @@ internal fun CollapsingScreen(
             // 属于滚动内容的尾部留白：最后一张卡可以离开悬浮底栏 / FAB，不形成固定空白带。
             // 内容不足一屏 + 收起距离时，[collapsingContentMinHeightPx] 会在其后补足空白，
             // 空白同样属于滚动内容，可以随内容一起滚走。
-            Spacer(Modifier.height(bottomContentPadding + extraImePadding))
+            Spacer(Modifier.height(bottomContentPadding))
+            // 软键盘弹出时只补超出系统导航栏的部分，避免与调用方已计入的底部导航栏 inset 叠加。
+            Spacer(Modifier.windowInsetsBottomHeight(WindowInsets.ime.exclude(WindowInsets.navigationBars)))
         }
 
         Row(
@@ -180,7 +189,11 @@ internal fun CollapsingScreen(
                 maxLines = 1,
                 modifier = Modifier
                     .weight(1f)
-                    .alpha(if (motionEnabled) progress else if (scroll.value > 0) 1f else 0f),
+                    .graphicsLayer {
+                        val scrollPx = scroll.value
+                        val progress = collapsingTitleProgress(scrollPx, collapseDistancePx)
+                        alpha = if (motionEnabled) progress else if (scrollPx > 0) 1f else 0f
+                    },
             )
             Row(verticalAlignment = Alignment.CenterVertically, content = actions)
         }

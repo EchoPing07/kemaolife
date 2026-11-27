@@ -1,9 +1,5 @@
 package com.github.echoping07.kemaolife.ui
 
-import androidx.compose.animation.animateColorAsState
-import androidx.compose.animation.core.FastOutSlowInEasing
-import androidx.compose.animation.core.animateFloatAsState
-import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -48,6 +44,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.Layout
 import androidx.compose.ui.res.stringResource
@@ -92,17 +89,15 @@ internal fun TimetableScreen(
     var showWeekPicker by remember { mutableStateOf(false) }
     var detail by remember { mutableStateOf<CourseTarget?>(null) }
     val week = state.week
-    viewModel.timetableFeedback.ExpireFeedback()
 
     // 翻页序列：页码只由周次序列换算，UI 不自己算周（AGENTS A3）。
     // 还没有课表时不给 pager 任何页，直接展示空态。
     val pages = remember(state.lastWeek, week?.week) {
         WeekPager.pages(state.lastWeek, week?.week ?: 0)
     }
-    val startPage = remember(pages, week?.week) {
-        WeekPager.indexOf(pages, week?.week ?: 0)
-    }
-    val pagerState = rememberPagerState(initialPage = startPage) { pages.size }
+    val pagerState = rememberPagerState(
+        initialPage = WeekPager.indexOf(pages, week?.week ?: 0),
+    ) { pages.size }
     val scope = rememberCoroutineScope()
     // 竖向滚动位置跨周共享：12 行网格每页高度相同，翻页时保持同一滚动位置，
     // 用户「先滚到第 5 大节，再左右看各周的 5-6 节」不会每次都被拉回顶部。
@@ -148,14 +143,17 @@ internal fun TimetableScreen(
             .background(MaterialTheme.colorScheme.surface)
             .statusBarsPadding(),
     ) {
+        val todayInWeek = remember(week?.days, state.todayDate) {
+            week?.days?.firstOrNull { it.date == state.todayDate }
+        }
         TimetableHeader(
             todayDate = state.todayDate,
             week = week?.week,
             currentWeek = state.currentWeek,
-            isCurrentWeek = week?.days?.any { it.date == state.todayDate } == true,
+            isCurrentWeek = todayInWeek != null,
             // 周几只在「浏览的就是今天所在周」时有意义，取该周里今天那条的 weekdayCn；
             // 取不到（缓存还没覆盖今天）就留空，不自己按日期推算星期（AGENTS A3）。
-            todayWeekday = week?.days?.firstOrNull { it.date == state.todayDate }?.weekdayCn.orEmpty(),
+            todayWeekday = todayInWeek?.weekdayCn.orEmpty(),
             loading = state.weekLoading || state.timetableSyncing,
             refreshResult = viewModel.timetableFeedback.result,
             stale = state.weekStale,
@@ -170,9 +168,8 @@ internal fun TimetableScreen(
         // 拖动时日期必须跟着课表一起走，否则日期停在旧周而课表滑到新周，两者错位。
         // 网格区 = 横向翻页容器：拖动时两侧课表同屏跟手位移，松手吸附（docs/android.md tab1）。
         // 没有课表时不给 pager 任何页，直接走空态 / 加载态，避免「0 页 0 号页」边界问题。
-        val showPager = week != null && pages.isNotEmpty()
         Box(modifier = Modifier.weight(1f)) {
-            if (showPager) {
+            if (week != null && pages.isNotEmpty()) {
                 HorizontalPager(
                     state = pagerState,
                     // 多组合两侧各一页：拖动开始的瞬间邻居页已经布局好，
@@ -184,7 +181,7 @@ internal fun TimetableScreen(
                     // 命中内存缓存就直接画（预取结果），否则回退到当前 state 的周
                     // —— 回退只在「刚落到还没预取到的页」短暂出现，随后 LaunchedEffect 补读。
                     val days = pageWeek?.let { w ->
-                        state.weekNeighbors[w]?.days ?: state.week?.takeIf { it.week == w }?.days
+                        state.weekNeighbors[w]?.days ?: week.takeIf { it.week == w }?.days
                     }
                     // 只有「当前页」才显示加载圈与「还没有课表」文案：
                     // 邻居页只是还没预取到，给它转圈或空态提示都会误导（拖动时一闪而过）。
@@ -192,7 +189,7 @@ internal fun TimetableScreen(
                         days = days,
                         state = when {
                             days != null -> PageState.CONTENT
-                            pageWeek == week?.week -> PageState.CURRENT
+                            pageWeek == week.week -> PageState.CURRENT
                             else -> PageState.PENDING
                         },
                         loading = state.weekLoading,
@@ -207,20 +204,14 @@ internal fun TimetableScreen(
                         onCourseClick = { day, entry -> detail = CourseTarget(day, entry) },
                     )
                 }
+            } else if (state.weekLoading) {
+                LoadingBlock()
             } else {
-                PageContent(
-                    days = week?.days,
-                    state = if (week != null) PageState.CONTENT else PageState.CURRENT,
-                    loading = state.weekLoading,
-                    error = state.timetableError,
-                    todayDate = state.todayDate,
-                    optimizeLocation = state.optimizeLocationDisplay,
-                    prefixLocationAt = state.prefixLocationAt,
-                    hideOverflow = state.hideTimetableOverflow,
-                    scrollState = gridScroll,
-                    bottomContentPadding = bottomContentPadding,
+                MissingCacheHint(
+                    // 真错误走 snackbar / 设置页；空态只给中性引导 + 可操作入口，
+                    // 不把内部初始化状态摊到课表位。
+                    text = state.timetableError ?: stringResource(R.string.timetable_cache_missing),
                     onSync = { viewModel.syncTimetable() },
-                    onCourseClick = { day, entry -> detail = CourseTarget(day, entry) },
                 )
             }
         }
@@ -288,7 +279,7 @@ private fun PageContent(
     onCourseClick: (DaySchedule, Entry) -> Unit,
 ) {
     when {
-        days != null && days.none { it.inSemester } -> {
+        days != null && days.none { it.inSemester } -> Column(Modifier.fillMaxSize()) {
             WeekStrip(days = days, todayDate = todayDate)
             EmptyHint(
                 text = stringResource(R.string.timetable_not_in_semester),
@@ -536,6 +527,15 @@ private fun WeekStrip(
     days: List<DaySchedule>,
     todayDate: String,
 ) {
+    val firstDate = days.firstOrNull()?.date
+    val monthText = remember(firstDate) {
+        firstDate?.substringAfter('-', "")?.substringBefore('-')?.toIntOrNull()?.toString().orEmpty()
+    }
+    val onSurface = MaterialTheme.colorScheme.onSurface
+    val onSurfaceVariant = MaterialTheme.colorScheme.onSurfaceVariant
+    val monthStyle = MaterialTheme.typography.titleSmall
+    val weekdayStyle = MaterialTheme.typography.labelMedium
+    val dayNumberStyle = MaterialTheme.typography.titleSmall
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -547,21 +547,19 @@ private fun WeekStrip(
             modifier = Modifier.width(GutterWidth),
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
-            val month = days.firstOrNull()?.date?.split('-')?.getOrNull(1)?.toIntOrNull()
             // 数字与「月」用完全相同的字号 / 字重 / 颜色：两者不同字号时，
             // 「月」会又小又淡地悬在数字下面，看起来像两个不相干的字。
-            val monthStyle = MaterialTheme.typography.titleSmall
             Text(
-                text = month?.toString().orEmpty(),
+                text = monthText,
                 style = monthStyle,
                 fontWeight = FontWeight.SemiBold,
-                color = MaterialTheme.colorScheme.onSurface,
+                color = onSurface,
             )
             Text(
                 text = "月",
                 style = monthStyle,
                 fontWeight = FontWeight.SemiBold,
-                color = MaterialTheme.colorScheme.onSurface,
+                color = onSurface,
             )
         }
         for (index in 0 until 7) {
@@ -571,12 +569,10 @@ private fun WeekStrip(
             // 取 ExtraBold(800)。
             // 字号保持全列一致，否则今天那列变高、上下两个字会与邻列错位。
             val todayWeight = FontWeight.ExtraBold
-            val contentColor by animateColorAsState(
-                targetValue = if (isToday) MaterialTheme.colorScheme.onSurface
-                else MaterialTheme.colorScheme.onSurfaceVariant,
-                animationSpec = tween(220),
-                label = "dayContentColor",
-            )
+            val contentColor = if (isToday) onSurface else onSurfaceVariant
+            val dayNum = remember(day?.date) {
+                day?.date?.substringAfterLast('-')?.toIntOrNull()?.toString().orEmpty()
+            }
             Column(
                 modifier = Modifier
                     .weight(1f)
@@ -585,15 +581,15 @@ private fun WeekStrip(
             ) {
                 Text(
                     text = day?.weekdayCn ?: WEEKDAY_CN[index],
-                    style = MaterialTheme.typography.labelMedium,
+                    style = weekdayStyle,
                     color = contentColor,
                     fontWeight = if (isToday) todayWeight else FontWeight.Normal,
                     maxLines = 1,
                 )
                 Spacer(Modifier.height(3.dp))
                 Text(
-                    text = day?.date?.substringAfterLast('-')?.toIntOrNull()?.toString().orEmpty(),
-                    style = MaterialTheme.typography.titleSmall,
+                    text = dayNum,
+                    style = dayNumberStyle,
                     fontWeight = if (isToday) todayWeight else FontWeight.Medium,
                     color = contentColor,
                     maxLines = 1,
@@ -613,6 +609,7 @@ private fun WeekGrid(
     bottomContentPadding: Dp,
     onCourseClick: (DaySchedule, Entry) -> Unit,
 ) {
+    val blockShape = appShape(10.dp)
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -648,6 +645,7 @@ private fun WeekGrid(
                     day = day,
                     blocks = blocks,
                     rowHeight = RowHeight,
+                    blockShape = blockShape,
                     optimizeLocation = optimizeLocation,
                     prefixLocationAt = prefixLocationAt,
                     hideOverflow = hideOverflow,
@@ -664,6 +662,7 @@ private fun DayColumn(
     day: DaySchedule?,
     blocks: List<CourseBlock>,
     rowHeight: Dp,
+    blockShape: Shape,
     optimizeLocation: Boolean,
     prefixLocationAt: Boolean,
     hideOverflow: Boolean,
@@ -678,7 +677,7 @@ private fun DayColumn(
                     modifier = Modifier
                         .fillMaxSize()
                         .padding(horizontal = 1.5.dp, vertical = 2.dp)
-                        .clip(appShape(10.dp))
+                        .clip(blockShape)
                         .background(palette.container)
                         .clickable(role = Role.Button) { day?.let { onCourseClick(it, block.entry) } }
                         .padding(horizontal = 4.dp, vertical = 4.dp),
@@ -733,7 +732,9 @@ private fun CourseCell(
     // 开启「过长隐藏」时按课长限制行数并显示省略号。
     val compact = spanRows < 2
     val extended = spanRows >= 4
-    val shownLocation = entry.displayLocation(optimizeLocation, prefixLocationAt)
+    val shownLocation = remember(entry.location, optimizeLocation, prefixLocationAt) {
+        entry.displayLocation(optimizeLocation, prefixLocationAt)
+    }
     val overflow = if (hideOverflow) TextOverflow.Ellipsis else TextOverflow.Clip
     Column(
         modifier = Modifier.fillMaxSize(),
@@ -770,9 +771,11 @@ private fun CourseCell(
         )
         if (compact) {
             // 单小节空间只够一行：地点与教师合并，两者都空时不占位。
-            val secondary = listOf(shownLocation, entry.teacher)
-                .filter { it.isNotBlank() }
-                .joinToString(" · ")
+            val secondary = when {
+                shownLocation.isNotBlank() && entry.teacher.isNotBlank() -> "$shownLocation · ${entry.teacher}"
+                shownLocation.isNotBlank() -> shownLocation
+                else -> entry.teacher
+            }
             if (secondary.isNotBlank()) {
                 CourseMetaText(
                     text = secondary,

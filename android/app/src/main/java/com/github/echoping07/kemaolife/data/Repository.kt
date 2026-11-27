@@ -1,5 +1,7 @@
 package com.github.echoping07.kemaolife.data
 
+import org.json.JSONObject
+
 /**
  * 用例调用面：UI 只通过这里访问数据，不理解 `op` 字符串，也不做业务计算。
  *
@@ -26,23 +28,15 @@ class Repository(private val bridge: Bridge) {
         bridge.call("timetable.sync").toResult { SyncResult.from(it) }
 
     /** `timetable.week`：纯读缓存，`week == 0` 表示当周，负数也是显式周次。 */
-    fun week(week: Int = 0): Result<WeekView> {
-        val env = bridge.call("timetable.week", "week" to week)
-        val data = env.data
-        if (!env.ok || data == null) return Result.failure(AppException(env.error))
-        return try {
-            Result.success(
-                WeekView(
-                    schedule = WeekSchedule.from(data),
-                    syncedAt = env.syncedAt,
-                    // 可选字段：缺省 0 = 未知，翻页容器不得据此拦截翻页（docs/contract.md §7.1）。
-                    lastWeek = data.optInt("lastWeek"),
-                ),
+    fun week(week: Int = 0): Result<WeekView> =
+        bridge.call("timetable.week", "week" to week).toResult { env, data ->
+            WeekView(
+                schedule = WeekSchedule.from(data),
+                syncedAt = env.syncedAt,
+                // 可选字段：缺省 0 = 未知，翻页容器不得据此拦截翻页（docs/contract.md §7.1）。
+                lastWeek = data.optInt("lastWeek"),
             )
-        } catch (e: Exception) {
-            Result.failure(AppException(ApiError(4002, "响应格式异常")))
         }
-    }
 
     /** `timetable.probe`：设置页「测试」，同步一次并回报耗时与快照摘要。 */
     fun testTimetable(): Result<ProbeResult> =
@@ -80,11 +74,11 @@ class Repository(private val bridge: Bridge) {
         daysThreshold: Int,
         prevState: ElectricityAlertState,
     ): Result<ElectricityAlertDecision> {
-        val statusJson = org.json.JSONObject()
+        val statusJson = JSONObject()
             .put("balance", status.balance)
             .put("unit", status.unit)
             .put("collectedAt", status.collectedAt)
-            .put("estimatedDays", status.estimatedDays ?: org.json.JSONObject.NULL)
+            .put("estimatedDays", status.estimatedDays ?: JSONObject.NULL)
         return bridge.call(
             "electricity.alert",
             "status" to statusJson,
@@ -133,15 +127,18 @@ class Repository(private val bridge: Bridge) {
 
     // ---- 信封 → Result ----------------------------------------------------
 
-    private fun <T> Envelope.toResult(map: (org.json.JSONObject) -> T): Result<T> {
+    private fun <T> Envelope.toResult(map: (Envelope, JSONObject) -> T): Result<T> {
         val data = data
         if (!ok || data == null) return Result.failure(AppException(error))
         return try {
-            Result.success(map(data))
+            Result.success(map(this, data))
         } catch (e: Exception) {
             Result.failure(AppException(ApiError(4002, "响应格式异常")))
         }
     }
+
+    private fun <T> Envelope.toResult(map: (JSONObject) -> T): Result<T> =
+        toResult { _, data -> map(data) }
 }
 
 /**

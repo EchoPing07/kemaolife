@@ -23,11 +23,13 @@ import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.foundation.shape.CircleShape
@@ -48,14 +50,12 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
-import androidx.compose.ui.layout.Layout
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
-import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
@@ -156,7 +156,7 @@ internal object FloatingNavIndicatorMath {
  *
  * - 选中背景是共享滑动胶囊，由左右双弹簧在绘制阶段驱动，切 tab（含跨 tab）平滑滑过并带弹性拉伸。
  * - `showLabels` 由「设置 → 外观」的独立开关控制，开启显示图标 + 文字，关闭切为紧凑纯图标胶囊。
- * - 归属 [AppRoute.Home] 根场景：推入或预测性返回二级页时随根场景整体退场与回归。
+ * - 归属 [AppDestination.Home] 根场景：推入或预测性返回二级页时随根场景整体退场与回归。
  */
 @Composable
 internal fun FloatingNavBar(
@@ -224,19 +224,13 @@ internal fun FloatingNavBar(
             shadowElevation = 6.dp,
             border = BorderStroke(0.5.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f)),
         ) {
-            Layout(
-                content = {
-                    items.forEach { item ->
-                        FloatingNavBarItem(
-                            item = item,
-                            showLabel = showLabels,
-                            motionEnabled = motionEnabled,
-                        )
-                    }
-                },
+            val preferredWidth =
+                itemSlotWidth * items.size + FloatingNavBarMetrics.ItemGap * (items.size - 1)
+            Row(
                 modifier =
                     Modifier
                         .padding(FloatingNavBarMetrics.ContainerPadding)
+                        .widthIn(max = preferredWidth)
                         .selectableGroup()
                         .drawBehind {
                             val bounds =
@@ -259,29 +253,15 @@ internal fun FloatingNavBar(
                                 )
                             }
                         },
-            ) { measurables, constraints ->
-                val count = measurables.size
-                val gapPx = FloatingNavBarMetrics.ItemGap.roundToPx()
-                val heightPx = itemHeight.roundToPx()
-                val preferredSlotPx = itemSlotWidth.roundToPx()
-                val maxPerSlot =
-                    if (constraints.hasBoundedWidth && count > 0) {
-                        ((constraints.maxWidth - gapPx * (count - 1)) / count).coerceAtLeast(0)
-                    } else {
-                        Int.MAX_VALUE
-                    }
-                val slotPx = preferredSlotPx.coerceAtMost(maxPerSlot)
-                val itemConstraints = Constraints.fixed(slotPx, heightPx)
-                val placeables = measurables.map { it.measure(itemConstraints) }
-                val totalWidth =
-                    (slotPx * count + gapPx * (count - 1).coerceAtLeast(0))
-                        .coerceIn(constraints.minWidth, constraints.maxWidth)
-                layout(totalWidth, heightPx) {
-                    var x = 0
-                    placeables.forEach { placeable ->
-                        placeable.placeRelative(x, 0)
-                        x += slotPx + gapPx
-                    }
+                horizontalArrangement = Arrangement.spacedBy(FloatingNavBarMetrics.ItemGap),
+            ) {
+                items.forEach { item ->
+                    FloatingNavBarItem(
+                        item = item,
+                        showLabel = showLabels,
+                        motionEnabled = motionEnabled,
+                        modifier = Modifier.weight(1f).height(itemHeight),
+                    )
                 }
             }
         }
@@ -293,6 +273,7 @@ private fun FloatingNavBarItem(
     item: FloatingNavItemData,
     showLabel: Boolean,
     motionEnabled: Boolean,
+    modifier: Modifier = Modifier,
 ) {
     val interactionSource = remember { MutableInteractionSource() }
     val pressed by interactionSource.collectIsPressedAsState()
@@ -301,7 +282,7 @@ private fun FloatingNavBarItem(
         animationSpec = if (motionEnabled) spring(dampingRatio = 0.60f, stiffness = 760f) else tween(0),
         label = "floatingNavPressScale",
     )
-    val iconTint by animateColorAsState(
+    val contentTint by animateColorAsState(
         targetValue =
             if (item.selected) {
                 MaterialTheme.colorScheme.onPrimaryContainer
@@ -309,22 +290,12 @@ private fun FloatingNavBarItem(
                 MaterialTheme.colorScheme.onSurfaceVariant
             },
         animationSpec = if (motionEnabled) tween(200) else tween(0),
-        label = "floatingNavIconTint",
-    )
-    val labelTint by animateColorAsState(
-        targetValue =
-            if (item.selected) {
-                MaterialTheme.colorScheme.onPrimaryContainer
-            } else {
-                MaterialTheme.colorScheme.onSurfaceVariant
-            },
-        animationSpec = if (motionEnabled) tween(200) else tween(0),
-        label = "floatingNavLabelTint",
+        label = "floatingNavContentTint",
     )
 
     Box(
         modifier =
-            Modifier
+            modifier
                 .clip(CircleShape)
                 .semantics {
                     // 纯图标模式下仍向无障碍读屏提供完整 tab 名称。
@@ -374,7 +345,7 @@ private fun FloatingNavBarItem(
                 Icon(
                     imageVector = if (isSelected) item.selectedIcon else item.icon,
                     contentDescription = null,
-                    tint = iconTint,
+                    tint = contentTint,
                     modifier = Modifier.size(if (showLabel) 22.dp else 24.dp),
                 )
             }
@@ -399,7 +370,7 @@ private fun FloatingNavBarItem(
                         text = item.label,
                         style = MaterialTheme.typography.labelSmall,
                         fontWeight = if (item.selected) FontWeight.SemiBold else FontWeight.Medium,
-                        color = labelTint,
+                        color = contentTint,
                         maxLines = 1,
                         softWrap = false,
                         overflow = TextOverflow.Ellipsis,

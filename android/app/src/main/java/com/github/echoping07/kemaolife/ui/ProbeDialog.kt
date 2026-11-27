@@ -43,7 +43,6 @@ internal fun ProbeDialog(state: ProbeState, onClose: () -> Unit, onRetry: () -> 
     // 弹窗只负责展示：测试由触发按钮那一侧发起（runProbe），
     // 在这里再 LaunchedEffect 触发一次会变成两轮真实请求。
     val target = state.target
-
     val result = state.result
     AlertDialog(
         onDismissRequest = onClose,
@@ -145,7 +144,8 @@ internal fun ProbeDialog(state: ProbeState, onClose: () -> Unit, onRetry: () -> 
                                 shape = appShape(PageCorners.Nested),
                             ) {
                                 Column(modifier = Modifier.padding(14.dp)) {
-                                    orderedDetails(result.detail).forEach { (key, value) ->
+                                    // `ProbeResult.from` 已按白名单固定顺序写入 LinkedHashMap。
+                                    result.detail.entries.forEach { (key, value) ->
                                         Row(
                                             modifier = Modifier
                                                 .fillMaxWidth()
@@ -185,32 +185,12 @@ private fun probeName(target: ProbeTarget): String = stringResource(
     },
 )
 
-/**
- * 字段展示顺序：已知字段按「先结论、后细节」排，未知字段排最后并按名字排序。
- *
- * `detail` 由 `ProbeResult.from` 按白名单构造，这里再按固定顺序呈现，
- * 避免上游字段顺序变化让同一份结果每次打开弹窗的排版都不一样。
- */
-private fun orderedDetails(detail: Map<String, String>): List<Pair<String, String>> {
-    val order = listOf(
-        "state", "checkedAt",
-        "balance", "unit", "collectedAt", "estimatedDays", "monthUse", "dataUntil", "dayCount",
-        "syncedAt", "week1Monday", "lastWeek", "lessonCount",
-    )
-    val known = order.mapNotNull { key -> detail[key]?.let { key to it } }
-    val rest = detail.filterKeys { it !in order }.toSortedMap().map { it.key to it.value }
-    return known + rest
-}
-
 /** 值的中文化 / 简短化：wire 值与完整时间戳都不该原样摊给用户看。 */
+@Composable
 private fun probeFieldValue(key: String, value: String): String {
     if (value.isBlank()) return "—"
     return when (key) {
-        "state" -> when (CampusState.from(value)) {
-            CampusState.ONLINE -> "已在线"
-            CampusState.UNAUTH -> "未认证"
-            CampusState.OFFLINE -> "不在校园网"
-        }
+        "state" -> campusStateLabel(CampusState.from(value))
         // RFC3339 → MM/dd HH:mm，与页面上的「同步于 / 数据截至」同一格式。
         "syncedAt", "collectedAt", "checkedAt" -> shortStamp(value)
         // 纯日期 → yyyy/M/d，与课表日期同一格式。

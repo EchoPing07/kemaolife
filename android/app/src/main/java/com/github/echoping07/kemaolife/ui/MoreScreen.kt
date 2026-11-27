@@ -1,30 +1,28 @@
 package com.github.echoping07.kemaolife.ui
 
 import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.Crossfade
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.togetherWith
-import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import com.github.echoping07.kemaolife.ui.theme.appShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.rounded.KeyboardArrowDown
 import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -32,11 +30,17 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.rotate
+import androidx.compose.ui.geometry.CornerRadius
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
@@ -45,7 +49,9 @@ import androidx.compose.ui.unit.dp
 import com.github.echoping07.kemaolife.R
 import com.github.echoping07.kemaolife.data.CampusState
 import com.github.echoping07.kemaolife.data.DaySchedule
+import com.github.echoping07.kemaolife.data.DayUsage
 import com.github.echoping07.kemaolife.data.ElectricityReport
+import com.github.echoping07.kemaolife.ui.theme.appShape
 import java.util.Locale
 
 /**
@@ -68,10 +74,6 @@ internal fun MoreScreen(
     // 只把稳定依赖放进 effect：ViewModel 自己读最新 state，不捕获整个 AppState。
     // 进入本页的自动查询按最小间隔节流；手动刷新按钮不受约束。
     LaunchedEffect(Unit) { viewModel.onEnterMore() }
-    viewModel.timetableFeedback.ExpireFeedback()
-    viewModel.electricityFeedback.ExpireFeedback()
-    viewModel.campusFeedback.ExpireFeedback()
-    viewModel.campusActionFeedback.ExpireFeedback()
 
     CollapsingScreen(
         title = stringResource(R.string.tab_more),
@@ -257,7 +259,7 @@ private fun ElectricityBody(report: ElectricityReport, unit: String) {
 
     if (report.usage.days.isNotEmpty()) {
         Spacer(Modifier.height(14.dp))
-        UsageSparkline(report.usage.days.map { it.use })
+        UsageSparkline(report.usage.days)
     }
 }
 
@@ -265,24 +267,8 @@ private fun ElectricityBody(report: ElectricityReport, unit: String) {
 @Composable
 private fun MetricGrid(left: Pair<String, String>, right: Pair<String, String>) {
     Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-        MetricCell(
-            left.first,
-            left.second,
-            Modifier
-                .weight(1f)
-                .clip(appShape(PageCorners.Nested))
-                .background(MaterialTheme.colorScheme.surfaceContainerHigh)
-                .padding(horizontal = 14.dp, vertical = 12.dp),
-        )
-        MetricCell(
-            right.first,
-            right.second,
-            Modifier
-                .weight(1f)
-                .clip(appShape(PageCorners.Nested))
-                .background(MaterialTheme.colorScheme.surfaceContainerHigh)
-                .padding(horizontal = 14.dp, vertical = 12.dp),
-        )
+        MetricCell(left.first, left.second, Modifier.weight(1f))
+        MetricCell(right.first, right.second, Modifier.weight(1f))
     }
 }
 
@@ -291,9 +277,13 @@ private fun MetricCell(
     label: String,
     value: String,
     modifier: Modifier = Modifier,
-    paddingStart: androidx.compose.ui.unit.Dp = 0.dp,
 ) {
-    Column(modifier = modifier.padding(start = paddingStart)) {
+    Column(
+        modifier = modifier
+            .clip(appShape(PageCorners.Nested))
+            .background(MaterialTheme.colorScheme.surfaceContainerHigh)
+            .padding(horizontal = 14.dp, vertical = 12.dp),
+    ) {
         Text(
             text = value,
             style = MaterialTheme.typography.titleMedium,
@@ -311,29 +301,46 @@ private fun MetricCell(
  * 近几日的用量柱：只是把 Go 侧已排序好的 `days[]` 画出来，不做任何统计（AGENTS A3）。
  *
  * 用等宽柱 + 最高值归一，柱高一眼能看出「今天用得特别多」。
+ * 单张 Canvas + 共享进度动画绘制全部柱体，避免 31 个独立动画与 Box 节点开销。
  */
 @Composable
-private fun UsageSparkline(values: List<Double>) {
-    val max = values.maxOrNull()?.takeIf { it > 0.0 } ?: return
-    Row(
+private fun UsageSparkline(days: List<DayUsage>) {
+    val ratios = remember(days) {
+        val max = days.maxOfOrNull { it.use }?.takeIf { it > 0.0 } ?: return@remember null
+        FloatArray(days.size) { i -> (days[i].use / max).toFloat().coerceIn(0.06f, 1f) }
+    } ?: return
+
+    val motionEnabled = animationsEnabled()
+    var target by remember { mutableStateOf(if (motionEnabled) 0f else 1f) }
+    LaunchedEffect(Unit) { target = 1f }
+    val progress = animateFloatAsState(
+        targetValue = target,
+        animationSpec = if (motionEnabled) tween(420) else tween(0),
+        label = "usageBars",
+    )
+    val barColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.35f)
+
+    Canvas(
         modifier = Modifier
             .fillMaxWidth()
             .height(48.dp),
-        horizontalArrangement = Arrangement.spacedBy(3.dp),
-        verticalAlignment = Alignment.Bottom,
     ) {
-        values.forEach { v ->
-            val ratio by animateFloatAsState(
-                targetValue = (v / max).toFloat().coerceIn(0.06f, 1f),
-                animationSpec = tween(420),
-                label = "usageBar",
-            )
-            Box(
-                modifier = Modifier
-                    .weight(1f)
-                    .height((48 * ratio).dp)
-                    .clip(appShape(3.dp))
-                    .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.35f)),
+        val count = ratios.size
+        if (count == 0) return@Canvas
+        val gap = 3.dp.toPx()
+        val totalGap = gap * (count - 1)
+        val barWidth = ((size.width - totalGap) / count).coerceAtLeast(1f)
+        val radius = CornerRadius(3.dp.toPx(), 3.dp.toPx())
+        val p = progress.value
+        for (i in 0 until count) {
+            val barHeight = size.height * ratios[i] * p
+            if (barHeight <= 0f) continue
+            val left = i * (barWidth + gap)
+            drawRoundRect(
+                color = barColor,
+                topLeft = Offset(left, size.height - barHeight),
+                size = Size(barWidth, barHeight),
+                cornerRadius = radius,
             )
         }
     }
@@ -342,7 +349,7 @@ private fun UsageSparkline(values: List<Double>) {
 @Composable
 private fun CampusCard(state: AppState, viewModel: AppViewModel) {
     val campus = state.campus
-    var showDetails by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf(false) }
+    var showDetails by remember { mutableStateOf(false) }
 
     SectionCard(
         title = stringResource(R.string.section_campusnet),
@@ -396,14 +403,14 @@ private fun CampusCard(state: AppState, viewModel: AppViewModel) {
         // errorMsg 是上游 Location 的历史提示，不参与判态；已在线时夹带
         // 「正在进行外网拨号」会造成误读，卡片按三态收敛。手动判态 / 动作
         // 失败原因另走 snackbar，自动判态失败归 offline，不在此处渲染。
-        val details = listOf(
-            stringResource(R.string.campus_bras_name) to campus?.brasName.orEmpty(),
-            stringResource(R.string.campus_bras_address) to campus?.brasAddress.orEmpty(),
-            stringResource(R.string.campus_vlan) to campus?.vlan.orEmpty(),
-            stringResource(R.string.campus_device_ip) to campus?.deviceIp.orEmpty(),
-            stringResource(R.string.campus_mac) to campus?.mac.orEmpty(),
-        ).filter { it.second.isNotBlank() }
-        if (details.isNotEmpty()) {
+        val hasDetails = campus != null && (
+            campus.brasName.isNotBlank() ||
+                campus.brasAddress.isNotBlank() ||
+                campus.vlan.isNotBlank() ||
+                campus.deviceIp.isNotBlank() ||
+                campus.mac.isNotBlank()
+            )
+        if (hasDetails) {
             Spacer(Modifier.height(12.dp))
             // 水波纹要圆角又不能削字、不能缩进：12dp 小圆角配 10dp 垂直内边距，
             // 圆弧在文字顶部高度处内收不足 0.2dp（两种曲率模式都安全），
@@ -422,15 +429,23 @@ private fun CampusCard(state: AppState, viewModel: AppViewModel) {
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.weight(1f),
                 )
-                val rotation by animateFloatAsState(if (showDetails) 180f else 0f, label = "detailsChevron")
+                val rotation = animateFloatAsState(if (showDetails) 180f else 0f, label = "detailsChevron")
                 Icon(
-                    imageVector = Icons.Rounded.KeyboardArrowDown,
+                    imageVector = TabIcons.ChevronDown,
                     contentDescription = if (showDetails) stringResource(R.string.action_collapse) else stringResource(R.string.action_expand),
                     tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.rotate(rotation),
+                    modifier = Modifier.graphicsLayer { rotationZ = rotation.value },
                 )
             }
             AnimatedVisibility(visible = showDetails) {
+                // 仅在展开时解析标题资源并组装明细列表，收起态不产生临时分配。
+                val details = listOf(
+                    stringResource(R.string.campus_bras_name) to campus.brasName,
+                    stringResource(R.string.campus_bras_address) to campus.brasAddress,
+                    stringResource(R.string.campus_vlan) to campus.vlan,
+                    stringResource(R.string.campus_device_ip) to campus.deviceIp,
+                    stringResource(R.string.campus_mac) to campus.mac,
+                ).filter { it.second.isNotBlank() }
                 Column(modifier = Modifier.fillMaxWidth().padding(top = 6.dp)) {
                     details.forEach { (label, value) ->
                         Row(modifier = Modifier.fillMaxWidth().padding(vertical = 5.dp)) {
@@ -489,14 +504,22 @@ private fun CampusCard(state: AppState, viewModel: AppViewModel) {
 @Composable
 private fun CampusButton(
     label: String,
-    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    icon: ImageVector,
     emphasized: Boolean,
     enabled: Boolean,
     loading: Boolean,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    val content: @Composable androidx.compose.foundation.layout.RowScope.() -> Unit = {
+    Button(
+        onClick = onClick,
+        enabled = enabled,
+        shape = appShape(PageCorners.Field),
+        colors = if (emphasized) ButtonDefaults.buttonColors() else ButtonDefaults.filledTonalButtonColors(),
+        elevation = if (emphasized) ButtonDefaults.buttonElevation() else ButtonDefaults.filledTonalButtonElevation(),
+        modifier = modifier.height(44.dp),
+        contentPadding = PaddingValues(horizontal = 8.dp),
+    ) {
         ActionIcon(
             icon = icon,
             loading = loading,
@@ -507,25 +530,6 @@ private fun CampusButton(
         )
         Spacer(Modifier.width(5.dp))
         Text(label, maxLines = 1)
-    }
-    if (emphasized) {
-        Button(
-            onClick = onClick,
-            enabled = enabled,
-            shape = appShape(PageCorners.Field),
-            modifier = modifier.height(44.dp),
-            contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 8.dp),
-            content = content,
-        )
-    } else {
-        FilledTonalButton(
-            onClick = onClick,
-            enabled = enabled,
-            shape = appShape(PageCorners.Field),
-            modifier = modifier.height(44.dp),
-            contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 8.dp),
-            content = content,
-        )
     }
 }
 

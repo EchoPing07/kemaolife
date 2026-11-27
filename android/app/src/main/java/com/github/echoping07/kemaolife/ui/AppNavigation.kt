@@ -16,61 +16,47 @@ import androidx.compose.runtime.saveable.listSaver
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.snapshots.SnapshotStateList
 import androidx.compose.runtime.toMutableStateList
+import androidx.navigation3.runtime.NavKey
+
+/** 设置二级页标识：每个枚举项对应稳定序列化 `routeId`。 */
+enum class SettingsPage(val routeId: String) {
+    EDUCATION("settings/education"),
+    ELECTRICITY("settings/electricity"),
+    CAMPUS("settings/campus"),
+    APPEARANCE("settings/appearance"),
+    ABOUT("settings/about"),
+    LOGS("settings/logs"),
+}
 
 /**
  * 全应用页面路由键（供 Jetpack Navigation 3 [androidx.navigation3.ui.NavDisplay] 使用）。
  *
- * 顶层三 Tab 与悬浮底栏共同作为 [Home] 根场景；所有子页面（当前为设置二级页，
- * 后续跨 Tab 详情页或更深层级均可直接追加）与 [Home] 同处一条返回栈，
- * 统一获得弹簧物理转场、状态持久化与系统预测性返回手势。
+ * 顶层三 Tab 与悬浮底栏共同作为 [Home] 根场景；二级页（当前为 [Settings]）
+ * 与 [Home] 同处一条返回栈，统一获得弹簧物理转场、状态持久化与系统预测性返回手势。
  */
-internal sealed interface AppRoute {
+sealed interface AppDestination : NavKey {
     /** 稳定序列化标识：用于进程重建恢复返回栈及 Navigation 3 的 `contentKey`。 */
     val routeId: String
 
-    data object Home : AppRoute {
+    data object Home : AppDestination {
         override val routeId: String = "home"
     }
 
-    sealed interface SettingsChild : AppRoute {
-        data object Education : SettingsChild {
-            override val routeId: String = "settings/education"
-        }
-
-        data object Electricity : SettingsChild {
-            override val routeId: String = "settings/electricity"
-        }
-
-        data object Campus : SettingsChild {
-            override val routeId: String = "settings/campus"
-        }
-
-        data object Appearance : SettingsChild {
-            override val routeId: String = "settings/appearance"
-        }
-
-        data object About : SettingsChild {
-            override val routeId: String = "settings/about"
-        }
-
-        data object Logs : SettingsChild {
-            override val routeId: String = "settings/logs"
-        }
+    data class Settings(val page: SettingsPage) : AppDestination {
+        override val routeId: String
+            get() = page.routeId
     }
 
     companion object {
-        private val byId: Map<String, AppRoute> =
-            listOf(
-                Home,
-                SettingsChild.Education,
-                SettingsChild.Electricity,
-                SettingsChild.Campus,
-                SettingsChild.Appearance,
-                SettingsChild.About,
-                SettingsChild.Logs,
-            ).associateBy(AppRoute::routeId)
+        private val settingsById: Map<String, SettingsPage> =
+            SettingsPage.entries.associateBy(SettingsPage::routeId)
 
-        fun fromId(id: String): AppRoute? = byId[id]
+        fun fromId(id: String): AppDestination? =
+            if (id == Home.routeId) {
+                Home
+            } else {
+                settingsById[id]?.let(AppDestination::Settings)
+            }
     }
 }
 
@@ -80,38 +66,38 @@ internal sealed interface AppRoute {
 internal object AppBackStackOps {
     /** 压入目标页；连续重复点击同一入口时不叠加重复栈帧。 */
     fun push(
-        stack: MutableList<AppRoute>,
-        route: AppRoute,
+        stack: MutableList<AppDestination>,
+        destination: AppDestination,
     ): Boolean {
-        if (stack.lastOrNull() == route) return false
-        stack.add(route)
+        if (stack.lastOrNull() == destination) return false
+        stack.add(destination)
         return true
     }
 
-    /** 弹出栈顶子页；始终保留根页面 [AppRoute.Home]，防止同一帧连按两次返回导致空栈崩溃。 */
-    fun pop(stack: MutableList<AppRoute>): Boolean {
+    /** 弹出栈顶子页；始终保留根页面 [AppDestination.Home]，防止同一帧连按两次返回导致空栈崩溃。 */
+    fun pop(stack: MutableList<AppDestination>): Boolean {
         if (stack.size <= 1) return false
         stack.removeAt(stack.lastIndex)
         return true
     }
 
-    fun encode(stack: List<AppRoute>): List<String> = stack.map(AppRoute::routeId)
+    fun encode(stack: List<AppDestination>): List<String> = stack.map(AppDestination::routeId)
 
-    /** 进程重建恢复返回栈：忽略未知旧标识，且保证栈底始终是 [AppRoute.Home]。 */
-    fun decode(ids: List<String>): List<AppRoute> {
-        val restored = ids.mapNotNull(AppRoute::fromId)
-        if (restored.isEmpty()) return listOf(AppRoute.Home)
-        return if (restored.first() == AppRoute.Home) {
+    /** 进程重建恢复返回栈：忽略未知旧标识，且保证栈底始终是 [AppDestination.Home]。 */
+    fun decode(ids: List<String>): List<AppDestination> {
+        val restored = ids.mapNotNull(AppDestination::fromId)
+        if (restored.isEmpty()) return listOf(AppDestination.Home)
+        return if (restored.first() == AppDestination.Home) {
             restored
         } else {
-            listOf(AppRoute.Home) + restored.filterNot { it == AppRoute.Home }
+            listOf(AppDestination.Home) + restored.filterNot { it == AppDestination.Home }
         }
     }
 }
 
 /** 跨配置变更与进程重建持久化的 Navigation 3 返回栈。 */
 @Composable
-internal fun rememberAppBackStack(): SnapshotStateList<AppRoute> =
+internal fun rememberAppBackStack(): SnapshotStateList<AppDestination> =
     rememberSaveable(
         saver =
             listSaver(
@@ -119,7 +105,7 @@ internal fun rememberAppBackStack(): SnapshotStateList<AppRoute> =
                 restore = { AppBackStackOps.decode(it).toMutableStateList() },
             ),
     ) {
-        mutableStateListOf(AppRoute.Home)
+        mutableStateListOf(AppDestination.Home)
     }
 
 /**

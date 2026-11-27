@@ -6,54 +6,26 @@ import android.content.Context
 class ThemePreferences(context: Context) {
     private val preferences = context.getSharedPreferences("appearance", Context.MODE_PRIVATE)
 
-    /** 兼容旧调用：只返回主题色。新页面应通过 [loadSettings] 一次读取完整偏好。 */
-    fun load(): String = loadSettings().themeColor
-
+    /** 一次读取全部 9 项外观偏好；键缺失时回落全局默认，不做旧版本迁移。 */
     fun loadSettings(): ThemeSettings = ThemeSettings(
         themeColor = normalizeThemeColor(preferences.getString(KEY_THEME, DEFAULT_THEME_COLOR)),
-        themeMode = loadMode(),
-        dynamicColor = loadDynamicColor(),
-        amoled = loadAmoled(),
-        continuousCorners = loadContinuousCorners(),
-        floatingBottomBar = loadFloatingBottomBar(),
-        showBottomBarLabels = loadShowBottomBarLabels(),
-        predictiveBackEnabled = loadPredictiveBackEnabled(),
-        customThemeColor = loadCustomThemeColor(),
+        themeMode = normalizeThemeMode(preferences.getString(KEY_THEME_MODE, THEME_MODE_SYSTEM)),
+        // 键不存在（新安装 / 清数据）时取全局默认；已显式存过 false 时尊重用户选择。
+        dynamicColor = preferences.getBoolean(KEY_DYNAMIC_COLOR, DEFAULT_DYNAMIC_COLOR),
+        amoled = preferences.getBoolean(KEY_AMOLED, false),
+        continuousCorners = preferences.getBoolean(KEY_CONTINUOUS_CORNERS, DEFAULT_CONTINUOUS_CORNERS),
+        floatingBottomBar = preferences.getBoolean(KEY_FLOATING_BOTTOM_BAR, DEFAULT_FLOATING_BOTTOM_BAR),
+        showBottomBarLabels = preferences.getBoolean(
+            KEY_SHOW_BOTTOM_BAR_LABELS,
+            DEFAULT_SHOW_BOTTOM_BAR_LABELS,
+        ),
+        predictiveBackEnabled = preferences.getBoolean(KEY_PREDICTIVE_BACK, DEFAULT_PREDICTIVE_BACK),
+        customThemeColor = normalizeCustomThemeColor(
+            preferences.getInt(KEY_CUSTOM_THEME_COLOR, DEFAULT_CUSTOM_THEME_COLOR),
+        ),
     )
 
-    fun loadCustomThemeColor(): Int =
-        normalizeCustomThemeColor(preferences.getInt(KEY_CUSTOM_THEME_COLOR, DEFAULT_CUSTOM_THEME_COLOR))
-
-    fun loadMode(): String = normalizeThemeMode(
-        preferences.getString(KEY_THEME_MODE, THEME_MODE_SYSTEM),
-    )
-
-    // 键不存在（新安装 / 清数据）时取全局默认；已显式存过 false 时尊重用户选择。
-    fun loadDynamicColor(): Boolean = preferences.getBoolean(KEY_DYNAMIC_COLOR, DEFAULT_DYNAMIC_COLOR)
-
-    fun loadAmoled(): Boolean = preferences.getBoolean(KEY_AMOLED, false)
-
-    /** 缺省值不做旧版本迁移：升级后与全新安装一样按默认关闭。 */
-    fun loadContinuousCorners(): Boolean =
-        preferences.getBoolean(KEY_CONTINUOUS_CORNERS, DEFAULT_CONTINUOUS_CORNERS)
-
-    /** 是否使用胶囊悬浮底栏；未显式设置时默认开启。 */
-    fun loadFloatingBottomBar(): Boolean =
-        preferences.getBoolean(KEY_FLOATING_BOTTOM_BAR, DEFAULT_FLOATING_BOTTOM_BAR)
-
-    /** 底栏是否显示文字标签；未显式设置时默认显示。 */
-    fun loadShowBottomBarLabels(): Boolean =
-        preferences.getBoolean(KEY_SHOW_BOTTOM_BAR_LABELS, DEFAULT_SHOW_BOTTOM_BAR_LABELS)
-
-    /** 二级页是否启用预测性返回跟手预览；未显式设置时默认开启。 */
-    fun loadPredictiveBackEnabled(): Boolean =
-        preferences.getBoolean(KEY_PREDICTIVE_BACK, DEFAULT_PREDICTIVE_BACK)
-
-    /** 兼容旧的主题色保存接口。 */
-    fun save(theme: String) {
-        preferences.edit().putString(KEY_THEME, normalizeThemeColor(theme)).apply()
-    }
-
+    /** 一次批量持久化全部外观偏好（单次 `apply()`）。 */
     fun save(settings: ThemeSettings) {
         preferences.edit()
             .putString(KEY_THEME, normalizeThemeColor(settings.themeColor))
@@ -66,40 +38,6 @@ class ThemePreferences(context: Context) {
             .putBoolean(KEY_SHOW_BOTTOM_BAR_LABELS, settings.showBottomBarLabels)
             .putBoolean(KEY_PREDICTIVE_BACK, settings.predictiveBackEnabled)
             .apply()
-    }
-
-    fun saveCustomThemeColor(argb: Int) {
-        preferences.edit().putInt(KEY_CUSTOM_THEME_COLOR, normalizeCustomThemeColor(argb)).apply()
-    }
-
-    fun saveThemeMode(value: String) {
-        preferences.edit().putString(KEY_THEME_MODE, normalizeThemeMode(value)).apply()
-    }
-
-    fun saveMode(value: String) = saveThemeMode(value)
-
-    fun saveDynamicColor(enabled: Boolean) {
-        preferences.edit().putBoolean(KEY_DYNAMIC_COLOR, enabled).apply()
-    }
-
-    fun saveAmoled(enabled: Boolean) {
-        preferences.edit().putBoolean(KEY_AMOLED, enabled).apply()
-    }
-
-    fun saveContinuousCorners(enabled: Boolean) {
-        preferences.edit().putBoolean(KEY_CONTINUOUS_CORNERS, enabled).apply()
-    }
-
-    fun saveFloatingBottomBar(enabled: Boolean) {
-        preferences.edit().putBoolean(KEY_FLOATING_BOTTOM_BAR, enabled).apply()
-    }
-
-    fun saveShowBottomBarLabels(enabled: Boolean) {
-        preferences.edit().putBoolean(KEY_SHOW_BOTTOM_BAR_LABELS, enabled).apply()
-    }
-
-    fun savePredictiveBackEnabled(enabled: Boolean) {
-        preferences.edit().putBoolean(KEY_PREDICTIVE_BACK, enabled).apply()
     }
 
     private companion object {

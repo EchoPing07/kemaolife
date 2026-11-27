@@ -151,12 +151,6 @@ internal object CustomThemePalette {
         val tertiaryHue = if (isAchromatic) 210f else (hsl.hue + 60f) % 360f
         val tertiarySat = if (isAchromatic) 0f else (hsl.saturation * 0.56f).coerceIn(0.18f, 0.56f)
 
-        val surfaceHue = primaryHue
-        val surfaceSat = if (isAchromatic) 0.02f else (hsl.saturation * 0.16f).coerceIn(0.04f, 0.12f)
-        val surfacePage = hslToRgb(surfaceHue, surfaceSat, 0.91f)
-        val surfaceHigh = hslToRgb(surfaceHue, surfaceSat, 0.865f)
-        val surfaceHighest = hslToRgb(surfaceHue, surfaceSat, 0.825f)
-
         return if (dark) {
             val primaryToneSat = (primarySat * 0.85f).coerceAtMost(0.78f)
             val tertiaryToneSat = (tertiarySat * 0.85f).coerceAtMost(0.70f)
@@ -173,11 +167,17 @@ internal object CustomThemePalette {
                 onTertiary = colorAtTone(tertiaryHue, tertiarySat, 20f),
                 tertiaryContainer = colorAtTone(tertiaryHue, tertiarySat, 30f),
                 onTertiaryContainer = colorAtTone(tertiaryHue, (tertiarySat * 0.75f).coerceAtMost(0.60f), 90f),
-                surfacePage = surfacePage,
-                surfaceHigh = surfaceHigh,
-                surfaceHighest = surfaceHighest,
+                // 深色主题使用固定暗灰表面阶，跳过浅色表面 HSL 计算。
+                surfacePage = 0xFF0F1113.toInt(),
+                surfaceHigh = 0xFF282C30.toInt(),
+                surfaceHighest = 0xFF32363B.toInt(),
             )
         } else {
+            val surfaceHue = primaryHue
+            val surfaceSat = if (isAchromatic) 0.02f else (hsl.saturation * 0.16f).coerceIn(0.04f, 0.12f)
+            val surfacePage = hslToRgb(surfaceHue, surfaceSat, 0.91f)
+            val surfaceHigh = hslToRgb(surfaceHue, surfaceSat, 0.865f)
+            val surfaceHighest = hslToRgb(surfaceHue, surfaceSat, 0.825f)
             val containerSat = (primarySat * 0.78f).coerceAtMost(0.66f)
             val tertiaryContainerSat = (tertiarySat * 0.78f).coerceAtMost(0.60f)
             CustomPaletteColors(
@@ -212,13 +212,40 @@ internal object CustomThemePalette {
     private fun normalizeHue(hue: Float): Float = ((hue % 360f) + 360f) % 360f
 
     private fun packSextantRgb(h: Float, c: Float, x: Float, m: Float): Int {
-        val (r1, g1, b1) = when {
-            h < 60f -> Triple(c, x, 0f)
-            h < 120f -> Triple(x, c, 0f)
-            h < 180f -> Triple(0f, c, x)
-            h < 240f -> Triple(0f, x, c)
-            h < 300f -> Triple(x, 0f, c)
-            else -> Triple(c, 0f, x)
+        val r1: Float
+        val g1: Float
+        val b1: Float
+        when {
+            h < 60f -> {
+                r1 = c
+                g1 = x
+                b1 = 0f
+            }
+            h < 120f -> {
+                r1 = x
+                g1 = c
+                b1 = 0f
+            }
+            h < 180f -> {
+                r1 = 0f
+                g1 = c
+                b1 = x
+            }
+            h < 240f -> {
+                r1 = 0f
+                g1 = x
+                b1 = c
+            }
+            h < 300f -> {
+                r1 = x
+                g1 = 0f
+                b1 = c
+            }
+            else -> {
+                r1 = c
+                g1 = 0f
+                b1 = x
+            }
         }
         val r = ((r1 + m) * 255f).roundToInt().coerceIn(0, 255)
         val g = ((g1 + m) * 255f).roundToInt().coerceIn(0, 255)

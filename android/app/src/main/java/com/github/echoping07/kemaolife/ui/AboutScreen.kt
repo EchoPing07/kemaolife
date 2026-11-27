@@ -49,7 +49,7 @@ internal fun AboutScreen(state: AppState, viewModel: AppViewModel) {
     ) {
         Surface(shape = appShape(PageCorners.Logo), modifier = Modifier.padding(top = 4.dp).size(104.dp)) {
             Image(
-                painter = painterResource(R.mipmap.ic_about_logo),
+                painter = painterResource(R.drawable.ic_about_logo),
                 contentDescription = stringResource(R.string.app_name),
                 contentScale = androidx.compose.ui.layout.ContentScale.Crop,
                 modifier = Modifier.fillMaxSize(),

@@ -3,13 +3,18 @@ package com.github.echoping07.kemaolife.data
 import android.content.Context
 import android.content.SharedPreferences
 import android.os.SystemClock
+import java.io.File
 
 /**
- * 非敏感的行为偏好：查询间隔、探测开关、上次自动查询时刻、电费结果缓存。
+ * 非敏感的行为偏好：查询间隔、探测开关、上次自动查询时刻、课表/电费缓存。
  *
  * 为什么不放 Keystore：这些值不是凭据（P5 只管学号 / 密码 / Cookie），
  * 塞进加密块只会让「读一个数字」也要过一遍 KeyStore；也不放
  * [Credentials]（那是 Init 要传给 Go 的东西，间隔只影响 UI 的触发时机）。
+ *
+ * 为什么课表与电费 JSON 缓存放在 `filesDir` 独立文件而非 `app_prefs`：
+ * SharedPreferences 每次修改任何标量偏好都会重序列化整份 XML，大段 JSON 放进去会拖慢所有设置读写。
+ * `filesDir` 同样受 `allowBackup=false` 与 `data_extraction_rules.xml`（`domain="root"`）保护。
  *
  * 隐私口径：电费缓存只写 UI 必需字段，不含 `roomName` / `roomVerify` / 学号 /
  * Cookie（P2）；`roomName` 是本人宿舍标识，既不需要展示也不需要落盘。
@@ -18,6 +23,9 @@ import android.os.SystemClock
 class AppPreferences(context: Context) {
 
     private val prefs = context.getSharedPreferences("app_prefs", Context.MODE_PRIVATE)
+    private val timetableCacheFile = File(context.filesDir, TIMETABLE_CACHE_FILE)
+    private val electricityCacheFile = File(context.filesDir, ELECTRICITY_CACHE_FILE)
+    private val cacheFileLock = Any()
 
     /**
      * 时间戳 / 缓存需要跨进程存活：`.apply()` 异步落盘，进程被杀时可能丢。
@@ -74,6 +82,26 @@ class AppPreferences(context: Context) {
         set(value) = prefs.editCommit {
             putInt(KEY_ELECTRICITY_DAYS_THRESHOLD, clampedDaysThreshold(value))
         }
+
+    /**
+     * 原子保存电费余额与预计天数阈值；任一值变化时在同一次 `commit()` 中重置告警去重状态，
+     * 避免设置页保存时连续触发多次 fsync。
+     */
+    fun setElectricityAlertThresholds(balanceThreshold: Double, daysThreshold: Int) {
+        val nextBalance = clampedBalanceThreshold(balanceThreshold)
+        val nextDays = clampedDaysThreshold(daysThreshold)
+        val changed =
+            electricityBalanceThreshold != nextBalance ||
+                electricityDaysThreshold != nextDays
+        prefs.editCommit {
+            putString(KEY_ELECTRICITY_BALANCE_THRESHOLD, formatBalanceThreshold(nextBalance))
+            putInt(KEY_ELECTRICITY_DAYS_THRESHOLD, nextDays)
+            if (changed) {
+                putBoolean(KEY_ALERT_BALANCE_ALERTED, false)
+                putBoolean(KEY_ALERT_DAYS_ALERTED, false)
+            }
+        }
+    }
 
     /** 电费提醒去重状态（对应 Go `core/alert.State`），跨冷启动保留，充值回升后由 Go 重置。 */
     var electricityAlertState: ElectricityAlertState
@@ -141,35 +169,72 @@ class AppPreferences(context: Context) {
         set(value) = prefs.editCommit { putLong(KEY_LAST_ELECTRICITY, value) }
 
     /**
-     * 上一次电费结果（UI 必需字段的 JSON）。
+     * 上一次电费结果（UI 必需字段的 JSON，由 [ElectricityCache] 编解码）。
      *
      * 为什么要落盘：电费页冷启动时也要「先出缓存再联网」（docs/android.md）。
-     * 由 Kotlin 白名单重建，不含 `roomName` / `roomVerify` / 学号 / Cookie。
+     * 存进 `filesDir/electricity_cache.json`；升级后首次读取若文件尚不存在，
+     * 自动从旧版 `app_prefs` 迁移并移除旧键。
      */
     var electricityCacheJson: String
-        get() = prefs.getString(KEY_ELECTRICITY_CACHE, "").orEmpty()
-        set(value) = prefs.editCommit { putString(KEY_ELECTRICITY_CACHE, value) }
+        get() = synchronized(cacheFileLock) {
+            readCacheFile(
+                file = electricityCacheFile,
+                readLegacy = { legacyPrefValue(KEY_ELECTRICITY_CACHE) },
+                removeLegacy = { removeLegacyPref(KEY_ELECTRICITY_CACHE) },
+            )
+        }
+        set(value) = synchronized(cacheFileLock) {
+            writeCacheFile(electricityCacheFile, value)
+            removeLegacyPref(KEY_ELECTRICITY_CACHE)
+        }
 
     /**
      * 上次课表周视图的展示镜像（[TimetableCache] 编码）。
      *
      * 冷启动首帧要在门面 Init 之前就渲染课表：正本快照含 Cookie 只能由 Go 读，
-     * 而 Init 是 JNI 调用，排在 IO 协程里。这里只存 DTO 展示字段（docs/android.md）。
+     * 而 Init 是 JNI 调用，排在 IO 协程里。这里只存 DTO 展示字段（docs/android.md），
+     * 落在 `filesDir/timetable_cache.json`，首次读取自动迁移旧版 `app_prefs` 键。
      */
     var timetableCacheJson: String
-        get() = prefs.getString(KEY_TIMETABLE_CACHE, "").orEmpty()
-        set(value) = prefs.editCommit { putString(KEY_TIMETABLE_CACHE, value) }
+        get() = synchronized(cacheFileLock) {
+            readCacheFile(
+                file = timetableCacheFile,
+                readLegacy = { legacyPrefValue(KEY_TIMETABLE_CACHE) },
+                removeLegacy = { removeLegacyPref(KEY_TIMETABLE_CACHE) },
+            )
+        }
+        set(value) = synchronized(cacheFileLock) {
+            writeCacheFile(timetableCacheFile, value)
+            removeLegacyPref(KEY_TIMETABLE_CACHE)
+        }
 
     /** 换账号时与电费缓存一起清掉，避免旧账号课表先显示（docs/contract.md §6 规则 2）。 */
     fun clearTimetableCache() {
-        prefs.editCommit { putString(KEY_TIMETABLE_CACHE, "") }
+        synchronized(cacheFileLock) {
+            deleteCacheFile(timetableCacheFile)
+            if (prefs.contains(KEY_TIMETABLE_CACHE)) {
+                prefs.editCommit { remove(KEY_TIMETABLE_CACHE) }
+            }
+        }
     }
 
     /** 清除电费缓存：换账号 / 凭据失效时用，旧账号数据不能先显示。 */
     fun clearElectricityCache() {
-        prefs.editCommit {
-            putString(KEY_ELECTRICITY_CACHE, "")
-            putLong(KEY_LAST_ELECTRICITY, 0L)
+        synchronized(cacheFileLock) {
+            deleteCacheFile(electricityCacheFile)
+            prefs.editCommit {
+                if (prefs.contains(KEY_ELECTRICITY_CACHE)) remove(KEY_ELECTRICITY_CACHE)
+                putLong(KEY_LAST_ELECTRICITY, 0L)
+            }
+        }
+    }
+
+    private fun legacyPrefValue(key: String): String? =
+        if (prefs.contains(key)) prefs.getString(key, "").orEmpty() else null
+
+    private fun removeLegacyPref(key: String) {
+        if (prefs.contains(key)) {
+            prefs.edit().remove(key).apply()
         }
     }
 
@@ -310,6 +375,64 @@ class AppPreferences(context: Context) {
             val intervalMs = clamped(minutes).toLong() * 60_000L
             return now - last >= intervalMs
         }
+
+        /**
+         * 同步读取文件缓存；文件尚不存在且旧版 `app_prefs` 有残留时，透明迁移到文件并删除旧键。
+         * 纯 JVM 实现，便于单测直接覆盖原子写与迁移路径（不依赖 Robolectric）。
+         */
+        internal fun readCacheFile(
+            file: File,
+            readLegacy: () -> String?,
+            removeLegacy: () -> Unit,
+        ): String {
+            if (file.isFile) {
+                return runCatching { file.readText(Charsets.UTF_8) }.getOrDefault("")
+            }
+            val legacy = readLegacy() ?: return ""
+            if (legacy.isEmpty()) {
+                removeLegacy()
+                return ""
+            }
+            if (writeCacheFile(file, legacy)) {
+                removeLegacy()
+            }
+            return legacy
+        }
+
+        /** 原子写 UTF-8 缓存文件（同目录临时文件 + rename）；空串时删除文件。 */
+        internal fun writeCacheFile(file: File, content: String): Boolean {
+            if (content.isEmpty()) {
+                deleteCacheFile(file)
+                return true
+            }
+            val parent = file.parentFile
+            val tmp = File(parent, "${file.name}.tmp")
+            return try {
+                if (parent != null && !parent.exists()) parent.mkdirs()
+                tmp.writeText(content, Charsets.UTF_8)
+                if (!tmp.renameTo(file)) {
+                    // POSIX (Android/Linux) renameTo 原子覆盖已有目标；Windows JVM 单测目标已存在时返回 false。
+                    if (!file.delete() || !tmp.renameTo(file)) {
+                        tmp.delete()
+                        return false
+                    }
+                }
+                true
+            } catch (_: Exception) {
+                runCatching { tmp.delete() }
+                false
+            }
+        }
+
+        /** 删除缓存文件及可能残留的临时文件。 */
+        internal fun deleteCacheFile(file: File) {
+            runCatching { if (file.exists()) file.delete() }
+            val tmp = File(file.parentFile, "${file.name}.tmp")
+            runCatching { if (tmp.exists()) tmp.delete() }
+        }
+
+        private const val TIMETABLE_CACHE_FILE = "timetable_cache.json"
+        private const val ELECTRICITY_CACHE_FILE = "electricity_cache.json"
 
         private const val KEY_TIMETABLE_INTERVAL = "timetable_interval_minutes"
         private const val KEY_ELECTRICITY_INTERVAL = "electricity_interval_minutes"

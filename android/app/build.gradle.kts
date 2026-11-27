@@ -49,7 +49,12 @@ android {
 
     buildTypes {
         release {
-            isMinifyEnabled = false
+            isMinifyEnabled = true
+            isShrinkResources = true
+            proguardFiles(
+                getDefaultProguardFile("proguard-android-optimize.txt"),
+                "proguard-rules.pro",
+            )
             // 本地未注入发布密钥时回落 debug 签名，仅供开发自测；
             // release.yml 会断言四个 Secrets 齐全，不会把 debug 签名当 Release 资产。
             signingConfig = signingConfigs.findByName("release")
@@ -101,8 +106,6 @@ dependencies {
     implementation(platform("androidx.compose:compose-bom:2026.03.01"))
     implementation("androidx.compose.ui:ui")
     implementation("androidx.compose.material3:material3")
-    // Material 3 1.4 起不再传递导出 material-icons-core，更多 / 外观页用到的圆角图标需显式声明。
-    implementation("androidx.compose.material:material-icons-core")
 
     // Jetpack Navigation 3：统一管理页面返回栈与预测性返回转场（替代手写 PredictiveBackHandler）。
     implementation("androidx.navigation3:navigation3-runtime:1.2.2")

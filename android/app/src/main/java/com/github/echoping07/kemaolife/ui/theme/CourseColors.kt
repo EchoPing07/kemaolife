@@ -5,7 +5,6 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.Immutable
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.luminance
-import kotlin.math.abs
 
 /**
  * 课表色块配色：一个课程固定一种颜色，三端不需要约定，本端按课程名散列。
@@ -46,5 +45,5 @@ private val DarkPalettes = listOf(
 internal fun coursePalette(name: String): CoursePalette {
     val dark = MaterialTheme.colorScheme.background.luminance() < 0.5f
     val palettes = if (dark) DarkPalettes else LightPalettes
-    return palettes[abs(name.hashCode()) % palettes.size]
+    return palettes[(name.hashCode() and Int.MAX_VALUE) % palettes.size]
 }

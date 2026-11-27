@@ -13,8 +13,8 @@ import org.json.JSONObject
  * 校正跨周 / 跨学期，并回写本镜像。
  *
  * 字段白名单是刻意的：不写 Cookie / 凭据 / 学号 / 上游快照结构，也不做周次计算
- * （AGENTS A3）。镜像落在应用私有 `app_prefs`，`allowBackup=false` 且
- * `data_extraction_rules.xml` 已排除全部 sharedpref。
+ * （AGENTS A3）。镜像落在应用私有 `filesDir/timetable_cache.json`，`allowBackup=false` 且
+ * `data_extraction_rules.xml` 已排除全部私有数据（`domain="root"`）。
  */
 data class CachedWeek(val schedule: WeekSchedule, val syncedAt: String)
 

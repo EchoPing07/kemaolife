@@ -82,8 +82,6 @@
     <string name="action_succeeded">操作成功</string>
     <string name="action_failed">操作失败</string>
     <string name="action_unavailable">请先检查配置或网络条件</string>
-    <string name="campus_action_running">正在处理，请稍候…</string>
-    <string name="campus_check_configuration">请检查校园网凭据与 WiFi 连接</string>
 
     <!-- 设置页：总览 + 教务 / 电费 / 校园网三个二级页。 -->
     <string name="settings_accounts">账号与服务</string>
@@ -98,7 +96,6 @@
     <string name="action_back">返回</string>
     <string name="settings_personalization">个性化</string>
     <string name="settings_appearance">外观</string>
-    <string name="settings_theme_color">主题色</string>
     <string name="settings_theme_hint">莫奈取色、AMOLED深色模式、主题等</string>
     <string name="settings_predictive_back">预测性返回手势</string>
     <string name="settings_predictive_back_hint">侧滑返回二级页时跟手预览上一页</string>
@@ -212,7 +209,6 @@
     <string name="interval_hint_education">自动同步的最小间隔，最少 %1$d 分钟；手动刷新不受限制。</string>
     <string name="interval_hint_electricity">自动查询的最小间隔，最少 %1$d 分钟；手动查询不受限制。</string>
     <string name="interval_clamped">低于下限，将按 %1$d %2$s 生效</string>
-    <string name="credentials_keystore_hint">凭据经 Android Keystore 加密后保存在本机，不上传、不进日志。</string>
 
     <!-- 测试弹窗：*.probe 的结构化回报。 -->
     <string name="probe_title">%1$s 测试</string>

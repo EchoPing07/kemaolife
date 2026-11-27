@@ -42,7 +42,7 @@ internal object DockedNavBarMetrics {
  * 传统贴底导航栏（Material 3 [NavigationBar]）。
  *
  * 在「设置 → 外观 → 显示与色彩」关闭「悬浮底栏」时启用；
- * 与 [FloatingNavBar] 共用条目数据与「底栏文字标签」开关，并归属 [AppRoute.Home] 根场景。
+ * 与 [FloatingNavBar] 共用条目数据与「底栏文字标签」开关，并归属 [AppDestination.Home] 根场景。
  */
 @Composable
 internal fun DockedNavBar(

@@ -2,7 +2,6 @@ package com.github.echoping07.kemaolife.ui
 
 import android.os.Build
 import androidx.compose.foundation.Canvas
-import androidx.compose.foundation.background
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -16,8 +15,6 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.selection.toggleable
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.rounded.Check
 import androidx.compose.material3.ColorScheme
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -26,6 +23,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -169,6 +167,9 @@ internal fun AppearanceScreen(state: AppState, viewModel: AppViewModel) {
         }
         GroupGap()
         val customHex = formatThemeColorHex(state.customThemeColor)
+        val customPreviewScheme = remember(state.customThemeColor, dark) {
+            customColorScheme(state.customThemeColor, dark)
+        }
         GroupSurface(
             position = GroupPosition.LAST,
             modifier = Modifier.fillMaxWidth(),
@@ -181,7 +182,7 @@ internal fun AppearanceScreen(state: AppState, viewModel: AppViewModel) {
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 ThemePaletteDonut(
-                    scheme = customColorScheme(state.customThemeColor, dark),
+                    scheme = customPreviewScheme,
                     selected = customSelected,
                     dark = dark,
                     size = 44.dp,
@@ -276,30 +277,50 @@ internal fun ThemePaletteDonut(
             val outerRadius = min(this.size.width, this.size.height) / 2f
             val innerRadius = outerRadius * 0.44f
             val strokeWidth = outerRadius - innerRadius
+            val stroke = Stroke(width = strokeWidth)
             val arcSize = Size(outerRadius * 2 - strokeWidth, outerRadius * 2 - strokeWidth)
             val topLeft = Offset(strokeWidth / 2f, strokeWidth / 2f)
-            val colors = listOf(
-                scheme.primary,
-                scheme.primaryContainer,
-                scheme.secondaryContainer,
-                scheme.tertiaryContainer,
+            drawArc(
+                color = scheme.primary,
+                startAngle = -90f,
+                sweepAngle = 90f,
+                useCenter = false,
+                style = stroke,
+                size = arcSize,
+                topLeft = topLeft,
             )
-            colors.forEachIndexed { index, color ->
-                drawArc(
-                    color = color,
-                    startAngle = -90f + index * 90f,
-                    sweepAngle = 90f,
-                    useCenter = false,
-                    style = Stroke(width = strokeWidth),
-                    size = arcSize,
-                    topLeft = topLeft,
-                )
-            }
+            drawArc(
+                color = scheme.primaryContainer,
+                startAngle = 0f,
+                sweepAngle = 90f,
+                useCenter = false,
+                style = stroke,
+                size = arcSize,
+                topLeft = topLeft,
+            )
+            drawArc(
+                color = scheme.secondaryContainer,
+                startAngle = 90f,
+                sweepAngle = 90f,
+                useCenter = false,
+                style = stroke,
+                size = arcSize,
+                topLeft = topLeft,
+            )
+            drawArc(
+                color = scheme.tertiaryContainer,
+                startAngle = 180f,
+                sweepAngle = 90f,
+                useCenter = false,
+                style = stroke,
+                size = arcSize,
+                topLeft = topLeft,
+            )
             drawCircle(color = scheme.primary, radius = innerRadius * 0.88f)
         }
         if (selected) {
             Icon(
-                imageVector = Icons.Rounded.Check,
+                imageVector = TabIcons.Check,
                 contentDescription = null,
                 tint = if (dark) Color(0xFF17191C) else Color.White,
                 modifier = Modifier.size(checkSize),
@@ -316,7 +337,7 @@ private fun ThemeDonutWheel(
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    val preview = theme.previewColorScheme(dark)
+    val preview = remember(theme, dark) { theme.previewColorScheme(dark) }
     Column(
         horizontalAlignment = Alignment.CenterHorizontally,
         modifier = modifier
