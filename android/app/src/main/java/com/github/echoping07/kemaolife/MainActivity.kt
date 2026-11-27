@@ -278,7 +278,7 @@ private fun AppRoot(
             )
         },
     ) { _ ->
-        // 外层铺底色：视差缩放转场露出边缘时与主题底色一致，避免闪黑或闪白。
+        // 外层铺底色：页面滑入滑出转场露出边缘时与主题底色一致，避免闪黑或闪白。
         Box(
             modifier =
                 Modifier
@@ -290,7 +290,7 @@ private fun AppRoot(
                 onBack = onBack,
                 transitionSpec = { AppNavTransitions.push(motionEnabled) },
                 popTransitionSpec = { AppNavTransitions.pop(motionEnabled) },
-                predictivePopTransitionSpec = { _ -> AppNavTransitions.pop(motionEnabled) },
+                predictivePopTransitionSpec = { _ -> AppNavTransitions.predictivePop(motionEnabled) },
                 entryProvider = { destination ->
                     NavEntry(key = destination, contentKey = destination.routeId) { key ->
                         when (key) {

@@ -69,16 +69,40 @@ class AppNavigationTest {
     fun `transitions and predictive pop respect motionEnabled flag`() {
         val disabledPush = AppNavTransitions.push(motionEnabled = false)
         val disabledPop = AppNavTransitions.pop(motionEnabled = false)
+        val disabledPredictivePop = AppNavTransitions.predictivePop(motionEnabled = false)
         assertEquals(EnterTransition.None, disabledPush.targetContentEnter)
         assertEquals(ExitTransition.None, disabledPush.initialContentExit)
         assertEquals(EnterTransition.None, disabledPop.targetContentEnter)
         assertEquals(ExitTransition.None, disabledPop.initialContentExit)
+        assertEquals(EnterTransition.None, disabledPredictivePop.targetContentEnter)
+        assertEquals(ExitTransition.None, disabledPredictivePop.initialContentExit)
 
         val enabledPush = AppNavTransitions.push(motionEnabled = true)
         val enabledPop = AppNavTransitions.pop(motionEnabled = true)
+        val enabledPredictivePop = AppNavTransitions.predictivePop(motionEnabled = true)
         assertNotEquals(EnterTransition.None, enabledPush.targetContentEnter)
         assertNotEquals(ExitTransition.None, enabledPush.initialContentExit)
         assertNotEquals(EnterTransition.None, enabledPop.targetContentEnter)
         assertNotEquals(ExitTransition.None, enabledPop.initialContentExit)
+        assertNotEquals(EnterTransition.None, enabledPredictivePop.targetContentEnter)
+        assertNotEquals(ExitTransition.None, enabledPredictivePop.initialContentExit)
+    }
+
+    @Test
+    fun `nav settle easing is monotonic, bounded, and front-loaded`() {
+        val easing = NavSettleEasing()
+        assertEquals(0f, easing.transform(0f), 1e-6f)
+        assertEquals(1f, easing.transform(1f), 1e-6f)
+
+        var prev = 0f
+        for (step in 1..100) {
+            val value = easing.transform(step / 100f)
+            assertTrue("expected monotonic increase at step $step: $value >= $prev", value >= prev)
+            assertTrue("expected bounded value at step $step: $value <= 1f", value <= 1f)
+            prev = value
+        }
+
+        assertTrue(easing.transform(0.2f) > 0.4f)
+        assertTrue(easing.transform(0.5f) > 0.85f)
     }
 }

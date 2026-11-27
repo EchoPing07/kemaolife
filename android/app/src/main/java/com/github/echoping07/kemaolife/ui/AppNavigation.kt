@@ -3,10 +3,11 @@ package com.github.echoping07.kemaolife.ui
 import androidx.compose.animation.ContentTransform
 import androidx.compose.animation.EnterTransition
 import androidx.compose.animation.ExitTransition
+import androidx.compose.animation.core.Easing
+import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
-import androidx.compose.animation.scaleIn
-import androidx.compose.animation.scaleOut
 import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.togetherWith
@@ -16,7 +17,13 @@ import androidx.compose.runtime.saveable.listSaver
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.snapshots.SnapshotStateList
 import androidx.compose.runtime.toMutableStateList
+import androidx.compose.ui.unit.IntOffset
 import androidx.navigation3.runtime.NavKey
+import kotlin.math.PI
+import kotlin.math.cos
+import kotlin.math.exp
+import kotlin.math.sin
+import kotlin.math.sqrt
 
 /** 设置二级页标识：每个枚举项对应稳定序列化 `routeId`。 */
 enum class SettingsPage(val routeId: String) {
@@ -109,35 +116,82 @@ internal fun rememberAppBackStack(): SnapshotStateList<AppDestination> =
     }
 
 /**
+ * 欠阻尼弹簧的解析阶跃缓动（参数对齐 Miuix 默认页面转场 `response = 0.8f, damping = 0.95f`）：
+ * 前段响应利落、后段绵长柔和收尾，在 `[0, 1]` 内严格单调无回弹。
+ */
+internal class NavSettleEasing(
+    response: Float = 0.8f,
+    damping: Float = 0.95f,
+) : Easing {
+    private val r: Double
+    private val w: Double
+    private val c2: Double
+
+    init {
+        val omega = 2.0 * PI / response
+        val k = omega * omega
+        val c = damping * 4.0 * PI / response
+        w = sqrt(4.0 * k - c * c) / 2.0
+        r = -c / 2.0
+        c2 = r / w
+    }
+
+    override fun transform(fraction: Float): Float {
+        if (fraction <= 0f) return 0f
+        if (fraction >= 1f) return 1f
+        val t = fraction.toDouble()
+        return (exp(r * t) * (-cos(w * t) + c2 * sin(w * t)) + 1.0).toFloat()
+    }
+}
+
+/**
  * 统一的页面进退与预测性返回转场规格：
- * - 推入：新页从右侧全幅滑入（`+it → 0`），底层视差退后半屏（`0 → -it/2`）并缩小淡出；
- * - 弹出与预测性返回共享镜像路径：顶页向右侧全幅滑出，底层从半屏深处平滑放大淡入，
- *   配合 Navigation 3 内部的 `SeekableTransitionState` 与默认弹簧规格，拖拽与松手衔接自然。
- * - 系统关闭动画时立即切换，不执行位移与缩放。
+ * - 推入：新页从右侧全幅滑入（`+it → 0`），底层无缩放、向左轻微视差偏移 25%（`0 → -it/4`）并轻度衰减透明度；
+ * - 弹出：顶页向右侧全幅滑出，底层从左侧 25% 处平移归位，全程使用 `500ms` + [NavSettleEasing]；
+ * - 预测性返回：沿用相同位移与透明度路径，但采用 [LinearEasing] 避免与手指拖拽进度叠加非线性缓动；
+ * - 系统关闭动画时立即切换，不执行位移与淡入淡出。
  */
 internal object AppNavTransitions {
-    private const val UNDERLAY_SCALE = 0.7f
+    private const val DURATION_MILLIS = 500
+    private const val UNDERLAY_OFFSET_DIVISOR = 4
+    private const val UNDERLAY_ALPHA = 0.9f
+    private val SettleEasing: Easing = NavSettleEasing()
 
     fun push(motionEnabled: Boolean): ContentTransform =
         if (!motionEnabled) {
             EnterTransition.None togetherWith ExitTransition.None
         } else {
-            slideInHorizontally(initialOffsetX = { it }) togetherWith
+            val slideSpec = tween<IntOffset>(durationMillis = DURATION_MILLIS, easing = SettleEasing)
+            val fadeSpec = tween<Float>(durationMillis = DURATION_MILLIS, easing = SettleEasing)
+            slideInHorizontally(animationSpec = slideSpec, initialOffsetX = { it }) togetherWith
                 (
-                    slideOutHorizontally(targetOffsetX = { -it / 2 }) +
-                        scaleOut(targetScale = UNDERLAY_SCALE) +
-                        fadeOut()
+                    slideOutHorizontally(
+                        animationSpec = slideSpec,
+                        targetOffsetX = { -it / UNDERLAY_OFFSET_DIVISOR },
+                    ) + fadeOut(animationSpec = fadeSpec, targetAlpha = UNDERLAY_ALPHA)
                 )
         }
 
     fun pop(motionEnabled: Boolean): ContentTransform =
+        popWithEasing(motionEnabled = motionEnabled, easing = SettleEasing)
+
+    fun predictivePop(motionEnabled: Boolean): ContentTransform =
+        popWithEasing(motionEnabled = motionEnabled, easing = LinearEasing)
+
+    private fun popWithEasing(
+        motionEnabled: Boolean,
+        easing: Easing,
+    ): ContentTransform =
         if (!motionEnabled) {
             EnterTransition.None togetherWith ExitTransition.None
         } else {
+            val slideSpec = tween<IntOffset>(durationMillis = DURATION_MILLIS, easing = easing)
+            val fadeSpec = tween<Float>(durationMillis = DURATION_MILLIS, easing = easing)
             (
-                slideInHorizontally(initialOffsetX = { -it / 2 }) +
-                    scaleIn(initialScale = UNDERLAY_SCALE) +
-                    fadeIn()
-            ) togetherWith slideOutHorizontally(targetOffsetX = { it })
+                slideInHorizontally(
+                    animationSpec = slideSpec,
+                    initialOffsetX = { -it / UNDERLAY_OFFSET_DIVISOR },
+                ) + fadeIn(animationSpec = fadeSpec, initialAlpha = UNDERLAY_ALPHA)
+            ) togetherWith slideOutHorizontally(animationSpec = slideSpec, targetOffsetX = { it })
         }
 }
