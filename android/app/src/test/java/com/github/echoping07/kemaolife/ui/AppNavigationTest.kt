@@ -1,5 +1,6 @@
 package com.github.echoping07.kemaolife.ui
 
+import androidx.compose.animation.ContentTransform
 import androidx.compose.animation.EnterTransition
 import androidx.compose.animation.ExitTransition
 import org.junit.Assert.assertEquals
@@ -124,5 +125,96 @@ class AppNavigationTest {
         val earlyDelta = easing.transform(0.2f) - easing.transform(0f)
         val lateDelta = easing.transform(1f) - easing.transform(0.8f)
         assertTrue("expected deceleration near end: $lateDelta < $earlyDelta", lateDelta < earlyDelta)
+    }
+
+    @Test
+    fun `forward transition corrects direction when target is home`() {
+        val home = AppDestination.Home.routeId
+        val appearance = SettingsPage.APPEARANCE.routeId
+        val about = SettingsPage.ABOUT.routeId
+        val push = AppNavTransitions.push(motionEnabled = true)
+        val pop = AppNavTransitions.pop(motionEnabled = true)
+        val predictivePop = AppNavTransitions.predictivePop(motionEnabled = true)
+
+        // 先确认三种基础规格互不相等，确保下方等价断言具有区分力。
+        assertNotEquals(push.targetContentEnter, pop.targetContentEnter)
+        assertNotEquals(push.initialContentExit, pop.initialContentExit)
+        assertNotEquals(pop.targetContentEnter, predictivePop.targetContentEnter)
+        assertNotEquals(pop.initialContentExit, predictivePop.initialContentExit)
+
+        // 正常进入子页（Home → Settings，以及子页间推入）走 push。
+        assertSameTransform(push, AppNavTransitions.forward(home, appearance, motionEnabled = true))
+        assertSameTransform(push, AppNavTransitions.forward(appearance, about, motionEnabled = true))
+
+        // 进场未完被返回打断（Settings → Home）及启动首帧缓存（Home → Home）走 predictivePop。
+        assertSameTransform(predictivePop, AppNavTransitions.forward(appearance, home, motionEnabled = true))
+        assertSameTransform(predictivePop, AppNavTransitions.forward(home, home, motionEnabled = true))
+    }
+
+    @Test
+    fun `pop transition corrects direction when re-entering child from home`() {
+        val home = AppDestination.Home.routeId
+        val appearance = SettingsPage.APPEARANCE.routeId
+        val about = SettingsPage.ABOUT.routeId
+        val push = AppNavTransitions.push(motionEnabled = true)
+        val pop = AppNavTransitions.pop(motionEnabled = true)
+
+        assertSameTransform(pop, AppNavTransitions.pop(appearance, home, motionEnabled = true))
+        assertSameTransform(pop, AppNavTransitions.pop(appearance, about, motionEnabled = true))
+        assertSameTransform(pop, AppNavTransitions.pop(home, home, motionEnabled = true))
+
+        // 退场未完立即再次进入子页，自校正为 push。
+        assertSameTransform(push, AppNavTransitions.pop(home, appearance, motionEnabled = true))
+    }
+
+    @Test
+    fun `predictive pop transition corrects direction when re-entering child from home`() {
+        val home = AppDestination.Home.routeId
+        val appearance = SettingsPage.APPEARANCE.routeId
+        val about = SettingsPage.ABOUT.routeId
+        val push = AppNavTransitions.push(motionEnabled = true)
+        val predictivePop = AppNavTransitions.predictivePop(motionEnabled = true)
+
+        assertSameTransform(predictivePop, AppNavTransitions.predictivePop(appearance, home, motionEnabled = true))
+        assertSameTransform(predictivePop, AppNavTransitions.predictivePop(appearance, about, motionEnabled = true))
+        assertSameTransform(predictivePop, AppNavTransitions.predictivePop(home, home, motionEnabled = true))
+
+        // 预测性返回未完立即再次进入子页，自校正为 push。
+        assertSameTransform(push, AppNavTransitions.predictivePop(home, appearance, motionEnabled = true))
+    }
+
+    @Test
+    fun `route-aware transitions return None for all pairs when motion is disabled`() {
+        val home = AppDestination.Home.routeId
+        val appearance = SettingsPage.APPEARANCE.routeId
+        val about = SettingsPage.ABOUT.routeId
+        val pairs =
+            listOf(
+                home to appearance,
+                appearance to home,
+                home to home,
+                appearance to about,
+            )
+
+        for ((initialKey, targetKey) in pairs) {
+            val transforms =
+                listOf(
+                    AppNavTransitions.forward(initialKey, targetKey, motionEnabled = false),
+                    AppNavTransitions.pop(initialKey, targetKey, motionEnabled = false),
+                    AppNavTransitions.predictivePop(initialKey, targetKey, motionEnabled = false),
+                )
+            for (transform in transforms) {
+                assertEquals(EnterTransition.None, transform.targetContentEnter)
+                assertEquals(ExitTransition.None, transform.initialContentExit)
+            }
+        }
+    }
+
+    private fun assertSameTransform(
+        expected: ContentTransform,
+        actual: ContentTransform,
+    ) {
+        assertEquals(expected.targetContentEnter, actual.targetContentEnter)
+        assertEquals(expected.initialContentExit, actual.initialContentExit)
     }
 }

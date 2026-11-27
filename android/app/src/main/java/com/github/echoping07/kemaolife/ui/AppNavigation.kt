@@ -17,7 +17,6 @@ import androidx.compose.runtime.saveable.listSaver
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.snapshots.SnapshotStateList
 import androidx.compose.runtime.toMutableStateList
-import androidx.compose.ui.unit.IntOffset
 import androidx.navigation3.runtime.NavKey
 import kotlin.math.PI
 import kotlin.math.cos
@@ -150,6 +149,10 @@ internal class NavSettleEasing(
  * - 弹出：顶页向右侧全幅滑出，底层从左侧 25% 处平移归位，全程使用 `500ms` + [NavSettleEasing]；
  * - 预测性返回：Navigation 3 的 `SeekableTransitionState` 在松手后会继续沿同一条曲线播完剩余段，
  *   因此使用前段近 1:1 跟手、后段柔和减速的 [PredictivePopEasing]，避免 `LinearEasing` 松手后匀速硬停；
+ * - 方向自校正：`NavDisplay` 按值捕获当前帧的 spec 传给内部 `AnimatedContent`，而 `AnimatedContent` 在
+ *   起止场景仍留在 `contentMap` 时会跳过重建并复用旧条目。进场 `500ms` 未结束前立即触发返回、退场未结束前
+ *   立即重进子页，以及启动首帧 `Home → Home` 缓存 `Home` 进场规格，都会使实际方向与当初捕获的 spec 相反；
+ *   因此各路由入口按 `initialState.key` / `targetState.key` 自校正方向；
  * - 系统关闭动画时立即切换，不执行位移与淡入淡出。
  */
 internal object AppNavTransitions {
@@ -161,50 +164,116 @@ internal object AppNavTransitions {
     // 起点斜率 1.0（拖拽初期自然跟手），终点斜率 0.0（松手后柔和减速收尾，无硬停）。
     internal val PredictivePopEasing: Easing = CubicBezierEasing(0.3f, 0.3f, 0.35f, 1f)
 
+    // EnterTransition / ExitTransition 不可变，复用静态实例既减少分配，也便于单测按实例精确断言路由方向。
+    private val PushEnter: EnterTransition =
+        slideInHorizontally(
+            animationSpec = tween(durationMillis = DURATION_MILLIS, easing = SettleEasing),
+            initialOffsetX = { it },
+        )
+    private val PushExit: ExitTransition =
+        slideOutHorizontally(
+            animationSpec = tween(durationMillis = DURATION_MILLIS, easing = SettleEasing),
+            targetOffsetX = { -it / UNDERLAY_OFFSET_DIVISOR },
+        ) + fadeOut(
+            animationSpec = tween(durationMillis = DURATION_MILLIS, easing = SettleEasing),
+            targetAlpha = UNDERLAY_ALPHA,
+        )
+    private val PopEnter: EnterTransition = popEnterWithSpec(DURATION_MILLIS, SettleEasing)
+    private val PopExit: ExitTransition = popExitWithSpec(DURATION_MILLIS, SettleEasing)
+    private val PredictivePopEnter: EnterTransition =
+        popEnterWithSpec(PREDICTIVE_POP_DURATION_MILLIS, PredictivePopEasing)
+    private val PredictivePopExit: ExitTransition =
+        popExitWithSpec(PREDICTIVE_POP_DURATION_MILLIS, PredictivePopEasing)
+
     fun push(motionEnabled: Boolean): ContentTransform =
         if (!motionEnabled) {
             EnterTransition.None togetherWith ExitTransition.None
         } else {
-            val slideSpec = tween<IntOffset>(durationMillis = DURATION_MILLIS, easing = SettleEasing)
-            val fadeSpec = tween<Float>(durationMillis = DURATION_MILLIS, easing = SettleEasing)
-            slideInHorizontally(animationSpec = slideSpec, initialOffsetX = { it }) togetherWith
-                (
-                    slideOutHorizontally(
-                        animationSpec = slideSpec,
-                        targetOffsetX = { -it / UNDERLAY_OFFSET_DIVISOR },
-                    ) + fadeOut(animationSpec = fadeSpec, targetAlpha = UNDERLAY_ALPHA)
-                )
+            PushEnter togetherWith PushExit
         }
 
     fun pop(motionEnabled: Boolean): ContentTransform =
-        popWithSpec(
-            motionEnabled = motionEnabled,
-            durationMillis = DURATION_MILLIS,
-            easing = SettleEasing,
-        )
-
-    fun predictivePop(motionEnabled: Boolean): ContentTransform =
-        popWithSpec(
-            motionEnabled = motionEnabled,
-            durationMillis = PREDICTIVE_POP_DURATION_MILLIS,
-            easing = PredictivePopEasing,
-        )
-
-    private fun popWithSpec(
-        motionEnabled: Boolean,
-        durationMillis: Int,
-        easing: Easing,
-    ): ContentTransform =
         if (!motionEnabled) {
             EnterTransition.None togetherWith ExitTransition.None
         } else {
-            val slideSpec = tween<IntOffset>(durationMillis = durationMillis, easing = easing)
-            val fadeSpec = tween<Float>(durationMillis = durationMillis, easing = easing)
-            (
-                slideInHorizontally(
-                    animationSpec = slideSpec,
-                    initialOffsetX = { -it / UNDERLAY_OFFSET_DIVISOR },
-                ) + fadeIn(animationSpec = fadeSpec, initialAlpha = UNDERLAY_ALPHA)
-            ) togetherWith slideOutHorizontally(animationSpec = slideSpec, targetOffsetX = { it })
+            PopEnter togetherWith PopExit
         }
+
+    fun predictivePop(motionEnabled: Boolean): ContentTransform =
+        if (!motionEnabled) {
+            EnterTransition.None togetherWith ExitTransition.None
+        } else {
+            PredictivePopEnter togetherWith PredictivePopExit
+        }
+
+    /**
+     * `NavDisplay.transitionSpec` 方向自校正入口：目标为 [AppDestination.Home] 时（涵盖进场未完被返回打断的
+     * `Settings → Home` 与启动首帧缓存 `Home` 进场规格的 `Home → Home`）返回 [predictivePop]，否则返回 [push]。
+     */
+    fun forward(
+        initialKey: Any,
+        targetKey: Any,
+        motionEnabled: Boolean,
+    ): ContentTransform =
+        if (targetKey == AppDestination.Home.routeId) {
+            predictivePop(motionEnabled)
+        } else {
+            push(motionEnabled)
+        }
+
+    /**
+     * `NavDisplay.popTransitionSpec` 方向自校正入口：退场未完立即重进子页（`Home → 子页`）时返回 [push]，
+     * 否则返回 [pop]。
+     */
+    fun pop(
+        initialKey: Any,
+        targetKey: Any,
+        motionEnabled: Boolean,
+    ): ContentTransform =
+        if (isForwardFromHome(initialKey, targetKey)) {
+            push(motionEnabled)
+        } else {
+            pop(motionEnabled)
+        }
+
+    /**
+     * `NavDisplay.predictivePopTransitionSpec` 方向自校正入口：退场未完立即重进子页（`Home → 子页`）时
+     * 返回 [push]，否则返回 [predictivePop]。
+     */
+    fun predictivePop(
+        initialKey: Any,
+        targetKey: Any,
+        motionEnabled: Boolean,
+    ): ContentTransform =
+        if (isForwardFromHome(initialKey, targetKey)) {
+            push(motionEnabled)
+        } else {
+            predictivePop(motionEnabled)
+        }
+
+    private fun isForwardFromHome(
+        initialKey: Any,
+        targetKey: Any,
+    ): Boolean = initialKey == AppDestination.Home.routeId && targetKey != AppDestination.Home.routeId
+
+    private fun popEnterWithSpec(
+        durationMillis: Int,
+        easing: Easing,
+    ): EnterTransition =
+        slideInHorizontally(
+            animationSpec = tween(durationMillis = durationMillis, easing = easing),
+            initialOffsetX = { -it / UNDERLAY_OFFSET_DIVISOR },
+        ) + fadeIn(
+            animationSpec = tween(durationMillis = durationMillis, easing = easing),
+            initialAlpha = UNDERLAY_ALPHA,
+        )
+
+    private fun popExitWithSpec(
+        durationMillis: Int,
+        easing: Easing,
+    ): ExitTransition =
+        slideOutHorizontally(
+            animationSpec = tween(durationMillis = durationMillis, easing = easing),
+            targetOffsetX = { it },
+        )
 }

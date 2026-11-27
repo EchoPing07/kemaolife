@@ -291,9 +291,27 @@ private fun AppRoot(
             NavDisplay(
                 backStack = backStack,
                 onBack = onBack,
-                transitionSpec = { AppNavTransitions.push(motionEnabled) },
-                popTransitionSpec = { AppNavTransitions.pop(motionEnabled) },
-                predictivePopTransitionSpec = { _ -> AppNavTransitions.predictivePop(motionEnabled) },
+                transitionSpec = {
+                    AppNavTransitions.forward(
+                        initialKey = initialState.key,
+                        targetKey = targetState.key,
+                        motionEnabled = motionEnabled,
+                    )
+                },
+                popTransitionSpec = {
+                    AppNavTransitions.pop(
+                        initialKey = initialState.key,
+                        targetKey = targetState.key,
+                        motionEnabled = motionEnabled,
+                    )
+                },
+                predictivePopTransitionSpec = { _ ->
+                    AppNavTransitions.predictivePop(
+                        initialKey = initialState.key,
+                        targetKey = targetState.key,
+                        motionEnabled = motionEnabled,
+                    )
+                },
                 entryProvider = { destination ->
                     NavEntry(key = destination, contentKey = destination.routeId) { key ->
                         when (key) {
