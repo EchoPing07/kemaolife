@@ -105,4 +105,24 @@ class AppNavigationTest {
         assertTrue(easing.transform(0.2f) > 0.4f)
         assertTrue(easing.transform(0.5f) > 0.85f)
     }
+
+    @Test
+    fun `predictive pop easing tracks near-linearly at start and decelerates smoothly`() {
+        val easing = AppNavTransitions.PredictivePopEasing
+        assertEquals(0f, easing.transform(0f), 1e-6f)
+        assertEquals(1f, easing.transform(1f), 1e-6f)
+
+        var prev = 0f
+        for (step in 1..100) {
+            val value = easing.transform(step / 100f)
+            assertTrue("expected monotonic increase at step $step", value >= prev)
+            assertTrue("expected bounded value at step $step", value <= 1f)
+            prev = value
+        }
+
+        // 末端明显减速，避免 LinearEasing 松手硬停。
+        val earlyDelta = easing.transform(0.2f) - easing.transform(0f)
+        val lateDelta = easing.transform(1f) - easing.transform(0.8f)
+        assertTrue("expected deceleration near end: $lateDelta < $earlyDelta", lateDelta < earlyDelta)
+    }
 }

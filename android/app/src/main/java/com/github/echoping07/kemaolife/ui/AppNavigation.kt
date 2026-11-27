@@ -3,8 +3,8 @@ package com.github.echoping07.kemaolife.ui
 import androidx.compose.animation.ContentTransform
 import androidx.compose.animation.EnterTransition
 import androidx.compose.animation.ExitTransition
+import androidx.compose.animation.core.CubicBezierEasing
 import androidx.compose.animation.core.Easing
-import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -148,14 +148,18 @@ internal class NavSettleEasing(
  * 统一的页面进退与预测性返回转场规格：
  * - 推入：新页从右侧全幅滑入（`+it → 0`），底层无缩放、向左轻微视差偏移 25%（`0 → -it/4`）并轻度衰减透明度；
  * - 弹出：顶页向右侧全幅滑出，底层从左侧 25% 处平移归位，全程使用 `500ms` + [NavSettleEasing]；
- * - 预测性返回：沿用相同位移与透明度路径，但采用 [LinearEasing] 避免与手指拖拽进度叠加非线性缓动；
+ * - 预测性返回：Navigation 3 的 `SeekableTransitionState` 在松手后会继续沿同一条曲线播完剩余段，
+ *   因此使用前段近 1:1 跟手、后段柔和减速的 [PredictivePopEasing]，避免 `LinearEasing` 松手后匀速硬停；
  * - 系统关闭动画时立即切换，不执行位移与淡入淡出。
  */
 internal object AppNavTransitions {
     private const val DURATION_MILLIS = 500
+    private const val PREDICTIVE_POP_DURATION_MILLIS = 450
     private const val UNDERLAY_OFFSET_DIVISOR = 4
     private const val UNDERLAY_ALPHA = 0.9f
     private val SettleEasing: Easing = NavSettleEasing()
+    // 起点斜率 1.0（拖拽初期自然跟手），终点斜率 0.0（松手后柔和减速收尾，无硬停）。
+    internal val PredictivePopEasing: Easing = CubicBezierEasing(0.3f, 0.3f, 0.35f, 1f)
 
     fun push(motionEnabled: Boolean): ContentTransform =
         if (!motionEnabled) {
@@ -173,20 +177,29 @@ internal object AppNavTransitions {
         }
 
     fun pop(motionEnabled: Boolean): ContentTransform =
-        popWithEasing(motionEnabled = motionEnabled, easing = SettleEasing)
+        popWithSpec(
+            motionEnabled = motionEnabled,
+            durationMillis = DURATION_MILLIS,
+            easing = SettleEasing,
+        )
 
     fun predictivePop(motionEnabled: Boolean): ContentTransform =
-        popWithEasing(motionEnabled = motionEnabled, easing = LinearEasing)
+        popWithSpec(
+            motionEnabled = motionEnabled,
+            durationMillis = PREDICTIVE_POP_DURATION_MILLIS,
+            easing = PredictivePopEasing,
+        )
 
-    private fun popWithEasing(
+    private fun popWithSpec(
         motionEnabled: Boolean,
+        durationMillis: Int,
         easing: Easing,
     ): ContentTransform =
         if (!motionEnabled) {
             EnterTransition.None togetherWith ExitTransition.None
         } else {
-            val slideSpec = tween<IntOffset>(durationMillis = DURATION_MILLIS, easing = easing)
-            val fadeSpec = tween<Float>(durationMillis = DURATION_MILLIS, easing = easing)
+            val slideSpec = tween<IntOffset>(durationMillis = durationMillis, easing = easing)
+            val fadeSpec = tween<Float>(durationMillis = durationMillis, easing = easing)
             (
                 slideInHorizontally(
                     animationSpec = slideSpec,
